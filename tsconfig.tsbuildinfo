@@ -1,0 +1,1 @@
+{"root":["./src/designeditor.tsx","./src/projectspage.tsx","./src/main.tsx","./src/components/codepanel.tsx","./src/components/fileexplorer.tsx","./src/utils/codegenerator.ts","./src/utils/projectstorage.ts"],"errors":true,"version":"5.8.3"}
