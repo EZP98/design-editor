@@ -112,13 +112,20 @@ const DEVICE_PRESETS: DevicePreset[] = [
   { id: 'ipad-air', name: 'iPad Air', width: 820, height: 1180, category: 'tablet' },
   { id: 'ipad-mini', name: 'iPad Mini', width: 744, height: 1133, category: 'tablet' },
   { id: 'ipad', name: 'iPad', width: 810, height: 1080, category: 'tablet' },
-  // Phone
+  // Phone - iPhone
   { id: 'iphone-15-pro-max', name: 'iPhone 15 Pro Max', width: 430, height: 932, category: 'phone' },
   { id: 'iphone-15-pro', name: 'iPhone 15 Pro', width: 393, height: 852, category: 'phone' },
   { id: 'iphone-15', name: 'iPhone 15', width: 393, height: 852, category: 'phone' },
+  { id: 'iphone-14-plus', name: 'iPhone 14 Plus', width: 428, height: 926, category: 'phone' },
+  { id: 'iphone-14', name: 'iPhone 14', width: 390, height: 844, category: 'phone' },
   { id: 'iphone-se', name: 'iPhone SE', width: 375, height: 667, category: 'phone' },
+  // Phone - Android
+  { id: 'pixel-8-pro', name: 'Pixel 8 Pro', width: 448, height: 998, category: 'phone' },
   { id: 'pixel-8', name: 'Pixel 8', width: 412, height: 915, category: 'phone' },
+  { id: 'galaxy-s24-ultra', name: 'Galaxy S24 Ultra', width: 384, height: 854, category: 'phone' },
   { id: 'galaxy-s24', name: 'Galaxy S24', width: 360, height: 780, category: 'phone' },
+  { id: 'galaxy-fold', name: 'Galaxy Z Fold 5', width: 344, height: 882, category: 'phone' },
+  { id: 'oneplus-12', name: 'OnePlus 12', width: 412, height: 915, category: 'phone' },
 ];
 
 // Category icons for toolbar
@@ -911,6 +918,7 @@ const DesignEditor: React.FC = () => {
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [showTimeline, setShowTimeline] = useState(false);
   const [showCodePanel, setShowCodePanel] = useState(false);
+  const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
   const [showPreview, setShowPreview] = useState(false);
   const [projectFiles, setProjectFiles] = useState<FileNode[]>(sampleProjectFiles);
   const [selectedFile, setSelectedFile] = useState<string | undefined>(undefined);
@@ -2829,23 +2837,83 @@ const DesignEditor: React.FC = () => {
                       style={{
                         display: 'flex',
                         alignItems: 'center',
-                        gap: 8,
-                        padding: '8px 16px',
-                        background: 'rgba(255,255,255,0.05)',
-                        borderRadius: 20,
+                        gap: 10,
+                        padding: '8px 14px',
+                        background: showDeviceDropdown
+                          ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%)'
+                          : 'rgba(255,255,255,0.04)',
+                        border: showDeviceDropdown
+                          ? '1px solid rgba(139, 92, 246, 0.4)'
+                          : '1px solid rgba(255,255,255,0.08)',
+                        borderRadius: 10,
                         fontSize: 12,
-                        color: '#71717a',
+                        color: '#a1a1aa',
                         cursor: 'pointer',
-                        transition: 'all 0.15s ease',
+                        transition: 'all 0.2s ease',
                       }}
-                      onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.08)'}
-                      onMouseLeave={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.05)'}
+                      onMouseEnter={(e) => {
+                        if (!showDeviceDropdown) {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.06)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+                        }
+                      }}
+                      onMouseLeave={(e) => {
+                        if (!showDeviceDropdown) {
+                          e.currentTarget.style.background = 'rgba(255,255,255,0.04)';
+                          e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                        }
+                      }}
                     >
-                      <span style={{ color: '#a78bfa', fontWeight: 500 }}>{selectedDevice.name}</span>
-                      <span>•</span>
-                      <span>{selectedDevice.width} × {selectedDevice.height}</span>
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 4 }}>
-                        <polyline points={showDeviceDropdown ? "18 15 12 9 6 15" : "6 9 12 15 18 9"} />
+                      {/* Device icon */}
+                      <span style={{
+                        color: showDeviceDropdown ? '#a78bfa' : '#71717a',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}>
+                        {selectedDevice.category === 'desktop' ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                            <line x1="8" y1="21" x2="16" y2="21"/>
+                            <line x1="12" y1="17" x2="12" y2="21"/>
+                          </svg>
+                        ) : selectedDevice.category === 'tablet' ? (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/>
+                            <line x1="12" y1="18" x2="12.01" y2="18"/>
+                          </svg>
+                        ) : (
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
+                            <line x1="12" y1="18" x2="12.01" y2="18"/>
+                          </svg>
+                        )}
+                      </span>
+                      <span style={{
+                        color: showDeviceDropdown ? '#e5e5e5' : '#d4d4d8',
+                        fontWeight: 500
+                      }}>
+                        {selectedDevice.name}
+                      </span>
+                      <span style={{
+                        color: '#52525b',
+                        fontSize: 11,
+                        fontFamily: 'monospace',
+                      }}>
+                        {selectedDevice.width}×{selectedDevice.height}
+                      </span>
+                      <svg
+                        width="12"
+                        height="12"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke={showDeviceDropdown ? '#a78bfa' : '#71717a'}
+                        strokeWidth="2"
+                        style={{
+                          transition: 'transform 0.2s ease',
+                          transform: showDeviceDropdown ? 'rotate(180deg)' : 'rotate(0deg)',
+                        }}
+                      >
+                        <polyline points="6 9 12 15 18 9" />
                       </svg>
                     </div>
 
@@ -2873,21 +2941,24 @@ const DesignEditor: React.FC = () => {
 
                     {/* Device Dropdown */}
                     {showDeviceDropdown && (
-                      <div style={{
-                        position: 'absolute',
-                        top: '100%',
-                        left: '50%',
-                        transform: 'translateX(-50%)',
-                        marginTop: 8,
-                        background: '#1a1a1a',
-                        border: '1px solid rgba(255,255,255,0.1)',
-                        borderRadius: 12,
-                        padding: 8,
-                        minWidth: 280,
-                        maxHeight: 400,
-                        overflow: 'auto',
-                        zIndex: 100,
-                        boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                      <div
+                        className="device-dropdown-scroll"
+                        style={{
+                          position: 'absolute',
+                          top: '100%',
+                          left: '50%',
+                          transform: 'translateX(-50%)',
+                          marginTop: 8,
+                          background: '#1a1a1a',
+                          border: '1px solid rgba(255,255,255,0.1)',
+                          borderRadius: 12,
+                          padding: 8,
+                          minWidth: 280,
+                          maxHeight: 350,
+                          overflowY: 'auto',
+                          overflowX: 'hidden',
+                          zIndex: 100,
+                          boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
                       }}>
                         {(['desktop', 'tablet', 'phone'] as DeviceCategory[]).map(category => (
                           <div key={category}>
@@ -3051,89 +3122,106 @@ const DesignEditor: React.FC = () => {
             </div>
           ) : useWebContainer ? (
             /* WebContainer Preview - for AI-generated code */
-            <div
-              style={{
-                width: visualEditMode ? '100%' : selectedDevice.width,
-                maxWidth: visualEditMode ? 1200 : '100%',
-                height: visualEditMode ? 'auto' : selectedDevice.height,
-                minHeight: visualEditMode ? 'calc(100vh - 200px)' : undefined,
-                maxHeight: visualEditMode ? 'none' : 'calc(100vh - 200px)',
-                transform: visualEditMode ? 'none' : `scale(${zoom})`,
-                transformOrigin: 'top center',
-                borderRadius: visualEditMode ? 8 : selectedDevice.category === 'phone' ? 40 : selectedDevice.category === 'tablet' ? 20 : 8,
-                overflow: visualEditMode ? 'visible' : 'hidden',
-                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                border: visualEditMode ? '2px solid #8b5cf6' : selectedDevice.category !== 'desktop' ? '8px solid #1a1a1a' : 'none',
-                transition: 'all 0.3s ease',
-                position: 'relative',
-              }}
-            >
-              {/* Phone notch for mobile view (Dynamic Island style) - hide in edit mode */}
-              {selectedDevice.category === 'phone' && !visualEditMode && (
-                <div style={{
-                  position: 'absolute',
-                  top: 8,
-                  left: '50%',
-                  transform: 'translateX(-50%)',
-                  width: 100,
-                  height: 28,
-                  background: '#000',
-                  borderRadius: 20,
-                  zIndex: 10,
-                }} />
-              )}
-              <WebContainerPreview
-                ref={webContainerPreviewRef}
-                files={webcontainerFiles}
-                autoStart={true}
-                onStatusChange={(status) => {
-                  setWebcontainerReady(status === 'ready');
-                }}
-                onUrlReady={(url) => {
-                  setWebcontainerUrl(url);
-                }}
-                currentPath={currentPreviewPath}
-                onPathChange={setCurrentPreviewPath}
-                width="100%"
-                height={visualEditMode ? '100vh' : '100%'}
-              />
-              {/* Visual Edit Overlay */}
-              {webcontainerReady && (
-                <SelectionOverlay
-                  iframeRef={{ current: getPreviewIframe() }}
-                  enabled={visualEditMode}
-                  zoom={zoom}
-                  onElementSelect={(el) => {
-                    setVisualSelectedElement(el);
-                    if (el?.sourceFile) {
-                      setSelectedFile(el.sourceFile);
-                      setShowCodePanel(true);
-                    }
+            (() => {
+              // Calculate scaling for non-desktop devices to show desktop version scaled down
+              const isSmallDevice = selectedDevice.category !== 'desktop';
+              const baseWidth = isSmallDevice ? 1280 : selectedDevice.width; // Render at desktop size
+              const baseHeight = isSmallDevice ? 800 : selectedDevice.height;
+              const scaleRatio = isSmallDevice ? selectedDevice.width / baseWidth : 1;
+
+              return (
+                <div
+                  style={{
+                    width: visualEditMode ? '100%' : selectedDevice.width,
+                    maxWidth: visualEditMode ? 1200 : '100%',
+                    height: visualEditMode ? 'auto' : selectedDevice.height,
+                    minHeight: visualEditMode ? 'calc(100vh - 200px)' : undefined,
+                    maxHeight: visualEditMode ? 'none' : 'calc(100vh - 200px)',
+                    transform: visualEditMode ? 'none' : `scale(${zoom})`,
+                    transformOrigin: 'top center',
+                    borderRadius: visualEditMode ? 8 : selectedDevice.category === 'phone' ? 40 : selectedDevice.category === 'tablet' ? 20 : 8,
+                    overflow: 'hidden',
+                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                    border: visualEditMode ? '2px solid #8b5cf6' : selectedDevice.category !== 'desktop' ? '8px solid #1a1a1a' : 'none',
+                    transition: 'all 0.3s ease',
+                    position: 'relative',
+                    background: '#fff',
                   }}
-                  onElementHover={(el) => {
-                    // Show hover feedback in status bar or tooltip
-                    if (el) {
-                      console.log('Hovering:', el.tagName);
-                    }
-                  }}
-                  onStyleChange={(property, value) => {
-                    // Direct style changes - send to AI for code update
-                    if (visualSelectedElement && chatPanelRef.current) {
-                      const prompt = `Update the ${property} to "${value}" for the ${visualSelectedElement.tagName} element${visualSelectedElement.className ? ` with class "${visualSelectedElement.className.split(' ')[0]}"` : ''}. Find and update the source code.`;
-                      chatPanelRef.current.sendMessage(prompt);
-                    }
-                  }}
-                  onPositionChange={(deltaX, deltaY) => {
-                    // Visual position feedback during drag
-                    console.log('Position delta:', deltaX, deltaY);
-                  }}
-                  onSizeChange={(width, height) => {
-                    // Visual size feedback during resize
-                    console.log('New size:', width, height);
-                  }}
-                />
-              )}
-            </div>
+                >
+                  {/* Phone notch for mobile view (Dynamic Island style) - hide in edit mode */}
+                  {selectedDevice.category === 'phone' && !visualEditMode && (
+                    <div style={{
+                      position: 'absolute',
+                      top: 8,
+                      left: '50%',
+                      transform: 'translateX(-50%)',
+                      width: 100,
+                      height: 28,
+                      background: '#000',
+                      borderRadius: 20,
+                      zIndex: 10,
+                    }} />
+                  )}
+                  {/* Scaled content wrapper for small devices */}
+                  <div
+                    style={{
+                      width: isSmallDevice && !visualEditMode ? baseWidth : '100%',
+                      height: isSmallDevice && !visualEditMode ? baseHeight : '100%',
+                      transform: isSmallDevice && !visualEditMode ? `scale(${scaleRatio})` : 'none',
+                      transformOrigin: 'top left',
+                    }}
+                  >
+                    <WebContainerPreview
+                      ref={webContainerPreviewRef}
+                      files={webcontainerFiles}
+                      autoStart={true}
+                      onStatusChange={(status) => {
+                        setWebcontainerReady(status === 'ready');
+                      }}
+                      onUrlReady={(url) => {
+                        setWebcontainerUrl(url);
+                      }}
+                      currentPath={currentPreviewPath}
+                      onPathChange={setCurrentPreviewPath}
+                      width="100%"
+                      height={visualEditMode ? '100vh' : '100%'}
+                    />
+                  </div>
+                  {/* Visual Edit Overlay */}
+                  {webcontainerReady && (
+                    <SelectionOverlay
+                      iframeRef={{ current: getPreviewIframe() }}
+                      enabled={visualEditMode}
+                      zoom={zoom}
+                      onElementSelect={(el) => {
+                        setVisualSelectedElement(el);
+                        if (el?.sourceFile) {
+                          setSelectedFile(el.sourceFile);
+                          setShowCodePanel(true);
+                        }
+                      }}
+                      onElementHover={(el) => {
+                        if (el) {
+                          console.log('Hovering:', el.tagName);
+                        }
+                      }}
+                      onStyleChange={(property, value) => {
+                        if (visualSelectedElement && chatPanelRef.current) {
+                          const prompt = `Update the ${property} to "${value}" for the ${visualSelectedElement.tagName} element${visualSelectedElement.className ? ` with class "${visualSelectedElement.className.split(' ')[0]}"` : ''}. Find and update the source code.`;
+                          chatPanelRef.current.sendMessage(prompt);
+                        }
+                      }}
+                      onPositionChange={(deltaX, deltaY) => {
+                        console.log('Position delta:', deltaX, deltaY);
+                      }}
+                      onSizeChange={(width, height) => {
+                        console.log('New size:', width, height);
+                      }}
+                    />
+                  )}
+                </div>
+              );
+            })()
           ) : (
             /* Design Mode - Canvas with elements */
             <div
@@ -3345,11 +3433,38 @@ const DesignEditor: React.FC = () => {
               </div>
               </div>
 
-              {/* Right Panel - Properties */}
-              <div className="de-right-panel">
-          <div className="de-panel-header">
-            <span className="de-panel-title">Properties</span>
-          </div>
+              {/* Right Panel - Properties (only show when editing or has selection) */}
+              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement)) && (
+              <div className="de-right-panel" style={{ position: 'relative' }}>
+                <div className="de-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span className="de-panel-title">Properties</span>
+                  <button
+                    onClick={() => {
+                      setShowPropertiesPanel(false);
+                      setVisualSelectedElement(null);
+                      setSelectedId(null);
+                    }}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: '#6b6b6b',
+                      cursor: 'pointer',
+                      padding: 4,
+                      borderRadius: 4,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                    }}
+                    onMouseEnter={(e) => e.currentTarget.style.color = '#a1a1a1'}
+                    onMouseLeave={(e) => e.currentTarget.style.color = '#6b6b6b'}
+                    title="Close panel"
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <line x1="18" y1="6" x2="6" y2="18" />
+                      <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                  </button>
+                </div>
 
           {/* Visual Edit Mode - Enhanced Props Panel */}
           {visualEditMode && visualSelectedElement ? (
@@ -3659,7 +3774,8 @@ Find the component in the codebase and update the styles. If using Tailwind, con
               {liveMode ? 'Click on an element to inspect it' : 'Select an element to edit its properties'}
             </div>
           )}
-        </div>
+              </div>
+              )}
 
               {/* Code Panel in Design Mode - Hide when GitHub project is loaded */}
               {showCodePanel && !githubRepo && (

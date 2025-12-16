@@ -65,25 +65,27 @@ const WebContainerPreview = forwardRef<WebContainerPreviewRef, WebContainerPrevi
     }
   }, [previewUrl, onUrlReady]);
 
+  // Track last navigated path to avoid duplicate navigations
+  const lastNavigatedPath = useRef<string>('/');
+
   // Navigate iframe when currentPath changes
   useEffect(() => {
     if (!currentPath || !previewUrl || !iframeRef.current) return;
 
-    try {
-      const iframe = iframeRef.current;
-      if (iframe.contentWindow) {
-        // Try using history API for SPA navigation
-        iframe.contentWindow.history.pushState({}, '', currentPath);
-        iframe.contentWindow.dispatchEvent(new PopStateEvent('popstate'));
-      }
-    } catch (e) {
-      // Cross-origin fallback: reload with new path
-      if (previewUrl && iframeRef.current) {
-        const url = new URL(previewUrl);
-        url.pathname = currentPath;
-        iframeRef.current.src = url.toString();
-      }
-    }
+    // Skip if already on this path
+    if (lastNavigatedPath.current === currentPath) return;
+    lastNavigatedPath.current = currentPath;
+
+    // Build the new URL with the path
+    const url = new URL(previewUrl);
+    url.pathname = currentPath;
+    const newUrl = url.toString();
+
+    console.log('[WebContainerPreview] Navigating to:', currentPath, '-> ', newUrl);
+
+    // Directly change iframe src - most reliable for WebContainer
+    // Vite dev server handles SPA routing automatically
+    iframeRef.current.src = newUrl;
   }, [currentPath, previewUrl]);
 
   // Listen for navigation events from iframe
