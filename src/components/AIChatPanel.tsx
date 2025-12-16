@@ -14,10 +14,11 @@ interface ModelOption {
 
 const AI_MODELS: ModelOption[] = [
   { id: 'claude', name: 'Claude', icon: '✨', description: 'Code & Design', color: '#8b5cf6' },
-  { id: 'gpt4', name: 'GPT-4', icon: '🧠', description: 'General AI', color: '#10b981' },
-  { id: 'image', name: 'Image', icon: '🎨', description: 'DALL-E / Midjourney', color: '#f59e0b' },
-  { id: 'video', name: 'Video', icon: '🎬', description: 'Runway / Sora', color: '#ef4444' },
-  { id: 'audio', name: 'Audio', icon: '🎵', description: 'ElevenLabs / Suno', color: '#3b82f6' },
+  // Coming soon:
+  // { id: 'gpt4', name: 'GPT-4', icon: '🧠', description: 'General AI', color: '#10b981' },
+  // { id: 'image', name: 'Image', icon: '🎨', description: 'DALL-E / Midjourney', color: '#f59e0b' },
+  // { id: 'video', name: 'Video', icon: '🎬', description: 'Runway / Sora', color: '#ef4444' },
+  // { id: 'audio', name: 'Audio', icon: '🎵', description: 'ElevenLabs / Suno', color: '#3b82f6' },
 ];
 
 interface AIChatPanelProps {
@@ -457,7 +458,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           }}>
             {/* Model Selector Button */}
             <button
-              onClick={() => setShowModelSelector(!showModelSelector)}
+              onClick={() => AI_MODELS.length > 1 && setShowModelSelector(!showModelSelector)}
               style={{
                 display: 'flex',
                 alignItems: 'center',
@@ -466,7 +467,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                 background: showModelSelector ? `${AI_MODELS.find(m => m.id === selectedModel)?.color}20` : 'rgba(255,255,255,0.05)',
                 border: '1px solid rgba(255,255,255,0.1)',
                 borderRadius: 8,
-                cursor: 'pointer',
+                cursor: AI_MODELS.length > 1 ? 'pointer' : 'default',
                 transition: 'all 0.15s',
               }}
             >
@@ -480,17 +481,19 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               }}>
                 {AI_MODELS.find(m => m.id === selectedModel)?.name}
               </span>
-              <svg
-                width="10"
-                height="10"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="#5a5a5a"
-                strokeWidth="2"
-                style={{ transform: showModelSelector ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
-              >
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+              {AI_MODELS.length > 1 && (
+                <svg
+                  width="10"
+                  height="10"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#5a5a5a"
+                  strokeWidth="2"
+                  style={{ transform: showModelSelector ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              )}
             </button>
 
             {/* Send Button */}
