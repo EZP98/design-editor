@@ -7,11 +7,13 @@ import AIChatPanel, { AIChatPanelRef } from './components/AIChatPanel';
 import WebContainerPreview, { WebContainerPreviewRef } from './components/WebContainerPreview';
 import SelectionOverlay, { SelectedElement } from './components/SelectionOverlay';
 import VisualPropsPanel from './components/VisualPropsPanel';
+import { ErrorAlertsContainer, AlertError } from './components/ActionableAlert';
 import { DesignElement as CodeElement } from './utils/codeGenerator';
 import { discoverPages, DiscoveredPage } from './lib/pageDiscovery';
 import { getProjectById, type Project } from './ProjectsPage';
 import { useWebContainer } from './lib/hooks/useWebContainer';
 import { useGit } from './lib/hooks/useGit';
+import { useAgenticErrors, buildErrorContext } from './lib/hooks/useAgenticErrors';
 
 // API URL for production/development
 const API_URL = import.meta.env.PROD
@@ -919,7 +921,7 @@ const DesignEditor: React.FC = () => {
   const [webcontainerUrl, setWebcontainerUrl] = useState<string>('');
   const [useWebContainer, setUseWebContainer] = useState(false);
   const [webcontainerFiles, setWebcontainerFiles] = useState<Record<string, string> | undefined>(undefined);
-  const [viewMode, setViewMode] = useState<'design' | 'code'>('design');
+  const [viewMode, setViewMode] = useState<'design' | 'code' | 'pages'>('design');
   const [currentBreakpoint, setCurrentBreakpoint] = useState<string>('desktop');
   const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(DEVICE_PRESETS.find(d => d.id === 'desktop-lg')!);
   const [showDeviceDropdown, setShowDeviceDropdown] = useState(false);
@@ -1215,6 +1217,82 @@ const DesignEditor: React.FC = () => {
   // useGit hook for cloning repos
   const { ready: gitReady, cloning: gitCloning, progress: gitProgress, gitClone } = useGit();
 
+  // Agentic error handling (bolt.diy pattern)
+  const {
+    errors: agenticErrors,
+    addError,
+    addBuildError,
+    addRuntimeError,
+    dismissError,
+    dismissAllErrors,
+    fixingErrorId,
+    setFixingErrorId,
+  } = useAgenticErrors();
+
+  // Handle "Fix with AI" for errors
+  const handleFixWithAI = useCallback(async (error: AlertError) => {
+    if (!chatPanelRef.current) return;
+
+    setFixingErrorId(error.id);
+
+    // Build context with error info and relevant files
+    const errorFileContent = error.file ? fileContents[error.file] || fileContents[error.file.replace(/^\//, '')] : undefined;
+
+    try {
+      await chatPanelRef.current.sendErrorForFix(
+        error.message,
+        error.file,
+        errorFileContent
+      );
+      // Don't dismiss immediately - wait to see if fix works
+      setTimeout(() => {
+        dismissError(error.id);
+        setFixingErrorId(null);
+      }, 2000);
+    } catch (err) {
+      console.error('Failed to send error to AI:', err);
+      setFixingErrorId(null);
+    }
+  }, [fileContents, dismissError, setFixingErrorId]);
+
+  // Listen for iframe errors (runtime errors from preview)
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      // Handle error messages from iframe
+      if (event.data?.type === 'error' || event.data?.type === 'runtime-error') {
+        addRuntimeError(event.data.message || event.data.error, event.data.source);
+      }
+    };
+
+    // Handle global unhandled errors that might come from iframe context
+    const handleError = (event: ErrorEvent) => {
+      // Only capture if it looks like it's from our preview
+      if (event.filename?.includes('localhost:') || event.filename?.includes('webcontainer')) {
+        addRuntimeError(event.message, event.filename);
+      }
+    };
+
+    window.addEventListener('message', handleMessage);
+    window.addEventListener('error', handleError);
+
+    return () => {
+      window.removeEventListener('message', handleMessage);
+      window.removeEventListener('error', handleError);
+    };
+  }, [addRuntimeError]);
+
+  // Listen for WebContainer build errors from logs
+  useEffect(() => {
+    const handleWebContainerError = (e: CustomEvent<{ error: string }>) => {
+      addError(e.detail.error);
+    };
+
+    window.addEventListener('webcontainer:error', handleWebContainerError as EventListener);
+    return () => {
+      window.removeEventListener('webcontainer:error', handleWebContainerError as EventListener);
+    };
+  }, [addError]);
+
   // Load GitHub repo using git clone (like bolt.diy)
   useEffect(() => {
     if (projectId === 'new') return;
@@ -1404,19 +1482,33 @@ const DesignEditor: React.FC = () => {
         if (selectedId) deleteElement(selectedId);
       }
       if (e.key === 'Escape') {
-        setSelectedId(null);
-        setTool('select');
+        // Exit visual edit mode first, then clear selection
+        if (visualEditMode) {
+          setVisualEditMode(false);
+          setVisualSelectedElement(null);
+        } else {
+          setSelectedId(null);
+          setTool('select');
+        }
       }
-      if (e.key === 'v') setTool('select');
-      if (e.key === 'h') setTool('hand');
-      if (e.key === 'r') setTool('rectangle');
-      if (e.key === 'o') setTool('ellipse');
-      if (e.key === 't') setTool('text');
-      if (e.key === 'f') setTool('frame');
+      // Only allow shortcuts when not in visual edit mode
+      if (!visualEditMode) {
+        if (e.key === 'v') setTool('select');
+        if (e.key === 'h') setTool('hand');
+        if (e.key === 'r') setTool('rectangle');
+        if (e.key === 'o') setTool('ellipse');
+        if (e.key === 't') setTool('text');
+        if (e.key === 'f') setTool('frame');
+      }
+      // Toggle edit mode with 'e' key
+      if (e.key === 'e' && !e.metaKey && !e.ctrlKey && webcontainerReady) {
+        setVisualEditMode(prev => !prev);
+        setVisualSelectedElement(null);
+      }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedId, deleteElement]);
+  }, [selectedId, deleteElement, visualEditMode, webcontainerReady]);
 
   // Trackpad/wheel navigation: pinch to zoom, two-finger pan
   useEffect(() => {
@@ -2029,6 +2121,29 @@ const DesignEditor: React.FC = () => {
                 <polyline points="8 6 2 12 8 18"/>
               </svg>
             </button>
+
+            {/* Pages/Tree Mode */}
+            <button
+              onClick={() => setViewMode('pages')}
+              title="Pages Tree"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                border: 'none',
+                background: viewMode === 'pages' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+                color: viewMode === 'pages' ? '#a78bfa' : '#6b6b6b',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                transition: 'all 0.15s',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>
+              </svg>
+            </button>
           </div>
 
           {/* Responsive Viewport Controls */}
@@ -2399,7 +2514,90 @@ const DesignEditor: React.FC = () => {
 
         {/* Center Content */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
-          {viewMode === 'code' ? (
+          {viewMode === 'pages' ? (
+            /* Pages Mode - Full Site Tree */
+            <div style={{ flex: 1, display: 'flex', background: '#0a0a0a' }}>
+              <div style={{
+                flex: 1,
+                padding: 24,
+                overflowY: 'auto',
+              }}>
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 12,
+                  marginBottom: 24,
+                }}>
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2">
+                    <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>
+                  </svg>
+                  <h2 style={{ color: '#e5e5e5', fontSize: 18, fontWeight: 600, margin: 0 }}>
+                    Site Structure
+                  </h2>
+                </div>
+
+                {/* File Tree */}
+                <div style={{
+                  background: '#111',
+                  borderRadius: 12,
+                  border: '1px solid rgba(255,255,255,0.06)',
+                  overflow: 'hidden',
+                }}>
+                  <FileExplorer
+                    files={projectFiles}
+                    onFileSelect={(file) => {
+                      if (file.type !== 'file') return;
+                      setSelectedFile(file.path);
+                      setViewMode('code');
+                    }}
+                    selectedFile={selectedFile}
+                    projectName={githubRepo?.name || "Portfolio"}
+                  />
+                </div>
+
+                {/* Routes/Pages Section */}
+                {discoveredPages.length > 0 && (
+                  <div style={{ marginTop: 24 }}>
+                    <h3 style={{ color: '#a1a1aa', fontSize: 12, fontWeight: 600, textTransform: 'uppercase', letterSpacing: 1, marginBottom: 12 }}>
+                      Routes ({discoveredPages.length})
+                    </h3>
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                      gap: 12,
+                    }}>
+                      {discoveredPages.map(page => (
+                        <div
+                          key={page.path}
+                          onClick={() => {
+                            setCurrentPreviewPath(page.path);
+                            setViewMode('design');
+                          }}
+                          style={{
+                            padding: 16,
+                            background: currentPreviewPath === page.path ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                            border: currentPreviewPath === page.path ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
+                            borderRadius: 10,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#4ade80" strokeWidth="2">
+                              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                              <polyline points="14 2 14 8 20 8"/>
+                            </svg>
+                            <span style={{ color: '#e5e5e5', fontWeight: 500, fontSize: 13 }}>{page.name}</span>
+                          </div>
+                          <span style={{ color: '#4ade80', fontFamily: 'monospace', fontSize: 11 }}>{page.path}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : viewMode === 'code' ? (
             /* Code Mode - Full Width Editor */
             <div style={{ flex: 1, display: 'flex' }}>
               {/* File Explorer for Code Mode */}
@@ -2570,19 +2768,32 @@ const DesignEditor: React.FC = () => {
                     {/* Edit Mode Toggle */}
                     {webcontainerReady && (
                       <button
-                        onClick={() => setVisualEditMode(!visualEditMode)}
+                        onClick={() => {
+                          const newMode = !visualEditMode;
+                          setVisualEditMode(newMode);
+                          if (newMode) {
+                            setVisualSelectedElement(null);
+                            console.log('Visual Edit Mode ENABLED - Click on elements to select them');
+                          } else {
+                            setVisualSelectedElement(null);
+                            console.log('Visual Edit Mode DISABLED');
+                          }
+                        }}
+                        title={visualEditMode ? 'Exit edit mode (ESC)' : 'Enter visual edit mode - click elements to select and edit'}
                         style={{
                           display: 'flex',
                           alignItems: 'center',
                           gap: 6,
                           padding: '8px 14px',
-                          background: visualEditMode ? 'rgba(139, 92, 246, 0.2)' : 'rgba(255,255,255,0.05)',
+                          background: visualEditMode ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(99, 102, 241, 0.3) 100%)' : 'rgba(255,255,255,0.05)',
                           border: visualEditMode ? '1px solid #8b5cf6' : '1px solid transparent',
                           borderRadius: 20,
                           fontSize: 12,
-                          color: visualEditMode ? '#a78bfa' : '#71717a',
+                          fontWeight: visualEditMode ? 600 : 400,
+                          color: visualEditMode ? '#c4b5fd' : '#71717a',
                           cursor: 'pointer',
-                          transition: 'all 0.15s ease',
+                          transition: 'all 0.2s ease',
+                          boxShadow: visualEditMode ? '0 0 20px rgba(139, 92, 246, 0.3)' : 'none',
                         }}
                         onMouseEnter={(e) => {
                           if (!visualEditMode) {
@@ -2600,6 +2811,15 @@ const DesignEditor: React.FC = () => {
                           <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                         </svg>
                         {visualEditMode ? 'Editing' : 'Edit'}
+                        {visualEditMode && (
+                          <span style={{
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            background: '#22c55e',
+                            animation: 'pulse 1.5s infinite',
+                          }} />
+                        )}
                       </button>
                     )}
 
@@ -2729,6 +2949,45 @@ const DesignEditor: React.FC = () => {
                     )}
                   </div>
                 )}
+
+          {/* Visual Edit Mode Banner */}
+          {visualEditMode && (
+            <div style={{
+              position: 'absolute',
+              top: 60,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(99, 102, 241, 0.9) 100%)',
+              backdropFilter: 'blur(8px)',
+              padding: '8px 20px',
+              borderRadius: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              zIndex: 100,
+              boxShadow: '0 4px 20px rgba(139, 92, 246, 0.4)',
+              animation: 'fadeIn 0.2s ease',
+            }}>
+              <span style={{
+                width: 8,
+                height: 8,
+                borderRadius: '50%',
+                background: '#22c55e',
+                animation: 'pulse 1.5s infinite',
+              }} />
+              <span style={{ color: '#fff', fontSize: 12, fontWeight: 500 }}>
+                Edit Mode - Click elements to select
+              </span>
+              <span style={{
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: 11,
+                marginLeft: 4,
+              }}>
+                ESC to exit
+              </span>
+            </div>
+          )}
+
           {/* Se abbiamo un projectUrl, mostra l'iframe */}
           {projectUrl && !useWebContainer ? (
             <div
@@ -2850,6 +3109,27 @@ const DesignEditor: React.FC = () => {
                       setSelectedFile(el.sourceFile);
                       setShowCodePanel(true);
                     }
+                  }}
+                  onElementHover={(el) => {
+                    // Show hover feedback in status bar or tooltip
+                    if (el) {
+                      console.log('Hovering:', el.tagName);
+                    }
+                  }}
+                  onStyleChange={(property, value) => {
+                    // Direct style changes - send to AI for code update
+                    if (visualSelectedElement && chatPanelRef.current) {
+                      const prompt = `Update the ${property} to "${value}" for the ${visualSelectedElement.tagName} element${visualSelectedElement.className ? ` with class "${visualSelectedElement.className.split(' ')[0]}"` : ''}. Find and update the source code.`;
+                      chatPanelRef.current.sendMessage(prompt);
+                    }
+                  }}
+                  onPositionChange={(deltaX, deltaY) => {
+                    // Visual position feedback during drag
+                    console.log('Position delta:', deltaX, deltaY);
+                  }}
+                  onSizeChange={(width, height) => {
+                    // Visual size feedback during resize
+                    console.log('New size:', width, height);
                   }}
                 />
               )}
@@ -3818,6 +4098,15 @@ Find the component in the codebase and update the styles. If using Tailwind, con
           </div>
         </div>
       )}
+
+      {/* Agentic Error Alerts (bolt.diy pattern) */}
+      <ErrorAlertsContainer
+        errors={agenticErrors}
+        onFixWithAI={handleFixWithAI}
+        onDismiss={dismissError}
+        onDismissAll={dismissAllErrors}
+        fixingErrorId={fixingErrorId}
+      />
 
     </div>
   );

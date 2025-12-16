@@ -1,6 +1,7 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
 import { useChatHistory } from '../lib/persistence/useChatHistory';
 import { ChatMessage, FileSnapshot } from '../lib/persistence/db';
+import { parseArtifacts, formatFilesForContext, ParsedArtifact } from '../lib/artifactParser';
 
 type AIModel = 'claude' | 'gpt4' | 'image' | 'video' | 'audio';
 
@@ -23,6 +24,8 @@ const AI_MODELS: ModelOption[] = [
 
 interface AIChatPanelProps {
   onApplyCode?: (code: string, filePath: string) => void;
+  onFilesUpdate?: (files: Record<string, string>) => void;
+  onArtifactsApplied?: (artifacts: ParsedArtifact[]) => void;
   currentFile?: string;
   currentCode?: string;
   projectName?: string;
@@ -32,10 +35,13 @@ interface AIChatPanelProps {
 
 export interface AIChatPanelRef {
   sendMessage: (content: string) => Promise<void>;
+  sendErrorForFix: (error: string, file?: string, code?: string) => Promise<void>;
 }
 
 const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChatPanelInner({
   onApplyCode,
+  onFilesUpdate,
+  onArtifactsApplied,
   currentFile,
   currentCode,
   projectName = 'default',
@@ -80,10 +86,17 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
     }
   }, [input]);
 
-  // Expose sendMessage to parent via ref
+  // Expose methods to parent via ref
   useImperativeHandle(ref, () => ({
     sendMessage: async (content: string) => {
       await sendMessageInternal(content);
+    },
+    sendErrorForFix: async (error: string, file?: string, code?: string) => {
+      const errorContext = `## Error to Fix\n\n\`\`\`\n${error}\n\`\`\`\n\n` +
+        (file ? `**File:** ${file}\n\n` : '') +
+        (code ? `**Current Code:**\n\`\`\`\n${code}\n\`\`\`\n\n` : '') +
+        `Fix this error and return the complete corrected file. Use code blocks with the file path.`;
+      await sendMessageInternal(errorContext);
     },
   }));
 
@@ -104,6 +117,17 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
     const assistantMessage = addMessage('assistant', '');
 
     try {
+      // Build full project context for AI
+      const projectContext = currentFiles
+        ? formatFilesForContext(currentFiles, 8, 6000)
+        : currentCode
+        ? `### ${currentFile || 'src/App.tsx'}\n\`\`\`tsx\n${currentCode}\n\`\`\`\n\n`
+        : '';
+
+      const systemContext = projectContext
+        ? `## Current Project Files\n\n${projectContext}`
+        : '';
+
       const response = await fetch('https://design-editor-api.eziopappalardo98.workers.dev/api/ai/chat/stream', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,6 +136,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           currentFile,
           currentCode,
           projectName,
+          projectContext: systemContext, // Full project context
           history: messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         }),
       });
@@ -152,11 +177,41 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       // Take snapshot after AI response
       await takeSnapshot(assistantMessage.id);
 
-      // Extract code if present and apply it
-      const codeMatch = fullContent.match(/```(?:jsx?|tsx?|css)?\n([\s\S]*?)```/);
-      if (codeMatch && onApplyCode) {
-        const code = codeMatch[1].trim();
-        onApplyCode(code, currentFile || 'src/App.tsx');
+      // Parse artifacts from AI response
+      const { artifacts, explanation } = parseArtifacts(fullContent);
+
+      if (artifacts.length > 0) {
+        console.log('[AIChatPanel] Parsed artifacts:', artifacts.map(a => a.path || a.type));
+
+        // Apply each file artifact
+        const updatedFiles: Record<string, string> = {};
+        for (const artifact of artifacts) {
+          if (artifact.type === 'file' && artifact.path) {
+            updatedFiles[artifact.path] = artifact.content;
+
+            // Also call single file callback for backwards compatibility
+            if (onApplyCode) {
+              onApplyCode(artifact.content, artifact.path);
+            }
+          }
+        }
+
+        // Batch update all files
+        if (Object.keys(updatedFiles).length > 0 && onFilesUpdate) {
+          onFilesUpdate(updatedFiles);
+        }
+
+        // Notify about applied artifacts
+        if (onArtifactsApplied) {
+          onArtifactsApplied(artifacts);
+        }
+      } else {
+        // Fallback: try simple code extraction (backwards compatibility)
+        const codeMatch = fullContent.match(/```(?:jsx?|tsx?|css)?\n([\s\S]*?)```/);
+        if (codeMatch && onApplyCode) {
+          const code = codeMatch[1].trim();
+          onApplyCode(code, currentFile || 'src/App.tsx');
+        }
       }
 
     } catch (error) {
