@@ -979,12 +979,29 @@ const DesignEditor: React.FC = () => {
   }, []);
 
   // Sync wcIframeRef when WebContainer becomes ready
+  // Use retry mechanism because iframe might not be in DOM immediately
   useEffect(() => {
-    if (webcontainerReady) {
+    if (!webcontainerReady) return;
+
+    let retryCount = 0;
+    const maxRetries = 20;
+
+    const syncIframeRef = () => {
       const iframe = getPreviewIframe();
-      wcIframeRef.current = iframe;
-      console.log('[DesignEditor] WebContainer ready, iframe ref updated:', iframe);
-    }
+      if (iframe) {
+        wcIframeRef.current = iframe;
+        console.log('[DesignEditor] WebContainer iframe ref synced:', iframe.src);
+      } else if (retryCount < maxRetries) {
+        retryCount++;
+        console.log(`[DesignEditor] Iframe not ready, retry ${retryCount}/${maxRetries}...`);
+        setTimeout(syncIframeRef, 100);
+      } else {
+        console.warn('[DesignEditor] Could not get iframe ref after max retries');
+      }
+    };
+
+    // Small delay to let React render the iframe
+    setTimeout(syncIframeRef, 50);
   }, [webcontainerReady, getPreviewIframe]);
   const [hoveredElement, setHoveredElement] = useState<{
     tagName: string;
