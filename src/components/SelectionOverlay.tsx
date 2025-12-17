@@ -1,25 +1,53 @@
 /**
  * SelectionOverlay - Visual editing overlay for iframe preview
- * Handles element selection, resize handles, and visual feedback
- * Based on Plasmic's FreestyleManipulator approach
+ * Uses postMessage to communicate with the visual edit bridge script
+ * injected into the WebContainer preview iframe.
+ *
+ * This approach enables visual editing even for cross-origin iframes
+ * like WebContainer previews.
  */
 
 import React, { useState, useCallback, useEffect, useRef } from 'react';
+
+export interface SourceLocation {
+  fileName: string;
+  lineNumber: number;
+  columnNumber?: number;
+  source: 'attribute' | 'parent' | 'fiber';
+}
 
 export interface SelectedElement {
   tagName: string;
   className: string;
   id: string;
-  rect: DOMRect;
-  computedStyles: CSSStyleDeclaration;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+    top: number;
+    left: number;
+    right: number;
+    bottom: number;
+  };
+  styles: Record<string, string>;
   xpath: string;
-  sourceFile?: string;
-  sourceLine?: number;
+  textContent?: string | null;
+  componentName?: string | null;
+  componentStack?: string[];
+  componentProps?: Record<string, unknown>;
+  sourceLocation?: SourceLocation | null;
+  attributes?: Record<string, string>;
 }
 
 export interface HoveredElement {
   tagName: string;
-  rect: DOMRect;
+  rect: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
 }
 
 interface SelectionOverlayProps {
@@ -28,7 +56,7 @@ interface SelectionOverlayProps {
   zoom: number;
   onElementSelect?: (element: SelectedElement | null) => void;
   onElementHover?: (element: HoveredElement | null) => void;
-  onStyleChange?: (property: string, value: string) => void;
+  onStyleChange?: (xpath: string, property: string, value: string) => void;
   onPositionChange?: (deltaX: number, deltaY: number) => void;
   onSizeChange?: (width: number, height: number) => void;
 }
@@ -42,135 +70,172 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
   onElementSelect,
   onElementHover,
   onStyleChange,
-  onPositionChange,
-  onSizeChange,
 }) => {
   const [selectedElement, setSelectedElement] = useState<SelectedElement | null>(null);
   const [hoveredElement, setHoveredElement] = useState<HoveredElement | null>(null);
+  const [bridgeReady, setBridgeReady] = useState(false);
   const [isDragging, setIsDragging] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [activeHandle, setActiveHandle] = useState<ResizeHandle | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const overlayRef = useRef<HTMLDivElement>(null);
+  const retryCountRef = useRef(0);
 
-  // Check if iframe is accessible (same-origin)
-  const isIframeAccessible = useCallback((): boolean => {
+  // Get iframe position for coordinate conversion
+  const getIframeOffset = useCallback(() => {
     const iframe = iframeRef.current;
-    if (!iframe) return false;
+    if (!iframe) return { x: 0, y: 0 };
+    const rect = iframe.getBoundingClientRect();
+    return { x: rect.left, y: rect.top };
+  }, [iframeRef]);
+
+  // Convert iframe-relative coordinates to screen coordinates
+  const convertToScreenCoords = useCallback((rect: SelectedElement['rect']) => {
+    const offset = getIframeOffset();
+    return {
+      x: rect.x * zoom + offset.x,
+      y: rect.y * zoom + offset.y,
+      width: rect.width * zoom,
+      height: rect.height * zoom,
+    };
+  }, [zoom, getIframeOffset]);
+
+  // Send message to iframe
+  const sendToIframe = useCallback((message: object) => {
+    const iframe = iframeRef.current;
+    if (!iframe?.contentWindow) return;
+
     try {
-      // This will throw if cross-origin
-      return iframe.contentDocument !== null;
-    } catch {
-      return false;
+      iframe.contentWindow.postMessage(message, '*');
+    } catch (e) {
+      console.error('[SelectionOverlay] Failed to send message:', e);
     }
   }, [iframeRef]);
 
-  // Get element from point in iframe
-  const getElementFromPoint = useCallback((clientX: number, clientY: number): SelectedElement | null => {
-    const iframe = iframeRef.current;
-    if (!iframe) return null;
-
-    // Check cross-origin access
-    try {
-      if (!iframe.contentDocument) return null;
-    } catch {
-      // Cross-origin - can't access
-      console.log('[SelectionOverlay] Cross-origin iframe, selection disabled');
-      return null;
+  // Enable/disable edit mode in iframe
+  useEffect(() => {
+    if (enabled && bridgeReady) {
+      sendToIframe({ type: 'visual-edit-enable' });
+    } else {
+      sendToIframe({ type: 'visual-edit-disable' });
+      setSelectedElement(null);
+      setHoveredElement(null);
     }
+  }, [enabled, bridgeReady, sendToIframe]);
 
-    const iframeRect = iframe.getBoundingClientRect();
-    const x = (clientX - iframeRect.left) / zoom;
-    const y = (clientY - iframeRect.top) / zoom;
+  // Ping bridge to check if ready
+  useEffect(() => {
+    if (!enabled) return;
 
-    const element = iframe.contentDocument.elementFromPoint(x, y) as HTMLElement;
-    if (!element || element === iframe.contentDocument.body || element === iframe.contentDocument.documentElement) {
-      return null;
-    }
+    console.log('[SelectionOverlay] Edit mode enabled, starting ping...');
+    retryCountRef.current = 0; // Reset on enable
 
-    const rect = element.getBoundingClientRect();
-    const computedStyles = iframe.contentWindow!.getComputedStyle(element);
+    const pingInterval = setInterval(() => {
+      if (!bridgeReady && retryCountRef.current < 60) {
+        // Only log every 5th ping to reduce noise
+        if (retryCountRef.current % 5 === 0) {
+          console.log('[SelectionOverlay] Ping #' + (retryCountRef.current + 1) + '/60');
+        }
+        sendToIframe({ type: 'visual-edit-ping' });
+        retryCountRef.current++;
+      } else if (retryCountRef.current >= 60 && !bridgeReady) {
+        console.warn('[SelectionOverlay] Bridge not responding after 60 pings (30s)');
+        console.warn('[SelectionOverlay] The visual edit bridge may not be loaded in the iframe.');
+        console.warn('[SelectionOverlay] Check the browser console for errors in the iframe.');
+      }
+    }, 500);
 
-    return {
-      tagName: element.tagName.toLowerCase(),
-      className: element.className,
-      id: element.id,
-      rect: new DOMRect(
-        rect.left * zoom + iframeRect.left,
-        rect.top * zoom + iframeRect.top,
-        rect.width * zoom,
-        rect.height * zoom
-      ),
-      computedStyles,
-      xpath: getXPath(element),
-      sourceFile: element.dataset.sourceFile,
-      sourceLine: element.dataset.sourceLine ? parseInt(element.dataset.sourceLine) : undefined,
-    };
-  }, [iframeRef, zoom]);
+    return () => clearInterval(pingInterval);
+  }, [enabled, bridgeReady, sendToIframe]);
 
-  // Generate XPath for element
-  const getXPath = (element: HTMLElement): string => {
-    const parts: string[] = [];
-    let current: HTMLElement | null = element;
+  // Listen for messages from iframe
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      const data = event.data;
 
-    while (current && current.nodeType === Node.ELEMENT_NODE) {
-      let index = 1;
-      let sibling = current.previousElementSibling;
-
-      while (sibling) {
-        if (sibling.tagName === current.tagName) index++;
-        sibling = sibling.previousElementSibling;
+      // DEBUG: Log ALL messages to see what's coming through
+      if (data && typeof data === 'object') {
+        console.log('[SelectionOverlay] Message received:', data.type || 'unknown', data);
       }
 
-      const tagName = current.tagName.toLowerCase();
-      const part = index > 1 ? `${tagName}[${index}]` : tagName;
-      parts.unshift(part);
+      if (!data || !data.type) return;
 
-      current = current.parentElement;
-    }
+      // Log all visual-edit messages for debugging
+      if (data.type.startsWith('visual-edit')) {
+        console.log('[SelectionOverlay] Received:', data.type, data.element ? `(${data.element.tagName})` : '');
+      }
 
-    return '/' + parts.join('/');
-  };
+      switch (data.type) {
+        case 'visual-edit-ready':
+        case 'visual-edit-pong':
+          console.log('[SelectionOverlay] Bridge ready!');
+          setBridgeReady(true);
+          retryCountRef.current = 0;
+          if (enabled) {
+            sendToIframe({ type: 'visual-edit-enable' });
+          }
+          break;
 
-  // Handle mouse move for hover effect
-  const handleMouseMove = useCallback((e: React.MouseEvent) => {
-    if (!enabled || isDragging || isResizing) return;
+        case 'visual-edit-hover':
+          if (data.element) {
+            const screenRect = convertToScreenCoords(data.element.rect);
+            setHoveredElement({
+              tagName: data.element.tagName,
+              rect: screenRect,
+            });
+            onElementHover?.({
+              tagName: data.element.tagName,
+              rect: screenRect,
+            });
+          } else {
+            setHoveredElement(null);
+            onElementHover?.(null);
+          }
+          break;
 
-    const element = getElementFromPoint(e.clientX, e.clientY);
-    if (element) {
-      setHoveredElement({
-        tagName: element.tagName,
-        rect: element.rect,
-      });
-      onElementHover?.({
-        tagName: element.tagName,
-        rect: element.rect,
-      });
-    } else {
-      setHoveredElement(null);
-      onElementHover?.(null);
-    }
-  }, [enabled, isDragging, isResizing, getElementFromPoint, onElementHover]);
+        case 'visual-edit-select':
+          if (data.element) {
+            const element: SelectedElement = {
+              ...data.element,
+              rect: convertToScreenCoords(data.element.rect),
+            };
+            setSelectedElement(element);
+            onElementSelect?.(element);
+          } else {
+            setSelectedElement(null);
+            onElementSelect?.(null);
+          }
+          break;
 
-  // Handle click for selection
-  const handleClick = useCallback((e: React.MouseEvent) => {
-    if (!enabled) return;
-    e.preventDefault();
-    e.stopPropagation();
+        case 'visual-edit-updated':
+          if (data.element && selectedElement?.xpath === data.element.xpath) {
+            setSelectedElement({
+              ...data.element,
+              rect: convertToScreenCoords(data.element.rect),
+            });
+          }
+          break;
+      }
+    };
 
-    const element = getElementFromPoint(e.clientX, e.clientY);
-    setSelectedElement(element);
-    onElementSelect?.(element);
-  }, [enabled, getElementFromPoint, onElementSelect]);
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, [enabled, selectedElement, convertToScreenCoords, sendToIframe, onElementSelect, onElementHover]);
 
-  // Handle drag start for moving element
-  const handleDragStart = useCallback((e: React.MouseEvent) => {
-    if (!selectedElement || isResizing) return;
-    e.preventDefault();
+  // Reset bridge state when iframe changes
+  useEffect(() => {
+    const iframe = iframeRef.current;
+    if (!iframe) return;
 
-    setIsDragging(true);
-    setDragStart({ x: e.clientX, y: e.clientY });
-  }, [selectedElement, isResizing]);
+    const handleLoad = () => {
+      console.log('[SelectionOverlay] Iframe loaded, resetting bridge state');
+      setBridgeReady(false);
+      retryCountRef.current = 0;
+    };
+
+    iframe.addEventListener('load', handleLoad);
+    return () => iframe.removeEventListener('load', handleLoad);
+  }, [iframeRef]);
 
   // Handle resize start
   const handleResizeStart = useCallback((e: React.MouseEvent, handle: ResizeHandle) => {
@@ -187,56 +252,48 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
     if (!isDragging && !isResizing) return;
 
     const handleMouseMove = (e: MouseEvent) => {
+      if (!selectedElement) return;
+
       const deltaX = (e.clientX - dragStart.x) / zoom;
       const deltaY = (e.clientY - dragStart.y) / zoom;
 
-      if (isDragging && selectedElement) {
-        onPositionChange?.(deltaX, deltaY);
-        // Update visual feedback
-        setSelectedElement(prev => prev ? {
-          ...prev,
-          rect: new DOMRect(
-            prev.rect.x + (e.clientX - dragStart.x),
-            prev.rect.y + (e.clientY - dragStart.y),
-            prev.rect.width,
-            prev.rect.height
-          )
-        } : null);
-        setDragStart({ x: e.clientX, y: e.clientY });
-      }
+      if (isResizing && activeHandle) {
+        let newWidth = selectedElement.rect.width / zoom;
+        let newHeight = selectedElement.rect.height / zoom;
 
-      if (isResizing && selectedElement && activeHandle) {
-        let newWidth = selectedElement.rect.width;
-        let newHeight = selectedElement.rect.height;
-        let newX = selectedElement.rect.x;
-        let newY = selectedElement.rect.y;
-
-        // Calculate new dimensions based on handle
         if (activeHandle.includes('e')) {
-          newWidth += e.clientX - dragStart.x;
+          newWidth += deltaX;
         }
         if (activeHandle.includes('w')) {
-          newWidth -= e.clientX - dragStart.x;
-          newX += e.clientX - dragStart.x;
+          newWidth -= deltaX;
         }
         if (activeHandle.includes('s')) {
-          newHeight += e.clientY - dragStart.y;
+          newHeight += deltaY;
         }
         if (activeHandle.includes('n')) {
-          newHeight -= e.clientY - dragStart.y;
-          newY += e.clientY - dragStart.y;
+          newHeight -= deltaY;
         }
 
         // Minimum size
         newWidth = Math.max(20, newWidth);
         newHeight = Math.max(20, newHeight);
 
-        onSizeChange?.(newWidth / zoom, newHeight / zoom);
+        // Send style change to iframe
+        sendToIframe({
+          type: 'visual-edit-apply-style',
+          xpath: selectedElement.xpath,
+          property: 'width',
+          value: `${Math.round(newWidth)}px`,
+        });
+        sendToIframe({
+          type: 'visual-edit-apply-style',
+          xpath: selectedElement.xpath,
+          property: 'height',
+          value: `${Math.round(newHeight)}px`,
+        });
 
-        setSelectedElement(prev => prev ? {
-          ...prev,
-          rect: new DOMRect(newX, newY, newWidth, newHeight)
-        } : null);
+        onStyleChange?.(selectedElement.xpath, 'width', `${Math.round(newWidth)}px`);
+
         setDragStart({ x: e.clientX, y: e.clientY });
       }
     };
@@ -254,36 +311,12 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
       window.removeEventListener('mousemove', handleMouseMove);
       window.removeEventListener('mouseup', handleMouseUp);
     };
-  }, [isDragging, isResizing, dragStart, selectedElement, activeHandle, zoom, onPositionChange, onSizeChange]);
-
-  // Update selection when iframe content changes
-  useEffect(() => {
-    if (!selectedElement) return;
-
-    const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) return;
-
-    const observer = new MutationObserver(() => {
-      // Re-calculate selection rect
-      // This is simplified - would need xpath to re-find element
-    });
-
-    observer.observe(iframe.contentDocument!.body, {
-      childList: true,
-      subtree: true,
-      attributes: true,
-    });
-
-    return () => observer.disconnect();
-  }, [selectedElement, iframeRef]);
-
-  // Don't render overlay if iframe is cross-origin (WebContainer)
-  const canAccessIframe = isIframeAccessible();
+  }, [isDragging, isResizing, dragStart, selectedElement, activeHandle, zoom, sendToIframe, onStyleChange]);
 
   if (!enabled) return null;
 
-  // If cross-origin, show info message instead of overlay
-  if (!canAccessIframe) {
+  // Show loading state while waiting for bridge
+  if (!bridgeReady) {
     return (
       <div
         style={{
@@ -291,16 +324,34 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
           top: 8,
           left: '50%',
           transform: 'translateX(-50%)',
-          background: 'rgba(0,0,0,0.8)',
+          background: 'rgba(139, 92, 246, 0.9)',
           color: '#fff',
           padding: '8px 16px',
           borderRadius: 8,
           fontSize: 12,
           zIndex: 50,
           pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
         }}
       >
-        Visual editing non disponibile per WebContainer. Usa la Chat per modificare il codice.
+        <div
+          style={{
+            width: 12,
+            height: 12,
+            border: '2px solid rgba(255,255,255,0.3)',
+            borderTopColor: '#fff',
+            borderRadius: '50%',
+            animation: 'spin 1s linear infinite',
+          }}
+        />
+        Connessione all'editor visuale...
+        <style>{`
+          @keyframes spin {
+            to { transform: rotate(360deg); }
+          }
+        `}</style>
       </div>
     );
   }
@@ -341,20 +392,44 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
   return (
     <div
       ref={overlayRef}
-      onMouseMove={handleMouseMove}
-      onClick={handleClick}
-      onMouseLeave={() => setHoveredElement(null)}
       style={{
         position: 'absolute',
         top: 0,
         left: 0,
         right: 0,
         bottom: 0,
-        pointerEvents: enabled ? 'auto' : 'none',
-        cursor: isDragging ? 'grabbing' : isResizing ? 'default' : 'default',
+        pointerEvents: 'none', // Let clicks pass through to iframe
         zIndex: 50,
       }}
     >
+      {/* Edit mode indicator */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 8,
+          left: '50%',
+          transform: 'translateX(-50%)',
+          background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(99, 102, 241, 0.9) 100%)',
+          color: '#fff',
+          padding: '6px 14px',
+          borderRadius: 20,
+          fontSize: 11,
+          fontWeight: 500,
+          zIndex: 50,
+          pointerEvents: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 6,
+          boxShadow: '0 2px 10px rgba(139, 92, 246, 0.3)',
+        }}
+      >
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
+        </svg>
+        Edit Mode - Clicca per selezionare
+      </div>
+
       {/* Hover highlight */}
       {hoveredElement && !selectedElement && (
         <div
@@ -393,7 +468,6 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
       {/* Selection box */}
       {selectedElement && (
         <div
-          onMouseDown={handleDragStart}
           style={{
             position: 'fixed',
             left: selectedElement.rect.x,
@@ -402,6 +476,7 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
             height: selectedElement.rect.height,
             border: '2px solid #8b5cf6',
             background: isDragging ? 'rgba(139, 92, 246, 0.15)' : 'rgba(139, 92, 246, 0.05)',
+            pointerEvents: 'auto',
             cursor: isDragging ? 'grabbing' : 'grab',
             transition: isDragging || isResizing ? 'none' : 'all 0.1s ease',
           }}
@@ -410,29 +485,83 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
           <div
             style={{
               position: 'absolute',
-              top: -28,
+              top: -32,
               left: -2,
               display: 'flex',
               alignItems: 'center',
-              gap: 6,
-              background: '#8b5cf6',
+              gap: 4,
+              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
               color: '#fff',
               fontSize: 11,
               fontWeight: 500,
-              padding: '3px 8px',
-              borderRadius: 4,
+              padding: '4px 10px',
+              borderRadius: 6,
               whiteSpace: 'nowrap',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
+              boxShadow: '0 2px 12px rgba(139, 92, 246, 0.4)',
             }}
           >
-            <span>{selectedElement.tagName}</span>
+            {/* Component/Tag name */}
+            <span style={{ fontWeight: 600 }}>
+              {selectedElement.componentName || selectedElement.tagName}
+            </span>
             {selectedElement.className && (
-              <span style={{ opacity: 0.7 }}>.{selectedElement.className.split(' ')[0]}</span>
+              <span style={{ opacity: 0.7, fontSize: 10 }}>
+                .{selectedElement.className.split(' ')[0]}
+              </span>
             )}
             {selectedElement.id && (
-              <span style={{ opacity: 0.7 }}>#{selectedElement.id}</span>
+              <span style={{ opacity: 0.7, fontSize: 10 }}>#{selectedElement.id}</span>
+            )}
+            {/* Source location badge */}
+            {selectedElement.sourceLocation && (
+              <span
+                style={{
+                  marginLeft: 4,
+                  padding: '1px 6px',
+                  background: 'rgba(0,0,0,0.3)',
+                  borderRadius: 4,
+                  fontSize: 9,
+                  fontFamily: 'monospace',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 3,
+                }}
+              >
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                {selectedElement.sourceLocation.fileName.split('/').pop()}:{selectedElement.sourceLocation.lineNumber}
+              </span>
             )}
           </div>
+
+          {/* Component stack (if available) */}
+          {selectedElement.componentStack && selectedElement.componentStack.length > 1 && (
+            <div
+              style={{
+                position: 'absolute',
+                top: -52,
+                left: -2,
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: 'rgba(0,0,0,0.7)',
+                color: 'rgba(255,255,255,0.7)',
+                fontSize: 9,
+                padding: '2px 8px',
+                borderRadius: 4,
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {selectedElement.componentStack.slice(0, 4).map((name, i) => (
+                <span key={i} style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                  {i > 0 && <span style={{ opacity: 0.5 }}>›</span>}
+                  <span>{name}</span>
+                </span>
+              ))}
+            </div>
+          )}
 
           {/* Dimensions label */}
           <div
@@ -441,16 +570,24 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
               bottom: -24,
               left: '50%',
               transform: 'translateX(-50%)',
-              background: 'rgba(0,0,0,0.8)',
+              background: 'rgba(0,0,0,0.85)',
               color: '#fff',
               fontSize: 10,
-              padding: '2px 6px',
+              padding: '3px 8px',
               borderRadius: 4,
               whiteSpace: 'nowrap',
               fontFamily: 'monospace',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
-            {Math.round(selectedElement.rect.width / zoom)} × {Math.round(selectedElement.rect.height / zoom)}
+            <span>{Math.round(selectedElement.rect.width / zoom)} × {Math.round(selectedElement.rect.height / zoom)}</span>
+            {selectedElement.textContent && (
+              <span style={{ opacity: 0.6, maxWidth: 100, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                "{selectedElement.textContent.substring(0, 20)}{selectedElement.textContent.length > 20 ? '...' : ''}"
+              </span>
+            )}
           </div>
 
           {/* Resize handles */}

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { useParams } from 'react-router-dom';
 import './DesignEditor.css';
 import CodePanel from './components/CodePanel';
@@ -974,6 +975,60 @@ const DesignEditor: React.FC = () => {
   const canvasRef = useRef<HTMLDivElement>(null);
   const canvasAreaRef = useRef<HTMLDivElement>(null);
   const iframeRef = useRef<HTMLIFrameElement>(null);
+  const deviceSelectorRef = useRef<HTMLDivElement>(null);
+  const [dropdownPosition, setDropdownPosition] = useState<{ top: number; left: number } | null>(null);
+
+  // Container dimensions for auto-scaling device preview
+  const [containerDimensions, setContainerDimensions] = useState({ width: 1200, height: 800 });
+
+  // Track canvas area dimensions with ResizeObserver for responsive device scaling
+  useEffect(() => {
+    const canvasArea = canvasAreaRef.current;
+    if (!canvasArea) return;
+
+    const updateDimensions = () => {
+      setContainerDimensions({
+        width: canvasArea.clientWidth,
+        height: canvasArea.clientHeight,
+      });
+    };
+
+    // Initial measurement
+    updateDimensions();
+
+    // Watch for size changes
+    const resizeObserver = new ResizeObserver(updateDimensions);
+    resizeObserver.observe(canvasArea);
+
+    return () => resizeObserver.disconnect();
+  }, []);
+
+  // Close device dropdown when clicking outside
+  useEffect(() => {
+    if (!showDeviceDropdown) return;
+
+    const handleClickOutside = (e: MouseEvent) => {
+      const target = e.target as HTMLElement;
+      // Check if click is inside dropdown or device selector
+      if (
+        deviceSelectorRef.current?.contains(target) ||
+        target.closest('.device-dropdown-scroll')
+      ) {
+        return;
+      }
+      setShowDeviceDropdown(false);
+    };
+
+    // Delay to avoid immediate close from the open click
+    const timer = setTimeout(() => {
+      document.addEventListener('click', handleClickOutside);
+    }, 0);
+
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('click', handleClickOutside);
+    };
+  }, [showDeviceDropdown]);
 
   // Get current breakpoint data
   const activeBreakpoint = useMemo(() =>
@@ -2902,6 +2957,7 @@ const DesignEditor: React.FC = () => {
                     gap: 8,
                     marginBottom: 16,
                     position: 'relative',
+                    zIndex: 50,
                   }}>
                     {/* Edit Mode Toggle */}
                     {webcontainerReady && (
@@ -2963,7 +3019,18 @@ const DesignEditor: React.FC = () => {
 
                     {/* Device Selector */}
                     <div
-                      onClick={() => setShowDeviceDropdown(!showDeviceDropdown)}
+                      ref={deviceSelectorRef}
+                      onClick={() => {
+                        const newState = !showDeviceDropdown;
+                        setShowDeviceDropdown(newState);
+                        if (newState && deviceSelectorRef.current) {
+                          const rect = deviceSelectorRef.current.getBoundingClientRect();
+                          setDropdownPosition({
+                            top: rect.bottom + 8,
+                            left: rect.left + rect.width / 2,
+                          });
+                        }
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -3069,26 +3136,28 @@ const DesignEditor: React.FC = () => {
                       </div>
                     )}
 
-                    {/* Device Dropdown */}
-                    {showDeviceDropdown && (
+                    {/* Device Dropdown - rendered via Portal to escape overflow context */}
+                    {showDeviceDropdown && dropdownPosition && createPortal(
                       <div
                         className="device-dropdown-scroll"
+                        onClick={(e) => e.stopPropagation()}
+                        onMouseDown={(e) => e.stopPropagation()}
                         style={{
-                          position: 'absolute',
-                          top: '100%',
-                          left: '50%',
+                          position: 'fixed',
+                          top: dropdownPosition.top,
+                          left: dropdownPosition.left,
                           transform: 'translateX(-50%)',
-                          marginTop: 8,
                           background: '#1a1a1a',
                           border: '1px solid rgba(255,255,255,0.1)',
                           borderRadius: 12,
                           padding: 8,
                           minWidth: 280,
-                          maxHeight: 350,
+                          maxHeight: '60vh',
                           overflowY: 'auto',
                           overflowX: 'hidden',
-                          zIndex: 100,
+                          zIndex: 10000,
                           boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                          pointerEvents: 'auto',
                       }}>
                         {(['desktop', 'tablet', 'phone'] as DeviceCategory[]).map(category => (
                           <div key={category}>
@@ -3146,7 +3215,8 @@ const DesignEditor: React.FC = () => {
                             ))}
                           </div>
                         ))}
-                      </div>
+                      </div>,
+                      document.body
                     )}
                   </div>
                 )}
@@ -3253,52 +3323,61 @@ const DesignEditor: React.FC = () => {
           ) : useWebContainer ? (
             /* WebContainer Preview - for AI-generated code */
             (() => {
-              // Calculate scaling for non-desktop devices to show desktop version scaled down
-              const isSmallDevice = selectedDevice.category !== 'desktop';
-              const baseWidth = isSmallDevice ? 1280 : selectedDevice.width; // Render at desktop size
-              const baseHeight = isSmallDevice ? 800 : selectedDevice.height;
-              const scaleRatio = isSmallDevice ? selectedDevice.width / baseWidth : 1;
+              // Calculate scale to fit device in container with padding
+              const padding = 80; // padding around device frame
+              const availableWidth = containerDimensions.width - padding;
+              const availableHeight = containerDimensions.height - padding;
+
+              const scaleX = availableWidth / selectedDevice.width;
+              const scaleY = availableHeight / selectedDevice.height;
+              const autoScale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
+
+              // Final scale combines auto-scale with user zoom
+              const finalScale = visualEditMode ? 1 : autoScale * zoom;
 
               return (
                 <div
                   style={{
                     width: visualEditMode ? '100%' : selectedDevice.width,
-                    maxWidth: visualEditMode ? 1200 : '100%',
+                    maxWidth: visualEditMode ? 1200 : undefined,
                     height: visualEditMode ? 'auto' : selectedDevice.height,
                     minHeight: visualEditMode ? 'calc(100vh - 200px)' : undefined,
-                    maxHeight: visualEditMode ? 'none' : 'calc(100vh - 200px)',
-                    transform: visualEditMode ? 'none' : `scale(${zoom})`,
+                    transform: visualEditMode ? 'none' : `scale(${finalScale})`,
                     transformOrigin: 'top center',
-                    borderRadius: visualEditMode ? 8 : selectedDevice.category === 'phone' ? 40 : selectedDevice.category === 'tablet' ? 20 : 8,
+                    borderRadius: visualEditMode ? 8 : selectedDevice.category === 'phone' ? 44 : selectedDevice.category === 'tablet' ? 24 : 12,
                     overflow: 'hidden',
-                    boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
-                    border: visualEditMode ? '2px solid #8b5cf6' : selectedDevice.category !== 'desktop' ? '8px solid #1a1a1a' : 'none',
+                    boxShadow: selectedDevice.category !== 'desktop'
+                      ? '0 25px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)'
+                      : '0 8px 32px rgba(0,0,0,0.4)',
+                    border: visualEditMode ? '2px solid #8b5cf6' : selectedDevice.category !== 'desktop' ? '12px solid #1a1a1a' : 'none',
                     transition: 'all 0.3s ease',
                     position: 'relative',
-                    background: '#fff',
+                    background: selectedDevice.category !== 'desktop' ? '#000' : '#fff',
                   }}
                 >
                   {/* Phone notch for mobile view (Dynamic Island style) - hide in edit mode */}
                   {selectedDevice.category === 'phone' && !visualEditMode && (
                     <div style={{
                       position: 'absolute',
-                      top: 8,
+                      top: 12,
                       left: '50%',
                       transform: 'translateX(-50%)',
-                      width: 100,
-                      height: 28,
+                      width: 120,
+                      height: 34,
                       background: '#000',
                       borderRadius: 20,
                       zIndex: 10,
+                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
                     }} />
                   )}
-                  {/* Scaled content wrapper for small devices */}
+                  {/* Inner content area with rounded corners */}
                   <div
                     style={{
-                      width: isSmallDevice && !visualEditMode ? baseWidth : '100%',
-                      height: isSmallDevice && !visualEditMode ? baseHeight : '100%',
-                      transform: isSmallDevice && !visualEditMode ? `scale(${scaleRatio})` : 'none',
-                      transformOrigin: 'top left',
+                      width: '100%',
+                      height: '100%',
+                      overflow: 'hidden',
+                      borderRadius: selectedDevice.category === 'phone' ? 32 : selectedDevice.category === 'tablet' ? 12 : 0,
+                      background: '#fff',
                     }}
                   >
                     <WebContainerPreview
@@ -3325,8 +3404,8 @@ const DesignEditor: React.FC = () => {
                       zoom={zoom}
                       onElementSelect={(el) => {
                         setVisualSelectedElement(el);
-                        if (el?.sourceFile) {
-                          setSelectedFile(el.sourceFile);
+                        if (el?.sourceLocation?.fileName) {
+                          setSelectedFile(el.sourceLocation.fileName);
                           setShowCodePanel(true);
                         }
                       }}
@@ -3335,9 +3414,12 @@ const DesignEditor: React.FC = () => {
                           console.log('Hovering:', el.tagName);
                         }
                       }}
-                      onStyleChange={(property, value) => {
+                      onStyleChange={(xpath, property, value) => {
                         if (visualSelectedElement && chatPanelRef.current) {
-                          const prompt = `Update the ${property} to "${value}" for the ${visualSelectedElement.tagName} element${visualSelectedElement.className ? ` with class "${visualSelectedElement.className.split(' ')[0]}"` : ''}. Find and update the source code.`;
+                          const sourceInfo = visualSelectedElement.sourceLocation
+                            ? ` in ${visualSelectedElement.sourceLocation.fileName}:${visualSelectedElement.sourceLocation.lineNumber}`
+                            : '';
+                          const prompt = `Update the ${property} to "${value}" for the ${visualSelectedElement.tagName} element${visualSelectedElement.className ? ` with class "${visualSelectedElement.className.split(' ')[0]}"` : ''}${sourceInfo}. Find and update the source code.`;
                           chatPanelRef.current.sendMessage(prompt);
                         }
                       }}
@@ -3601,13 +3683,26 @@ const DesignEditor: React.FC = () => {
             <VisualPropsPanel
               element={visualSelectedElement}
               zoom={zoom}
+              onOpenFile={(sourceLocation) => {
+                // Open the file in the code panel
+                setSelectedFile(sourceLocation.fileName);
+                setShowCodePanel(true);
+              }}
               onApplyWithAI={async (element, changes) => {
                 // Build prompt for AI
                 const changeDescriptions = changes.map(c =>
                   `- ${c.property}: ${c.oldValue} → ${c.newValue}`
                 ).join('\n');
 
-                const prompt = `Update the styles for the ${element.tagName} element${element.className ? ` with class "${element.className.split(' ')[0]}"` : ''}${element.id ? ` and id "${element.id}"` : ''}.
+                const sourceInfo = element.sourceLocation
+                  ? `\n\nSource file: ${element.sourceLocation.fileName}:${element.sourceLocation.lineNumber}`
+                  : '';
+
+                const componentInfo = element.componentName
+                  ? `React component: ${element.componentName}`
+                  : `HTML element: <${element.tagName}>`;
+
+                const prompt = `Update the styles for ${componentInfo}${element.className ? ` with class "${element.className.split(' ')[0]}"` : ''}${element.id ? ` and id "${element.id}"` : ''}.${sourceInfo}
 
 Make these CSS changes:
 ${changeDescriptions}

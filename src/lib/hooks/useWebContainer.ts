@@ -7,6 +7,7 @@ import {
   startDevServer,
   createViteReactProject,
 } from '../webcontainer';
+import { VISUAL_EDIT_BRIDGE_SCRIPT } from '../visualEditBridge';
 
 export type WebContainerStatus =
   | 'idle'
@@ -25,6 +26,76 @@ export interface UseWebContainerReturn {
   boot: () => Promise<void>;
   runProject: (files?: Record<string, string>) => Promise<void>;
   updateFile: (path: string, content: string) => Promise<void>;
+}
+
+/**
+ * Inject the visual edit bridge script into HTML files
+ * This enables communication between the editor and the preview iframe
+ */
+function injectBridgeIntoFiles(files: Record<string, string>): Record<string, string> {
+  const result = { ...files };
+  // Escape the script for safer injection
+  const bridgeScript = `<script type="text/javascript">${VISUAL_EDIT_BRIDGE_SCRIPT}</script>`;
+
+  // Log all file paths for debugging
+  const allPaths = Object.keys(files);
+  console.log('[WebContainer] Processing', allPaths.length, 'files for bridge injection');
+
+  // Find all HTML files
+  const htmlFiles = allPaths.filter(p =>
+    p.toLowerCase().endsWith('.html') ||
+    p.toLowerCase().endsWith('.htm')
+  );
+  console.log('[WebContainer] Found HTML files:', htmlFiles);
+
+  let injectedCount = 0;
+  for (const [path, content] of Object.entries(result)) {
+    // Only inject into .html/.htm files
+    const lowerPath = path.toLowerCase();
+    if (!lowerPath.endsWith('.html') && !lowerPath.endsWith('.htm')) {
+      continue;
+    }
+
+    // Check for closing body tag (case-insensitive)
+    const bodyCloseMatch = content.match(/<\/body>/i);
+    if (!bodyCloseMatch) {
+      console.warn('[WebContainer] No </body> tag found in:', path);
+      // Try to inject before </html> as fallback
+      const htmlCloseMatch = content.match(/<\/html>/i);
+      if (htmlCloseMatch) {
+        // Avoid double injection
+        if (content.includes('__VISUAL_EDIT_BRIDGE__')) {
+          console.log('[WebContainer] Bridge already present in:', path);
+          continue;
+        }
+        result[path] = content.replace(htmlCloseMatch[0], `${bridgeScript}\n${htmlCloseMatch[0]}`);
+        injectedCount++;
+        console.log('[WebContainer] Injected visual edit bridge into:', path, '(before </html>)');
+      }
+      continue;
+    }
+
+    // Avoid double injection
+    if (content.includes('__VISUAL_EDIT_BRIDGE__')) {
+      console.log('[WebContainer] Bridge already present in:', path);
+      continue;
+    }
+
+    // Inject before </body>
+    result[path] = content.replace(bodyCloseMatch[0], `${bridgeScript}\n${bodyCloseMatch[0]}`);
+    injectedCount++;
+    console.log('[WebContainer] Injected visual edit bridge into:', path);
+  }
+
+  if (injectedCount === 0) {
+    console.warn('[WebContainer] WARNING: No HTML files injected with bridge!');
+    console.warn('[WebContainer] This means visual editing will NOT work.');
+    console.warn('[WebContainer] All file paths:', allPaths.slice(0, 30).join(', '), allPaths.length > 30 ? `... and ${allPaths.length - 30} more` : '');
+  } else {
+    console.log(`[WebContainer] Successfully injected bridge into ${injectedCount} HTML file(s)`);
+  }
+
+  return result;
 }
 
 export function useWebContainer(): UseWebContainerReturn {
@@ -93,7 +164,27 @@ export function useWebContainer(): UseWebContainerReturn {
       }
 
       const container = containerRef.current;
-      const projectFiles = files || createViteReactProject();
+      const rawFiles = files || createViteReactProject();
+
+      // DEBUG: Log all files being processed
+      console.log('[WebContainer] Raw files received:', Object.keys(rawFiles));
+      const htmlFilesInRaw = Object.keys(rawFiles).filter(f => f.toLowerCase().includes('.html'));
+      console.log('[WebContainer] HTML files in raw:', htmlFilesInRaw);
+      if (htmlFilesInRaw.length > 0) {
+        htmlFilesInRaw.forEach(f => {
+          console.log(`[WebContainer] ${f} content preview:`, rawFiles[f]?.substring(0, 200));
+        });
+      }
+
+      // Inject visual edit bridge script into HTML files
+      const projectFiles = injectBridgeIntoFiles(rawFiles);
+
+      // DEBUG: Verify injection
+      const htmlFilesAfter = Object.keys(projectFiles).filter(f => f.toLowerCase().includes('.html'));
+      htmlFilesAfter.forEach(f => {
+        const hasBridge = projectFiles[f]?.includes('__VISUAL_EDIT_BRIDGE__');
+        console.log(`[WebContainer] ${f} has bridge: ${hasBridge}`);
+      });
 
       // Write files
       setStatus('installing');
