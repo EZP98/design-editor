@@ -1421,13 +1421,15 @@ const DesignEditor: React.FC = () => {
         setProjectLogs(['Loading project...']);
 
         // Check if repo has a deployed homepage URL (instant preview)
-        if (repo.homepage && repo.homepage.startsWith('http')) {
-          setProjectUrl(repo.homepage);
-          setProjectStatus('ready');
-          setLiveMode(true);
-          setProjectLogs(['Site loaded from deployed URL']);
-          return;
-        }
+        // NOTE: Skip this for now - always use WebContainer for visual editing support
+        // TODO: Add a "quick preview" vs "edit mode" toggle
+        // if (repo.homepage && repo.homepage.startsWith('http')) {
+        //   setProjectUrl(repo.homepage);
+        //   setProjectStatus('ready');
+        //   setLiveMode(true);
+        //   setProjectLogs(['Site loaded from deployed URL']);
+        //   return;
+        // }
 
         // Enable WebContainer mode and show loading UI
         setUseWebContainer(true);
