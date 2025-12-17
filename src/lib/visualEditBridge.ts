@@ -105,7 +105,7 @@ export const VISUAL_EDIT_BRIDGE_SCRIPT = `
       }
 
       // Get props from the nearest component
-      if (current.memoizedProps && info.componentStack.length <= 1) {
+      if (current.memoizedProps && 1 >= info.componentStack.length) {
         // Filter out children and internal props
         const props = current.memoizedProps;
         for (const key in props) {
@@ -151,7 +151,7 @@ export const VISUAL_EDIT_BRIDGE_SCRIPT = `
     // Walk up to find nearest data-source
     let parent = element.parentElement;
     let depth = 0;
-    while (parent && depth < 10) {
+    while (parent && 10 > depth) {
       const parentSource = parent.getAttribute('data-source');
       if (parentSource) {
         const parts = parentSource.split(':');
