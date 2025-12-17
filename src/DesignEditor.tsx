@@ -3741,18 +3741,28 @@ const DesignEditor: React.FC = () => {
                   </button>
                 </div>
 
-          {/* Visual Edit Mode - Enhanced Props Panel */}
-          {visualEditMode && visualSelectedElement ? (
+          {/* Visual Edit Mode - New Editable Props Panel */}
+          {visualEditMode && editableSelectedElement ? (
+            <PropsPanel
+              selectedElement={editableSelectedElement}
+              onChange={(newProps) => {
+                // Send props update to iframe via PreviewManager
+                if (previewManagerRef.current && editableSelectedElement) {
+                  previewManagerRef.current.updateProps(editableSelectedElement.id, newProps);
+                  console.log('[DesignEditor] Props updated:', editableSelectedElement.id, newProps);
+                }
+              }}
+            />
+          ) : visualEditMode && visualSelectedElement ? (
+            // Fallback to old VisualPropsPanel for non-editable projects
             <VisualPropsPanel
               element={visualSelectedElement}
               zoom={zoom}
               onOpenFile={(sourceLocation) => {
-                // Open the file in the code panel
                 setSelectedFile(sourceLocation.fileName);
                 setShowCodePanel(true);
               }}
               onApplyWithAI={async (element, changes) => {
-                // Build prompt for AI
                 const changeDescriptions = changes.map(c =>
                   `- ${c.property}: ${c.oldValue} → ${c.newValue}`
                 ).join('\n');
@@ -3772,7 +3782,6 @@ ${changeDescriptions}
 
 Find the component in the codebase and update the styles. If using Tailwind, convert to Tailwind classes. If using CSS-in-JS or inline styles, update accordingly. Return the complete updated component code.`;
 
-                // Send to AI chat via ref
                 if (chatPanelRef.current) {
                   await chatPanelRef.current.sendMessage(prompt);
                 } else {
