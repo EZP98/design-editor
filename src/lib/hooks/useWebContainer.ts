@@ -31,11 +31,14 @@ export interface UseWebContainerReturn {
 /**
  * Inject the visual edit bridge script into HTML files
  * This enables communication between the editor and the preview iframe
+ *
+ * We inject at the START of <head> to ensure the bridge loads first,
+ * before any other scripts that might interfere.
  */
 function injectBridgeIntoFiles(files: Record<string, string>): Record<string, string> {
   const result = { ...files };
-  // Escape the script for safer injection
-  const bridgeScript = `<script type="text/javascript">${VISUAL_EDIT_BRIDGE_SCRIPT}</script>`;
+  // Wrap in script tag - using type="module" for better compatibility
+  const bridgeScript = `<script type="text/javascript" data-visual-bridge="true">${VISUAL_EDIT_BRIDGE_SCRIPT}</script>`;
 
   // Log all file paths for debugging
   const allPaths = Object.keys(files);
@@ -56,35 +59,41 @@ function injectBridgeIntoFiles(files: Record<string, string>): Record<string, st
       continue;
     }
 
-    // Check for closing body tag (case-insensitive)
-    const bodyCloseMatch = content.match(/<\/body>/i);
-    if (!bodyCloseMatch) {
-      console.warn('[WebContainer] No </body> tag found in:', path);
-      // Try to inject before </html> as fallback
-      const htmlCloseMatch = content.match(/<\/html>/i);
-      if (htmlCloseMatch) {
-        // Avoid double injection
-        if (content.includes('__VISUAL_EDIT_BRIDGE__')) {
-          console.log('[WebContainer] Bridge already present in:', path);
-          continue;
-        }
-        result[path] = content.replace(htmlCloseMatch[0], `${bridgeScript}\n${htmlCloseMatch[0]}`);
-        injectedCount++;
-        console.log('[WebContainer] Injected visual edit bridge into:', path, '(before </html>)');
-      }
-      continue;
-    }
-
     // Avoid double injection
-    if (content.includes('__VISUAL_EDIT_BRIDGE__')) {
+    if (content.includes('__VISUAL_EDIT_BRIDGE__') || content.includes('data-visual-bridge')) {
       console.log('[WebContainer] Bridge already present in:', path);
       continue;
     }
 
-    // Inject before </body>
-    result[path] = content.replace(bodyCloseMatch[0], `${bridgeScript}\n${bodyCloseMatch[0]}`);
-    injectedCount++;
-    console.log('[WebContainer] Injected visual edit bridge into:', path);
+    // Try to inject right after <head> tag (highest priority - runs first)
+    const headOpenMatch = content.match(/<head[^>]*>/i);
+    if (headOpenMatch) {
+      result[path] = content.replace(headOpenMatch[0], `${headOpenMatch[0]}\n${bridgeScript}`);
+      injectedCount++;
+      console.log('[WebContainer] Injected visual edit bridge into:', path, '(after <head>)');
+      console.log('[WebContainer] First 500 chars:', result[path].substring(0, 500));
+      continue;
+    }
+
+    // Fallback: inject before </body>
+    const bodyCloseMatch = content.match(/<\/body>/i);
+    if (bodyCloseMatch) {
+      result[path] = content.replace(bodyCloseMatch[0], `${bridgeScript}\n${bodyCloseMatch[0]}`);
+      injectedCount++;
+      console.log('[WebContainer] Injected visual edit bridge into:', path, '(before </body>)');
+      continue;
+    }
+
+    // Last fallback: inject before </html>
+    const htmlCloseMatch = content.match(/<\/html>/i);
+    if (htmlCloseMatch) {
+      result[path] = content.replace(htmlCloseMatch[0], `${bridgeScript}\n${htmlCloseMatch[0]}`);
+      injectedCount++;
+      console.log('[WebContainer] Injected visual edit bridge into:', path, '(before </html>)');
+      continue;
+    }
+
+    console.warn('[WebContainer] Could not find injection point in:', path);
   }
 
   if (injectedCount === 0) {

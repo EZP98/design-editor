@@ -952,10 +952,23 @@ const DesignEditor: React.FC = () => {
   const webContainerPreviewRef = useRef<WebContainerPreviewRef>(null);
   const chatPanelRef = useRef<AIChatPanelRef>(null);
 
+  // Stable iframe ref for SelectionOverlay
+  // This ref is synced with the WebContainerPreview's iframe when it becomes ready
+  const wcIframeRef = useRef<HTMLIFrameElement | null>(null);
+
   // Get iframe ref from WebContainerPreview
   const getPreviewIframe = useCallback(() => {
     return webContainerPreviewRef.current?.getIframe() || null;
   }, []);
+
+  // Sync wcIframeRef when WebContainer becomes ready
+  useEffect(() => {
+    if (webcontainerReady) {
+      const iframe = getPreviewIframe();
+      wcIframeRef.current = iframe;
+      console.log('[DesignEditor] WebContainer ready, iframe ref updated:', iframe);
+    }
+  }, [webcontainerReady, getPreviewIframe]);
   const [hoveredElement, setHoveredElement] = useState<{
     tagName: string;
     className: string;
@@ -3399,7 +3412,7 @@ const DesignEditor: React.FC = () => {
                   {/* Visual Edit Overlay */}
                   {webcontainerReady && (
                     <SelectionOverlay
-                      iframeRef={{ current: getPreviewIframe() }}
+                      iframeRef={wcIframeRef}
                       enabled={visualEditMode}
                       zoom={zoom}
                       onElementSelect={(el) => {

@@ -16,9 +16,16 @@
 
 export const VISUAL_EDIT_BRIDGE_SCRIPT = `
 (function() {
+  // IMMEDIATE LOG - this should appear if script runs at all
+  console.log('%c[VisualEditBridge] Script starting...', 'color: #8b5cf6; font-weight: bold;');
+
   // Prevent multiple injections
-  if (window.__VISUAL_EDIT_BRIDGE__) return;
+  if (window.__VISUAL_EDIT_BRIDGE__) {
+    console.log('[VisualEditBridge] Already initialized, skipping');
+    return;
+  }
   window.__VISUAL_EDIT_BRIDGE__ = true;
+  window.__VISUAL_EDIT_BRIDGE_VERSION__ = '1.0.0';
 
   let editModeEnabled = false;
   let selectedElement = null;
@@ -516,6 +523,12 @@ export const VISUAL_EDIT_BRIDGE_SCRIPT = `
    */
   window.addEventListener('message', function(event) {
     const data = event.data;
+
+    // Log ALL incoming messages for debugging
+    if (data && typeof data === 'object' && data.type) {
+      console.log('[VisualEditBridge] Received message:', data.type, data);
+    }
+
     if (!data || !data.type) return;
 
     switch (data.type) {
@@ -603,6 +616,21 @@ export const VISUAL_EDIT_BRIDGE_SCRIPT = `
   // ==========================================
 
   function initialize() {
+    console.log('%c[VisualEditBridge] Initializing...', 'color: #8b5cf6; font-weight: bold;');
+    console.log('[VisualEditBridge] window.parent:', window.parent);
+    console.log('[VisualEditBridge] window.parent === window:', window.parent === window);
+    console.log('[VisualEditBridge] In iframe:', window !== window.parent);
+    console.log('[VisualEditBridge] document.location:', document.location.href);
+
+    // Add a visible indicator that bridge loaded (for debugging)
+    const indicator = document.createElement('div');
+    indicator.id = 'visual-edit-bridge-indicator';
+    indicator.style.cssText = 'position:fixed;bottom:4px;right:4px;background:#8b5cf6;color:#fff;padding:4px 8px;border-radius:4px;font-size:10px;z-index:99999;opacity:0.7;pointer-events:none;';
+    indicator.textContent = 'Bridge Ready';
+    document.body.appendChild(indicator);
+    // Hide after 3 seconds
+    setTimeout(() => { indicator.style.display = 'none'; }, 3000);
+
     // Add event listeners with capture to intercept before app handlers
     document.addEventListener('mousemove', handleMouseMove, true);
     document.addEventListener('click', handleClick, true);
@@ -610,8 +638,13 @@ export const VISUAL_EDIT_BRIDGE_SCRIPT = `
 
     // Notify parent that bridge is ready - retry a few times to ensure parent receives it
     function sendReady() {
-      window.parent.postMessage({ type: 'visual-edit-ready' }, '*');
-      console.log('[VisualEditBridge] Sent ready message to parent');
+      try {
+        console.log('[VisualEditBridge] Sending ready message to parent...');
+        window.parent.postMessage({ type: 'visual-edit-ready', timestamp: Date.now() }, '*');
+        console.log('[VisualEditBridge] Message sent successfully');
+      } catch (e) {
+        console.error('[VisualEditBridge] Failed to send message:', e);
+      }
     }
 
     // Send immediately
@@ -622,8 +655,9 @@ export const VISUAL_EDIT_BRIDGE_SCRIPT = `
     setTimeout(sendReady, 500);
     setTimeout(sendReady, 1000);
     setTimeout(sendReady, 2000);
+    setTimeout(sendReady, 5000);
 
-    console.log('[VisualEditBridge] Initialized with React Fiber support');
+    console.log('%c[VisualEditBridge] READY - Initialized with React Fiber support', 'color: #10b981; font-weight: bold;');
   }
 
   // Wait for DOM to be ready

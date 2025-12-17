@@ -51,7 +51,7 @@ export interface HoveredElement {
 }
 
 interface SelectionOverlayProps {
-  iframeRef: React.RefObject<HTMLIFrameElement>;
+  iframeRef: React.RefObject<HTMLIFrameElement | null>;
   enabled: boolean;
   zoom: number;
   onElementSelect?: (element: SelectedElement | null) => void;
@@ -103,9 +103,17 @@ const SelectionOverlay: React.FC<SelectionOverlayProps> = ({
   // Send message to iframe
   const sendToIframe = useCallback((message: object) => {
     const iframe = iframeRef.current;
-    if (!iframe?.contentWindow) return;
+    if (!iframe) {
+      console.warn('[SelectionOverlay] No iframe ref available');
+      return;
+    }
+    if (!iframe.contentWindow) {
+      console.warn('[SelectionOverlay] Iframe has no contentWindow');
+      return;
+    }
 
     try {
+      console.log('[SelectionOverlay] Sending to iframe:', message, 'iframe src:', iframe.src);
       iframe.contentWindow.postMessage(message, '*');
     } catch (e) {
       console.error('[SelectionOverlay] Failed to send message:', e);
