@@ -598,24 +598,15 @@ export function CanvasToolbar({
             </ToolButton>
 
             {showIconPicker && (
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: 'calc(100% + 12px)',
-                  left: '50%',
-                  transform: 'translateX(-50%)',
+              <IconPicker
+                onSelect={(iconName) => {
+                  if (onAddIcon) {
+                    onAddIcon(iconName);
+                  }
+                  setShowIconPicker(false);
                 }}
-              >
-                <IconPicker
-                  onSelect={(iconName) => {
-                    if (onAddIcon) {
-                      onAddIcon(iconName);
-                    }
-                    setShowIconPicker(false);
-                  }}
-                  onClose={() => setShowIconPicker(false)}
-                />
-              </div>
+                onClose={() => setShowIconPicker(false)}
+              />
             )}
           </div>
 
