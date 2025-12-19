@@ -2493,9 +2493,8 @@ const DesignEditor: React.FC = () => {
               gap: 6,
             }}
           >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M5 16V5h14v5.5H5" />
-              <path d="M5 10.5h14L12 22 5 10.5z" fill="currentColor" stroke="none" />
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M4 0h16v8h-8v8H4V0zm0 16h8l8 8H4v-8z" />
             </svg>
             Framer
           </button>
@@ -4972,9 +4971,8 @@ Find the component in the codebase and update the styles. If using Tailwind, con
             onClick={(e) => e.stopPropagation()}
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
-                <path d="M5 16V5h14v5.5H5" fill="#05F" />
-                <path d="M5 10.5h14L12 22 5 10.5z" fill="#05F" />
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="#0099FF">
+                <path d="M4 0h16v8h-8v8H4V0zm0 16h8l8 8H4v-8z" />
               </svg>
               <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 600, margin: 0 }}>
                 Import from Web

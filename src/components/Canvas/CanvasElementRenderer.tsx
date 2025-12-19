@@ -404,18 +404,24 @@ export function CanvasElementRenderer({
   const getPaddingValues = () => {
     const { styles } = element;
     const parsePx = (val: string | number | undefined): number => {
-      if (val === undefined) return 0;
+      if (val === undefined || val === null) return NaN; // Return NaN to indicate "not set"
       if (typeof val === 'number') return val;
-      return parseFloat(val) || 0;
+      const parsed = parseFloat(val);
+      return isNaN(parsed) ? NaN : parsed;
     };
 
-    // Check for individual padding or shorthand
-    const padding = parsePx(styles.padding);
+    // Check for individual padding or shorthand (use ?? to match PropertiesPanel logic)
+    const basePadding = typeof styles.padding === 'number' ? styles.padding : (parseInt(String(styles.padding)) || 0);
+    const top = parsePx(styles.paddingTop);
+    const right = parsePx(styles.paddingRight);
+    const bottom = parsePx(styles.paddingBottom);
+    const left = parsePx(styles.paddingLeft);
+
     return {
-      top: parsePx(styles.paddingTop) || padding,
-      right: parsePx(styles.paddingRight) || padding,
-      bottom: parsePx(styles.paddingBottom) || padding,
-      left: parsePx(styles.paddingLeft) || padding,
+      top: isNaN(top) ? basePadding : top,
+      right: isNaN(right) ? basePadding : right,
+      bottom: isNaN(bottom) ? basePadding : bottom,
+      left: isNaN(left) ? basePadding : left,
     };
   };
 
@@ -727,10 +733,11 @@ export function CanvasElementRenderer({
                 transform: 'translate(-50%, -50%)',
                 fontSize: 9,
                 fontWeight: 600,
-                color: 'rgba(139, 30, 43, 0.9)',
-                background: 'rgba(0, 0, 0, 0.7)',
-                padding: '1px 4px',
-                borderRadius: 2,
+                color: '#fff',
+                background: '#8B1E2B',
+                padding: '2px 6px',
+                borderRadius: 3,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
               }}>
                 {paddingValues.bottom}
               </span>
@@ -758,10 +765,11 @@ export function CanvasElementRenderer({
                 transform: 'translate(-50%, -50%) rotate(-90deg)',
                 fontSize: 9,
                 fontWeight: 600,
-                color: 'rgba(139, 30, 43, 0.9)',
-                background: 'rgba(0, 0, 0, 0.7)',
-                padding: '1px 4px',
-                borderRadius: 2,
+                color: '#fff',
+                background: '#8B1E2B',
+                padding: '2px 6px',
+                borderRadius: 3,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                 whiteSpace: 'nowrap',
               }}>
                 {paddingValues.left}
@@ -790,10 +798,11 @@ export function CanvasElementRenderer({
                 transform: 'translate(-50%, -50%) rotate(90deg)',
                 fontSize: 9,
                 fontWeight: 600,
-                color: 'rgba(139, 30, 43, 0.9)',
-                background: 'rgba(0, 0, 0, 0.7)',
-                padding: '1px 4px',
-                borderRadius: 2,
+                color: '#fff',
+                background: '#8B1E2B',
+                padding: '2px 6px',
+                borderRadius: 3,
+                boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
                 whiteSpace: 'nowrap',
               }}>
                 {paddingValues.right}
