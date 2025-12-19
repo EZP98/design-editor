@@ -7,6 +7,8 @@
 import React, { useState, useMemo, useCallback } from 'react';
 import * as LucideIcons from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
+import { useCanvasStore } from '../../lib/canvas/canvasStore';
+import { THEME_COLORS } from '../../lib/canvas/types';
 
 // Get all icon names from lucide-react
 const allIconNames = Object.keys(LucideIcons).filter(
@@ -49,6 +51,12 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
+  // Theme
+  const canvasSettings = useCanvasStore((state) => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
+  const isDark = theme === 'dark';
+
   const filteredIcons = useMemo(() => {
     const query = search.toLowerCase().trim();
 
@@ -73,6 +81,10 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
     const IconComponent = (LucideIcons as Record<string, LucideIcon>)[iconName];
     if (!IconComponent) return null;
 
+    const defaultBg = isDark ? 'rgba(255, 255, 255, 0.02)' : 'rgba(0, 0, 0, 0.02)';
+    const hoverBg = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
+    const defaultBorder = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.08)';
+
     return (
       <button
         key={iconName}
@@ -82,9 +94,9 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
           width: 40,
           height: 40,
           borderRadius: 6,
-          border: selectedIcon === iconName ? '2px solid #8B1E2B' : '1px solid rgba(255, 255, 255, 0.06)',
-          background: selectedIcon === iconName ? 'rgba(139, 30, 43, 0.15)' : 'rgba(255, 255, 255, 0.02)',
-          color: selectedIcon === iconName ? '#fff' : '#a1a1aa',
+          border: selectedIcon === iconName ? `2px solid ${colors.accent}` : `1px solid ${defaultBorder}`,
+          background: selectedIcon === iconName ? colors.accentLight : defaultBg,
+          color: selectedIcon === iconName ? colors.textPrimary : colors.textSecondary,
           cursor: 'pointer',
           display: 'flex',
           alignItems: 'center',
@@ -93,16 +105,16 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         }}
         onMouseEnter={(e) => {
           if (selectedIcon !== iconName) {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
-            e.currentTarget.style.color = '#fff';
-            e.currentTarget.style.borderColor = 'rgba(139, 30, 43, 0.3)';
+            e.currentTarget.style.background = hoverBg;
+            e.currentTarget.style.color = colors.textPrimary;
+            e.currentTarget.style.borderColor = colors.accentMedium;
           }
         }}
         onMouseLeave={(e) => {
           if (selectedIcon !== iconName) {
-            e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-            e.currentTarget.style.color = '#a1a1aa';
-            e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+            e.currentTarget.style.background = defaultBg;
+            e.currentTarget.style.color = colors.textSecondary;
+            e.currentTarget.style.borderColor = defaultBorder;
           }
         }}
       >
@@ -110,6 +122,13 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
       </button>
     );
   };
+
+  // Theme-aware colors
+  const panelBg = isDark ? '#141414' : '#ffffff';
+  const borderColor = isDark ? 'rgba(255, 255, 255, 0.08)' : 'rgba(0, 0, 0, 0.1)';
+  const borderSubtle = isDark ? 'rgba(255, 255, 255, 0.06)' : 'rgba(0, 0, 0, 0.06)';
+  const inputBg = isDark ? 'rgba(0, 0, 0, 0.3)' : 'rgba(0, 0, 0, 0.04)';
+  const footerBg = isDark ? 'rgba(0, 0, 0, 0.2)' : 'rgba(0, 0, 0, 0.02)';
 
   return (
     <div
@@ -119,7 +138,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'rgba(0, 0, 0, 0.6)',
+        background: isDark ? 'rgba(0, 0, 0, 0.6)' : 'rgba(0, 0, 0, 0.3)',
         backdropFilter: 'blur(4px)',
         display: 'flex',
         alignItems: 'center',
@@ -134,10 +153,10 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
           width: 520,
           maxWidth: 'calc(100vw - 48px)',
           height: 'min(600px, calc(100vh - 48px))',
-          background: '#141414',
+          background: panelBg,
           borderRadius: 16,
-          border: '1px solid rgba(255, 255, 255, 0.08)',
-          boxShadow: '0 24px 80px rgba(0, 0, 0, 0.5)',
+          border: `1px solid ${borderColor}`,
+          boxShadow: isDark ? '0 24px 80px rgba(0, 0, 0, 0.5)' : '0 24px 80px rgba(0, 0, 0, 0.15)',
           display: 'flex',
           flexDirection: 'column',
           overflow: 'hidden',
@@ -146,7 +165,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         {/* Header */}
         <div style={{
           padding: '16px 20px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+          borderBottom: `1px solid ${borderSubtle}`,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
@@ -156,16 +175,16 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
               width: 32,
               height: 32,
               borderRadius: 8,
-              background: 'rgba(139, 30, 43, 0.15)',
+              background: colors.accentLight,
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}>
-              <LucideIcons.Sparkles size={16} color="#8B1E2B" />
+              <LucideIcons.Sparkles size={16} color={colors.accent} />
             </div>
             <div>
-              <div style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>Seleziona Icona</div>
-              <div style={{ fontSize: 11, color: '#52525b' }}>Lucide Icons • {allIconNames.length} icone</div>
+              <div style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>Seleziona Icona</div>
+              <div style={{ fontSize: 11, color: colors.textDimmed }}>Lucide Icons • {allIconNames.length} icone</div>
             </div>
           </div>
           <button
@@ -175,32 +194,32 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
               height: 28,
               borderRadius: 6,
               border: 'none',
-              background: 'rgba(255, 255, 255, 0.05)',
-              color: '#71717a',
+              background: isDark ? 'rgba(255, 255, 255, 0.05)' : 'rgba(0, 0, 0, 0.05)',
+              color: colors.textMuted,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
             }}
-            onMouseEnter={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.1)'; e.currentTarget.style.color = '#fff'; }}
-            onMouseLeave={(e) => { e.currentTarget.style.background = 'rgba(255,255,255,0.05)'; e.currentTarget.style.color = '#71717a'; }}
+            onMouseEnter={(e) => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'; e.currentTarget.style.color = colors.textPrimary; }}
+            onMouseLeave={(e) => { e.currentTarget.style.background = isDark ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'; e.currentTarget.style.color = colors.textMuted; }}
           >
             <LucideIcons.X size={16} />
           </button>
         </div>
 
         {/* Search */}
-        <div style={{ padding: '12px 20px', borderBottom: '1px solid rgba(255, 255, 255, 0.04)' }}>
+        <div style={{ padding: '12px 20px', borderBottom: `1px solid ${borderSubtle}` }}>
           <div style={{
             display: 'flex',
             alignItems: 'center',
             gap: 10,
             padding: '10px 12px',
-            background: 'rgba(0, 0, 0, 0.3)',
+            background: inputBg,
             borderRadius: 8,
-            border: '1px solid rgba(255, 255, 255, 0.06)',
+            border: `1px solid ${borderSubtle}`,
           }}>
-            <LucideIcons.Search size={16} color="#52525b" />
+            <LucideIcons.Search size={16} color={colors.textDimmed} />
             <input
               type="text"
               value={search}
@@ -215,7 +234,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
                 background: 'transparent',
                 border: 'none',
                 outline: 'none',
-                color: '#e4e4e7',
+                color: colors.textPrimary,
                 fontSize: 13,
               }}
             />
@@ -225,7 +244,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
                 style={{
                   background: 'none',
                   border: 'none',
-                  color: '#52525b',
+                  color: colors.textDimmed,
                   cursor: 'pointer',
                   padding: 0,
                   display: 'flex',
@@ -240,7 +259,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         {/* Categories */}
         <div style={{
           padding: '8px 20px 12px',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+          borderBottom: `1px solid ${borderSubtle}`,
           display: 'flex',
           gap: 6,
           flexWrap: 'wrap',
@@ -251,8 +270,8 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
               padding: '5px 10px',
               borderRadius: 6,
               border: 'none',
-              background: !activeCategory && !search ? 'rgba(139, 30, 43, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-              color: !activeCategory && !search ? '#fff' : '#71717a',
+              background: !activeCategory && !search ? colors.accentMedium : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)'),
+              color: !activeCategory && !search ? colors.textPrimary : colors.textMuted,
               fontSize: 11,
               cursor: 'pointer',
               fontWeight: 500,
@@ -268,8 +287,8 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
                 padding: '5px 10px',
                 borderRadius: 6,
                 border: 'none',
-                background: activeCategory === cat ? 'rgba(139, 30, 43, 0.2)' : 'rgba(255, 255, 255, 0.04)',
-                color: activeCategory === cat ? '#fff' : '#71717a',
+                background: activeCategory === cat ? colors.accentMedium : (isDark ? 'rgba(255, 255, 255, 0.04)' : 'rgba(0, 0, 0, 0.04)'),
+                color: activeCategory === cat ? colors.textPrimary : colors.textMuted,
                 fontSize: 11,
                 cursor: 'pointer',
                 fontWeight: 500,
@@ -291,7 +310,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
           {search ? (
             // Search results - flat list
             <>
-              <div style={{ fontSize: 10, color: '#52525b', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 Risultati per "{search}" ({filteredIcons.length})
               </div>
               <div style={{
@@ -305,7 +324,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
                 <div style={{
                   padding: '40px 20px',
                   textAlign: 'center',
-                  color: '#52525b',
+                  color: colors.textDimmed,
                   fontSize: 13,
                 }}>
                   Nessuna icona trovata
@@ -315,7 +334,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
           ) : activeCategory ? (
             // Single category view
             <>
-              <div style={{ fontSize: 10, color: '#52525b', marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+              <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 10, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
                 {activeCategory} ({filteredIcons.length})
               </div>
               <div style={{
@@ -333,14 +352,14 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
               <div style={{ marginBottom: 20 }}>
                 <div style={{
                   fontSize: 10,
-                  color: '#8B1E2B',
+                  color: colors.accent,
                   marginBottom: 10,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                   fontWeight: 600,
                   position: 'sticky',
                   top: -16,
-                  background: '#141414',
+                  background: panelBg,
                   padding: '8px 0',
                   marginTop: -8,
                   zIndex: 10,
@@ -361,18 +380,18 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
                 <div key={category} style={{ marginBottom: 20 }}>
                   <div style={{
                     fontSize: 10,
-                    color: '#71717a',
+                    color: colors.textMuted,
                     marginBottom: 10,
                     textTransform: 'uppercase',
                     letterSpacing: '0.05em',
                     fontWeight: 500,
                     position: 'sticky',
                     top: -16,
-                    background: '#141414',
+                    background: panelBg,
                     padding: '8px 0',
                     marginTop: -8,
                     zIndex: 10,
-                    borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+                    borderBottom: `1px solid ${borderSubtle}`,
                   }}>
                     {category} ({icons.length})
                   </div>
@@ -392,13 +411,13 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         {/* Footer */}
         <div style={{
           padding: '12px 20px',
-          borderTop: '1px solid rgba(255, 255, 255, 0.06)',
-          background: 'rgba(0, 0, 0, 0.2)',
+          borderTop: `1px solid ${borderSubtle}`,
+          background: footerBg,
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
         }}>
-          <span style={{ fontSize: 11, color: '#52525b' }}>
+          <span style={{ fontSize: 11, color: colors.textDimmed }}>
             Powered by Lucide Icons
           </span>
           <a
@@ -407,7 +426,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
             rel="noopener noreferrer"
             style={{
               fontSize: 11,
-              color: '#8B1E2B',
+              color: colors.accent,
               textDecoration: 'none',
               display: 'flex',
               alignItems: 'center',
