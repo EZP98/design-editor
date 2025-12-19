@@ -13,6 +13,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { ColorPicker } from '../ui/ColorPicker';
 
 // Token types
 export type TokenType = 'color' | 'spacing' | 'fontSize' | 'fontFamily' | 'fontWeight' | 'lineHeight' | 'borderRadius' | 'shadow';
@@ -392,22 +393,20 @@ const AddTokenModal: React.FC<{
           {/* Value */}
           <div>
             <label className="block text-xs text-gray-400 mb-1">Value</label>
-            <div className="flex items-center gap-2">
-              {type === 'color' && (
-                <input
-                  type="color"
-                  value={value}
-                  onChange={(e) => setValue(e.target.value)}
-                  className="w-8 h-8 rounded cursor-pointer"
-                />
-              )}
+            {type === 'color' ? (
+              <ColorPicker
+                value={value}
+                onChange={(v) => setValue(v)}
+                compact
+              />
+            ) : (
               <input
                 type="text"
                 value={value}
                 onChange={(e) => setValue(e.target.value)}
                 className="flex-1 h-8 px-2 bg-white/5 border border-white/10 rounded text-sm text-white font-mono focus:outline-none focus:border-violet-500/50"
               />
-            </div>
+            )}
           </div>
 
           {/* Group */}

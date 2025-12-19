@@ -1,6 +1,6 @@
 import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { useParams } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router-dom';
 import './DesignEditor.css';
 import CodePanel from './components/CodePanel';
 import FileExplorer, { FileNode } from './components/FileExplorer';
@@ -11,6 +11,7 @@ import { PreviewManager } from './components/EditablePreview';
 import type { PreviewManagerRef, SelectedElement as EditableSelectedElement } from './components/EditablePreview/PreviewManager';
 import { StylePanel, ElementToolbar, type ElementStyles, type SelectedElementInfo } from './components/StylePanel';
 import { RightSidebar } from './components/RightSidebar';
+import { ColorPicker } from './components/ui/ColorPicker';
 import { formatStyleChangesPrompt } from './lib/prompts/system-prompt';
 import { DesignToCodeEngine, createDesignToCodeEngine } from './lib/design-to-code';
 import { ErrorAlertsContainer, AlertError } from './components/ActionableAlert';
@@ -19,8 +20,13 @@ import { discoverPages, DiscoveredPage } from './lib/pageDiscovery';
 import { getProjectById, type Project } from './ProjectsPage';
 import { useWebContainer } from './lib/hooks/useWebContainer';
 import { useGit } from './lib/hooks/useGit';
-import { getWebContainer } from './lib/webcontainer';
+import { getWebContainer, createEditableViteProject } from './lib/webcontainer';
 import { useAgenticErrors, buildErrorContext } from './lib/hooks/useAgenticErrors';
+import { Canvas, CanvasSidebar, ComponentLibrary, PropertiesPanel } from './components/Canvas';
+import { useCanvasStore, setCurrentProjectId, saveProjectToRecents, loadProjectCanvasState, saveProjectCanvasState, generateCanvasThumbnail } from './lib/canvas/canvasStore';
+import { generateProjectFiles } from './lib/canvas/codeGenerator';
+import type { ElementType } from './lib/canvas/types';
+import { importFromFigma, saveFigmaToken, getFigmaToken, parseFigmaUrl } from './lib/figma/figmaImport';
 
 // API URL for production/development
 const API_URL = import.meta.env.PROD
@@ -937,13 +943,59 @@ const DesignEditor: React.FC = () => {
   const [isResizing, setIsResizing] = useState(false);
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(0.45); // Default 45% zoom like Figma
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [showTimeline, setShowTimeline] = useState(false);
   const [showCodePanel, setShowCodePanel] = useState(false);
   const [showPropertiesPanel, setShowPropertiesPanel] = useState(false);
+
+  // Canvas element selection state
+  const canvasSelectedIds = useCanvasStore((state) => state.selectedElementIds);
+  const hasCanvasSelection = canvasSelectedIds.length > 0;
+  const canvasCurrentPageId = useCanvasStore((state) => state.currentPageId);
+  const canvasPages = useCanvasStore((state) => state.pages);
+  const canvasElements = useCanvasStore((state) => state.elements);
+  const canvasRenamePage = useCanvasStore((state) => state.renamePage);
+  const updatePageNotes = useCanvasStore((state) => state.updatePageNotes);
+  const projectName = useCanvasStore((state) => state.projectName) || 'Nuovo Progetto';
+  const setProjectName = useCanvasStore((state) => state.setProjectName);
+
+  // Get current page for notes
+  const currentCanvasPage = canvasPages[canvasCurrentPageId];
+
+  // Auto-save effect: save project when canvas state changes
+  useEffect(() => {
+    if (!projectId || projectId === 'new') return;
+
+    // Debounce save to avoid too frequent saves
+    const saveTimeout = setTimeout(() => {
+      // Generate thumbnail from current canvas state
+      const thumbnail = generateCanvasThumbnail({
+        pages: canvasPages,
+        elements: canvasElements,
+      });
+
+      // Save canvas state to project-specific storage
+      saveProjectCanvasState(projectId, {
+        projectName,
+        pages: canvasPages,
+        elements: canvasElements,
+        currentPageId: canvasCurrentPageId,
+      });
+
+      // Update recents list with thumbnail
+      saveProjectToRecents(projectId, projectName, thumbnail);
+
+      console.log('[AutoSave] Project saved:', projectId, { name: projectName, hasThumbnail: !!thumbnail });
+    }, 1000); // 1 second debounce
+
+    return () => clearTimeout(saveTimeout);
+  }, [projectId, projectName, canvasPages, canvasElements, canvasCurrentPageId]);
+
   const [leftPanelCollapsed, setLeftPanelCollapsed] = useState(false);
   const [chatCollapsed, setChatCollapsed] = useState(false);
+  const [isEditingProjectName, setIsEditingProjectName] = useState(false);
+  const [editingProjectName, setEditingProjectName] = useState('');
   const [showPreview, setShowPreview] = useState(false);
   const [projectFiles, setProjectFiles] = useState<FileNode[]>(sampleProjectFiles);
   const [selectedFile, setSelectedFile] = useState<string | undefined>(undefined);
@@ -959,6 +1011,7 @@ const DesignEditor: React.FC = () => {
   const [selectedDevice, setSelectedDevice] = useState<DevicePreset>(DEVICE_PRESETS.find(d => d.id === 'desktop-lg')!);
   const [showDeviceDropdown, setShowDeviceDropdown] = useState(false);
   const [projectUrl, setProjectUrl] = useState<string>('');
+  const isCanvasMode = !useWebContainer && !projectUrl;
   const [iframeLoading, setIframeLoading] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
@@ -970,6 +1023,16 @@ const DesignEditor: React.FC = () => {
   const [currentPreviewPath, setCurrentPreviewPath] = useState<string>('/');
   const [visualEditMode, setVisualEditMode] = useState(false);
   const [isApplyingStyles, setIsApplyingStyles] = useState(false);
+
+  // Figma Import Modal State
+  const [showFigmaModal, setShowFigmaModal] = useState(false);
+  const [figmaUrl, setFigmaUrl] = useState('');
+  const [figmaToken, setFigmaToken] = useState(() => getFigmaToken() || '');
+
+  // Notes Panel State
+  const [showNotesPanel, setShowNotesPanel] = useState(false);
+  const [figmaImporting, setFigmaImporting] = useState(false);
+
   const designEngineRef = useRef<DesignToCodeEngine | null>(null);
   const [visualSelectedElement, setVisualSelectedElement] = useState<SelectedElement | null>(null);
   const previewContainerRef = useRef<HTMLDivElement>(null);
@@ -1062,6 +1125,41 @@ const DesignEditor: React.FC = () => {
     // TODO: Update source code with new props
     // This will require finding the component in the code and updating its props
   }, []);
+
+  // Handle Figma Import
+  const handleFigmaImport = useCallback(async () => {
+    if (!figmaUrl || figmaImporting) return;
+
+    const parsed = parseFigmaUrl(figmaUrl);
+    if (!parsed) {
+      alert('Invalid Figma URL. Please use a valid Figma file or frame URL.');
+      return;
+    }
+
+    if (!figmaToken) {
+      alert('Please enter your Figma Personal Access Token.');
+      return;
+    }
+
+    setFigmaImporting(true);
+    try {
+      // Save token for future use
+      saveFigmaToken(figmaToken);
+
+      // Import from Figma
+      await importFromFigma(figmaUrl, figmaToken);
+
+      // Close modal and reset
+      setShowFigmaModal(false);
+      setFigmaUrl('');
+      console.log('Figma import completed successfully');
+    } catch (error) {
+      console.error('Figma import failed:', error);
+      alert(`Figma import failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    } finally {
+      setFigmaImporting(false);
+    }
+  }, [figmaUrl, figmaToken, figmaImporting]);
 
   const [hoveredElement, setHoveredElement] = useState<{
     tagName: string;
@@ -1384,6 +1482,27 @@ const DesignEditor: React.FC = () => {
       setProjectUrl('');
       // Auto-start WebContainer with editable template for new projects
       setUseWebContainer(true);
+    }
+  }, [projectId]);
+
+  // Load project state when opening an existing project
+  useEffect(() => {
+    if (!projectId || projectId === 'new') return;
+
+    // Set the current project ID for storage scoping
+    setCurrentProjectId(projectId);
+
+    // Try to load saved canvas state for this project
+    const savedState = loadProjectCanvasState(projectId);
+    if (savedState) {
+      console.log('[ProjectLoad] Loading saved canvas state for:', projectId, savedState);
+      // Use Zustand's setState to merge the saved state into the store
+      useCanvasStore.setState({
+        ...(savedState.projectName && { projectName: savedState.projectName }),
+        ...(savedState.pages && { pages: savedState.pages }),
+        ...(savedState.elements && { elements: savedState.elements }),
+        ...(savedState.currentPageId && { currentPageId: savedState.currentPageId }),
+      });
     }
   }, [projectId]);
 
@@ -2236,246 +2355,79 @@ const DesignEditor: React.FC = () => {
           <button onClick={() => window.location.href = '/'} className="de-logo">
             OBJECTS
           </button>
-          {/* Project indicator */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            marginLeft: 16,
-            padding: '4px 12px',
-            background: 'rgba(139, 92, 246, 0.1)',
-            borderRadius: 6,
-            fontSize: 13,
-            color: '#a78bfa',
-          }}>
-            <div style={{
-              width: 6,
-              height: 6,
-              borderRadius: '50%',
-              background: useWebContainer || githubRepo ? '#22c55e' : '#6b7280',
-            }} />
-            {githubRepo?.name || (projectId === 'new' ? 'Nuovo Progetto' : 'OBJECTS')}
-          </div>
+          {/* Project Name - Editable */}
+          <input
+            type="text"
+            value={projectName}
+            onChange={(e) => setProjectName(e.target.value)}
+            style={{
+              marginLeft: 12,
+              padding: '6px 12px',
+              background: 'rgba(255, 255, 255, 0.06)',
+              border: '1px solid rgba(255, 255, 255, 0.1)',
+              borderRadius: 8,
+              fontSize: 13,
+              fontWeight: 500,
+              color: '#fff',
+              outline: 'none',
+              minWidth: 120,
+              maxWidth: 200,
+            }}
+            placeholder="Nome Progetto"
+          />
+          {/* Notes Button */}
+          <button
+            onClick={() => setShowNotesPanel(!showNotesPanel)}
+            className={`de-btn de-btn-ghost ${showNotesPanel ? 'active' : ''}`}
+            style={{
+              marginLeft: 8,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+              <polyline points="14 2 14 8 20 8"/>
+              <line x1="16" y1="13" x2="8" y2="13"/>
+              <line x1="16" y1="17" x2="8" y2="17"/>
+              <polyline points="10 9 9 9 8 9"/>
+            </svg>
+            Notes
+          </button>
+          {/* Figma Import Button */}
+          <button
+            onClick={() => setShowFigmaModal(true)}
+            className="de-btn de-btn-ghost"
+            title="Import from Figma"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+              <path d="M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M12 2h3.5a3.5 3.5 0 1 1 0 7H12V2z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M12 12.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 1 1-7 0z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M5 19.5A3.5 3.5 0 0 1 8.5 16H12v3.5a3.5 3.5 0 1 1-7 0z" stroke="currentColor" strokeWidth="1.5" />
+              <path d="M5 12.5A3.5 3.5 0 0 1 8.5 9H12v7H8.5A3.5 3.5 0 0 1 5 12.5z" stroke="currentColor" strokeWidth="1.5" />
+            </svg>
+            Figma
+          </button>
         </div>
 
         <div className="de-header-center">
-          {/* Mode Toggle - Icon Style like Bolt */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: 'rgba(255,255,255,0.06)',
-            borderRadius: 12,
-            padding: 4,
-            border: '1px solid rgba(255,255,255,0.08)',
-          }}>
-            {/* Preview/Design Mode */}
-            <button
-              onClick={() => setViewMode('design')}
-              title="Preview"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: 'none',
-                background: viewMode === 'design' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
-                color: viewMode === 'design' ? '#a78bfa' : '#6b6b6b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-                <circle cx="12" cy="12" r="3"/>
-              </svg>
-            </button>
-
-            {/* Code Mode */}
-            <button
-              onClick={() => setViewMode('code')}
-              title="Code"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: 'none',
-                background: viewMode === 'code' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
-                color: viewMode === 'code' ? '#a78bfa' : '#6b6b6b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <polyline points="16 18 22 12 16 6"/>
-                <polyline points="8 6 2 12 8 18"/>
-              </svg>
-            </button>
-
-            {/* Pages/Tree Mode */}
-            <button
-              onClick={() => setViewMode('pages')}
-              title="Pages Tree"
-              style={{
-                width: 32,
-                height: 32,
-                borderRadius: 8,
-                border: 'none',
-                background: viewMode === 'pages' ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
-                color: viewMode === 'pages' ? '#a78bfa' : '#6b6b6b',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                transition: 'all 0.15s',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>
-              </svg>
-            </button>
-          </div>
-
-          {/* Responsive Viewport Controls */}
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            background: 'rgba(255,255,255,0.06)',
-            borderRadius: 12,
-            padding: 4,
-            border: '1px solid rgba(255,255,255,0.08)',
-            marginLeft: 12,
-          }}>
-            {BREAKPOINTS.map(bp => (
-              <button
-                key={bp.id}
-                onClick={() => {
-                  setCurrentBreakpoint(bp.id);
-                  const defaultDevice = DEVICE_PRESETS.find(d => d.category === bp.icon);
-                  if (defaultDevice) setSelectedDevice(defaultDevice);
-                }}
-                title={`${bp.name} (${bp.width}px)`}
-                style={{
-                  width: 32,
-                  height: 32,
-                  borderRadius: 8,
-                  border: 'none',
-                  background: currentBreakpoint === bp.id ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
-                  color: currentBreakpoint === bp.id ? '#a78bfa' : '#6b6b6b',
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  transition: 'all 0.15s',
-                }}
-              >
-                {bp.icon === 'desktop' && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
-                    <line x1="8" y1="21" x2="16" y2="21"/>
-                    <line x1="12" y1="17" x2="12" y2="21"/>
-                  </svg>
-                )}
-                {bp.icon === 'tablet' && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="4" y="2" width="16" height="20" rx="2" ry="2"/>
-                    <line x1="12" y1="18" x2="12.01" y2="18"/>
-                  </svg>
-                )}
-                {bp.icon === 'phone' && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                    <rect x="5" y="2" width="14" height="20" rx="2" ry="2"/>
-                    <line x1="12" y1="18" x2="12.01" y2="18"/>
-                  </svg>
-                )}
-              </button>
-            ))}
-          </div>
-
-          {/* Project Name / URL Bar */}
-          {githubRepo && (
-            <div style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              padding: '6px 16px',
-              background: 'rgba(255,255,255,0.04)',
-              border: '1px solid rgba(255,255,255,0.08)',
-              borderRadius: 20,
-              marginLeft: 12,
-              minWidth: 200,
-            }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#22c55e' }} />
-              <span style={{ color: '#a1a1aa', fontSize: 12 }}>
-                {githubRepo.name}
-              </span>
-            </div>
-          )}
+          {/* Center spacer - zoom is in floating toolbar */}
         </div>
 
         <div className="de-header-right">
-          <button
-            onClick={() => setShowUrlInput(true)}
-            className="de-btn de-btn-ghost"
-            title="Set Project URL"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <circle cx="12" cy="12" r="10" />
-              <line x1="2" y1="12" x2="22" y2="12" />
-              <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
-            </svg>
-            URL
-          </button>
-          <button
-            onClick={() => setShowComponentLibrary(!showComponentLibrary)}
-            className={`de-btn de-btn-ghost ${showComponentLibrary ? 'active' : ''}`}
-          >
-            <span style={{ width: 16, height: 16, display: 'flex' }}>{Icons.plus}</span>
-            Components
-          </button>
-          <button
-            onClick={() => setShowTimeline(!showTimeline)}
-            className={`de-btn de-btn-ghost ${showTimeline ? 'active' : ''}`}
-          >
-            Timeline
-          </button>
-          {!githubRepo && (
-          <button
-            onClick={() => setShowCodePanel(!showCodePanel)}
-            className={`de-btn de-btn-ghost ${showCodePanel ? 'active' : ''}`}
-          >
-            <span style={{ width: 16, height: 16, display: 'flex' }}>{Icons.code}</span>
-            Code
-          </button>
-          )}
-          {/* Run Button - Start WebContainer with editable project */}
-          <button
-            onClick={() => {
-              if (!useWebContainer) {
-                setUseWebContainer(true);
-                // WebContainer will auto-start with createEditableViteProject() as default
-              }
-            }}
-            className={`de-btn ${useWebContainer ? 'de-btn-primary' : 'de-btn-ghost'}`}
-            title="Run editable preview in WebContainer"
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <polygon points="5 3 19 12 5 21 5 3" />
-            </svg>
-            {useWebContainer ? 'Running' : 'Run'}
-          </button>
           <button
             onClick={() => setShowPreview(true)}
             className="de-btn de-btn-ghost"
           >
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <rect x="2" y="3" width="20" height="14" rx="2" />
-              <line x1="8" y1="21" x2="16" y2="21" />
-              <line x1="12" y1="17" x2="12" y2="21" />
+              <polygon points="5 3 19 12 5 21 5 3"/>
             </svg>
             Preview
           </button>
@@ -2565,6 +2517,101 @@ const DesignEditor: React.FC = () => {
                 </svg>
               </button>
             </div>
+          ) : isCanvasMode ? (
+          /* Canvas Mode - Show CanvasSidebar + AI Chat */
+          <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
+            {/* Canvas Sidebar */}
+            <div style={{
+              flex: chatCollapsed ? 1 : '0 0 50%',
+              overflow: 'hidden',
+              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              transition: 'flex 0.2s ease',
+            }}>
+              <CanvasSidebar />
+            </div>
+
+            {/* AI Chat Section */}
+            <div style={{
+              flex: chatCollapsed ? '0 0 44px' : '1 1 50%',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              minHeight: 0,
+              transition: 'flex 0.2s ease',
+            }}>
+              {/* Chat Header */}
+              <div style={{
+                padding: '10px 16px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                cursor: 'pointer',
+                background: 'rgba(0, 0, 0, 0.2)',
+              }}
+              onClick={() => setChatCollapsed(!chatCollapsed)}
+              >
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 24,
+                    height: 24,
+                    borderRadius: 6,
+                    background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+                    </svg>
+                  </div>
+                  <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>
+                    AI Assistant
+                  </span>
+                </div>
+                <svg
+                  width="14"
+                  height="14"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="#52525b"
+                  strokeWidth="2"
+                  style={{
+                    transform: chatCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
+                    transition: 'transform 0.2s ease',
+                  }}
+                >
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </div>
+              {!chatCollapsed && (
+                <div style={{ flex: 1, overflow: 'hidden' }}>
+                  <AIChatPanel
+                    ref={chatPanelRef}
+                    currentFile={selectedFile}
+                    currentCode={selectedFile ? fileContents[selectedFile.replace(/^\//, '')] : undefined}
+                    projectName={projectName}
+                    currentFiles={fileContents}
+                    onFilesUpdate={(updatedFiles) => {
+                      setFileContents(prev => ({ ...prev, ...updatedFiles }));
+                      setWebcontainerFiles(prev => ({ ...prev, ...updatedFiles }));
+                    }}
+                    onRestoreSnapshot={(files) => {
+                      setFileContents(files);
+                      setWebcontainerFiles(files);
+                    }}
+                    onApplyCode={(code, filePath) => {
+                      if (filePath) {
+                        setFileContents(prev => ({
+                          ...prev,
+                          [filePath.replace(/^\//, '')]: code
+                        }));
+                      }
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+          </div>
           ) : (
           <>
           {/* Top - Pages/Frames as Thumbnails */}
@@ -2639,7 +2686,7 @@ const DesignEditor: React.FC = () => {
                       key={page.path}
                       onClick={() => setCurrentPreviewPath(page.path)}
                       style={{
-                        background: currentPreviewPath === page.path ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                        background: currentPreviewPath === page.path ? 'rgba(139, 30, 43, 0.15)' : 'rgba(255,255,255,0.03)',
                         border: currentPreviewPath === page.path ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
                         borderRadius: 8,
                         padding: 8,
@@ -2683,7 +2730,7 @@ const DesignEditor: React.FC = () => {
                     onClick={() => setCurrentPageId(page.id)}
                     onDoubleClick={() => setEditingPageId(page.id)}
                     style={{
-                      background: currentPageId === page.id ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                      background: currentPageId === page.id ? 'rgba(139, 30, 43, 0.15)' : 'rgba(255,255,255,0.03)',
                       border: currentPageId === page.id ? '2px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
                       borderRadius: 8,
                       padding: 8,
@@ -2877,7 +2924,7 @@ const DesignEditor: React.FC = () => {
                   gap: 12,
                   marginBottom: 24,
                 }}>
-                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" strokeWidth="2">
+                  <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#C94C5C" strokeWidth="2">
                     <path d="M3 3h7v7H3zM14 3h7v7h-7zM14 14h7v7h-7zM3 14h7v7H3z"/>
                   </svg>
                   <h2 style={{ color: '#e5e5e5', fontSize: 18, fontWeight: 600, margin: 0 }}>
@@ -2924,7 +2971,7 @@ const DesignEditor: React.FC = () => {
                           }}
                           style={{
                             padding: 16,
-                            background: currentPreviewPath === page.path ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                            background: currentPreviewPath === page.path ? 'rgba(139, 30, 43, 0.15)' : 'rgba(255,255,255,0.03)',
                             border: currentPreviewPath === page.path ? '1px solid #8b5cf6' : '1px solid rgba(255,255,255,0.08)',
                             borderRadius: 10,
                             cursor: 'pointer',
@@ -2998,7 +3045,7 @@ const DesignEditor: React.FC = () => {
             </div>
           ) : (
             /* Design Mode - Canvas */
-            <div style={{ flex: 1, display: 'flex' }}>
+            <div style={{ flex: 1, display: 'flex', height: '100%', overflow: 'hidden' }}>
               {/* Component Library Sidebar */}
               {showComponentLibrary && (
                 <div className="de-component-library">
@@ -3080,6 +3127,15 @@ const DesignEditor: React.FC = () => {
               )}
 
               {/* Canvas */}
+              {isCanvasMode ? (
+                /* Canvas Mode - Visual Editor like Figma */
+                <Canvas
+                  zoom={zoom}
+                  pan={pan}
+                  onZoomChange={setZoom}
+                  onPanChange={setPan}
+                />
+              ) : (
               <div
                 className="de-canvas-area"
                 ref={canvasAreaRef}
@@ -3134,7 +3190,7 @@ const DesignEditor: React.FC = () => {
                           alignItems: 'center',
                           gap: 6,
                           padding: '8px 14px',
-                          background: visualEditMode ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.3) 0%, rgba(99, 102, 241, 0.3) 100%)' : 'rgba(255,255,255,0.05)',
+                          background: visualEditMode ? 'linear-gradient(135deg, rgba(139, 30, 43, 0.3) 0%, rgba(92, 16, 24, 0.3) 100%)' : 'rgba(255,255,255,0.05)',
                           border: visualEditMode ? '1px solid #8b5cf6' : '1px solid transparent',
                           borderRadius: 20,
                           fontSize: 12,
@@ -3142,7 +3198,7 @@ const DesignEditor: React.FC = () => {
                           color: visualEditMode ? '#c4b5fd' : '#71717a',
                           cursor: 'pointer',
                           transition: 'all 0.2s ease',
-                          boxShadow: visualEditMode ? '0 0 20px rgba(139, 92, 246, 0.3)' : 'none',
+                          boxShadow: visualEditMode ? '0 0 20px rgba(139, 30, 43, 0.3)' : 'none',
                         }}
                         onMouseEnter={(e) => {
                           if (!visualEditMode) {
@@ -3204,10 +3260,10 @@ const DesignEditor: React.FC = () => {
                         gap: 10,
                         padding: '8px 14px',
                         background: showDeviceDropdown
-                          ? 'linear-gradient(135deg, rgba(139, 92, 246, 0.2) 0%, rgba(99, 102, 241, 0.2) 100%)'
+                          ? 'linear-gradient(135deg, rgba(139, 30, 43, 0.2) 0%, rgba(92, 16, 24, 0.2) 100%)'
                           : 'rgba(255,255,255,0.04)',
                         border: showDeviceDropdown
-                          ? '1px solid rgba(139, 92, 246, 0.4)'
+                          ? '1px solid rgba(139, 30, 43, 0.4)'
                           : '1px solid rgba(255,255,255,0.08)',
                         borderRadius: 10,
                         fontSize: 12,
@@ -3230,7 +3286,7 @@ const DesignEditor: React.FC = () => {
                     >
                       {/* Device icon */}
                       <span style={{
-                        color: showDeviceDropdown ? '#a78bfa' : '#71717a',
+                        color: showDeviceDropdown ? '#C94C5C' : '#71717a',
                         display: 'flex',
                         alignItems: 'center',
                       }}>
@@ -3270,7 +3326,7 @@ const DesignEditor: React.FC = () => {
                         height="12"
                         viewBox="0 0 24 24"
                         fill="none"
-                        stroke={showDeviceDropdown ? '#a78bfa' : '#71717a'}
+                        stroke={showDeviceDropdown ? '#C94C5C' : '#71717a'}
                         strokeWidth="2"
                         style={{
                           transition: 'transform 0.2s ease',
@@ -3353,7 +3409,7 @@ const DesignEditor: React.FC = () => {
                                   padding: '10px 12px',
                                   borderRadius: 8,
                                   cursor: 'pointer',
-                                  background: selectedDevice.id === device.id ? 'rgba(139, 92, 246, 0.2)' : 'transparent',
+                                  background: selectedDevice.id === device.id ? 'rgba(139, 30, 43, 0.2)' : 'transparent',
                                   transition: 'all 0.15s ease',
                                 }}
                                 onMouseEnter={(e) => {
@@ -3362,11 +3418,11 @@ const DesignEditor: React.FC = () => {
                                   }
                                 }}
                                 onMouseLeave={(e) => {
-                                  e.currentTarget.style.background = selectedDevice.id === device.id ? 'rgba(139, 92, 246, 0.2)' : 'transparent';
+                                  e.currentTarget.style.background = selectedDevice.id === device.id ? 'rgba(139, 30, 43, 0.2)' : 'transparent';
                                 }}
                               >
                                 <span style={{
-                                  color: selectedDevice.id === device.id ? '#a78bfa' : '#e5e5e5',
+                                  color: selectedDevice.id === device.id ? '#C94C5C' : '#e5e5e5',
                                   fontSize: 13,
                                 }}>
                                   {device.name}
@@ -3395,7 +3451,7 @@ const DesignEditor: React.FC = () => {
               top: 60,
               left: '50%',
               transform: 'translateX(-50%)',
-              background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(99, 102, 241, 0.9) 100%)',
+              background: 'linear-gradient(135deg, rgba(139, 30, 43, 0.9) 0%, rgba(92, 16, 24, 0.9) 100%)',
               backdropFilter: 'blur(8px)',
               padding: '8px 20px',
               borderRadius: 20,
@@ -3403,7 +3459,7 @@ const DesignEditor: React.FC = () => {
               alignItems: 'center',
               gap: 10,
               zIndex: 100,
-              boxShadow: '0 4px 20px rgba(139, 92, 246, 0.4)',
+              boxShadow: '0 4px 20px rgba(139, 30, 43, 0.4)',
               animation: 'fadeIn 0.2s ease',
             }}>
               <span style={{
@@ -3613,7 +3669,7 @@ const DesignEditor: React.FC = () => {
                     width: 64,
                     height: 64,
                     borderRadius: 16,
-                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                    background: 'linear-gradient(135deg, #8B1E2B 0%, #C94C5C 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -3638,7 +3694,7 @@ const DesignEditor: React.FC = () => {
                         padding: '12px 24px',
                         borderRadius: 10,
                         border: 'none',
-                        background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                        background: 'linear-gradient(135deg, #8B1E2B 0%, #C94C5C 100%)',
                         color: '#fff',
                         fontSize: 14,
                         fontWeight: 500,
@@ -3799,10 +3855,47 @@ const DesignEditor: React.FC = () => {
                 </div>
               </div>
               </div>
+              )}
 
-              {/* Right Panel - Properties (only show when editing or has selection) */}
-              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement)) && (
-              <div className="de-right-panel" style={{ position: 'relative' }}>
+              {/* Right Panel - Properties */}
+              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement) || (isCanvasMode && hasCanvasSelection)) && (
+              isCanvasMode && hasCanvasSelection ? (
+                /* Canvas Mode - Show PropertiesPanel component */
+                <div
+                  className="de-right-panel"
+                  style={{
+                    width: 300,
+                    minWidth: 300,
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    background: 'rgba(20, 20, 20, 0.98)',
+                    borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                    overflow: 'hidden',
+                  }}
+                >
+                  <div
+                    style={{
+                      flex: 1,
+                      overflowY: 'auto',
+                      overflowX: 'hidden',
+                      minHeight: 0,
+                    }}
+                  >
+                    <PropertiesPanel />
+                  </div>
+                </div>
+              ) :
+              <div className="de-right-panel" style={{
+                width: 280,
+                minWidth: 280,
+                height: '100%',
+                display: 'flex',
+                flexDirection: 'column',
+                background: 'rgba(20, 20, 20, 0.98)',
+                borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                overflow: 'hidden',
+              }}>
                 <div className="de-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className="de-panel-title">Properties</span>
                   <button
@@ -4025,21 +4118,12 @@ Find the component in the codebase and update the styles. If using Tailwind, con
                 <div className="de-prop-group-content">
                   <div className="de-prop-field">
                     <span className="de-prop-label">Fill</span>
-                    <div className="de-color-row">
-                      <div className="de-color-swatch" style={{ backgroundColor: selectedElement.fill }}>
-                        <input
-                          type="color"
-                          value={selectedElement.fill}
-                          onChange={(e) => updateElement(selectedElement.id, { fill: e.target.value })}
-                        />
-                      </div>
-                      <input
-                        type="text"
-                        value={selectedElement.fill}
-                        onChange={(e) => updateElement(selectedElement.id, { fill: e.target.value })}
-                        className="de-input de-color-text"
-                      />
-                    </div>
+                    <ColorPicker
+                      value={selectedElement.fill}
+                      onChange={(value) => updateElement(selectedElement.id, { fill: value })}
+                      showGradients
+                      compact
+                    />
                   </div>
 
                   <div className="de-prop-field" style={{ marginTop: 12 }}>
@@ -4630,6 +4714,441 @@ Find the component in the codebase and update the styles. If using Tailwind, con
             )}
           </div>
         </div>
+      )}
+
+      {/* Figma Import Modal */}
+      {showFigmaModal && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 9999,
+            background: 'rgba(0,0,0,0.8)',
+            backdropFilter: 'blur(8px)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          onClick={() => !figmaImporting && setShowFigmaModal(false)}
+        >
+          <div
+            style={{
+              background: '#1a1a1a',
+              borderRadius: 16,
+              padding: 32,
+              width: 480,
+              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+              border: '1px solid rgba(255,255,255,0.1)',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 8 }}>
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none">
+                <path d="M5 5.5A3.5 3.5 0 0 1 8.5 2H12v7H8.5A3.5 3.5 0 0 1 5 5.5z" fill="#F24E1E" />
+                <path d="M12 2h3.5a3.5 3.5 0 1 1 0 7H12V2z" fill="#FF7262" />
+                <path d="M12 12.5a3.5 3.5 0 1 1 7 0 3.5 3.5 0 1 1-7 0z" fill="#1ABCFE" />
+                <path d="M5 19.5A3.5 3.5 0 0 1 8.5 16H12v3.5a3.5 3.5 0 1 1-7 0z" fill="#0ACF83" />
+                <path d="M5 12.5A3.5 3.5 0 0 1 8.5 9H12v7H8.5A3.5 3.5 0 0 1 5 12.5z" fill="#A259FF" />
+              </svg>
+              <h2 style={{ color: '#fff', fontSize: 20, fontWeight: 600, margin: 0 }}>
+                Import from Figma
+              </h2>
+            </div>
+            <p style={{ color: '#6b6b6b', fontSize: 13, marginBottom: 24 }}>
+              Paste a Figma file or frame URL to import your design
+            </p>
+
+            <div style={{ marginBottom: 16 }}>
+              <label style={{ display: 'block', color: '#a1a1a1', fontSize: 12, marginBottom: 8 }}>
+                Figma URL
+              </label>
+              <input
+                type="text"
+                placeholder="https://www.figma.com/file/..."
+                value={figmaUrl}
+                onChange={(e) => setFigmaUrl(e.target.value)}
+                disabled={figmaImporting}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  background: '#0a0a0a',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 14,
+                  outline: 'none',
+                  opacity: figmaImporting ? 0.5 : 1,
+                }}
+                autoFocus
+              />
+            </div>
+
+            <div style={{ marginBottom: 24 }}>
+              <label style={{ display: 'block', color: '#a1a1a1', fontSize: 12, marginBottom: 8 }}>
+                Personal Access Token
+              </label>
+              <input
+                type="password"
+                placeholder="figd_..."
+                value={figmaToken}
+                onChange={(e) => setFigmaToken(e.target.value)}
+                disabled={figmaImporting}
+                style={{
+                  width: '100%',
+                  padding: '12px 16px',
+                  background: '#0a0a0a',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  color: '#fff',
+                  fontSize: 14,
+                  outline: 'none',
+                  opacity: figmaImporting ? 0.5 : 1,
+                }}
+              />
+              <p style={{ color: '#5a5a5a', fontSize: 11, marginTop: 8 }}>
+                Get your token from Figma → Settings → Personal Access Tokens
+              </p>
+            </div>
+
+            <div style={{ display: 'flex', gap: 12, justifyContent: 'flex-end' }}>
+              <button
+                onClick={() => setShowFigmaModal(false)}
+                disabled={figmaImporting}
+                style={{
+                  padding: '10px 20px',
+                  background: 'transparent',
+                  border: '1px solid rgba(255,255,255,0.1)',
+                  borderRadius: 8,
+                  color: '#a1a1a1',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: figmaImporting ? 'not-allowed' : 'pointer',
+                  opacity: figmaImporting ? 0.5 : 1,
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleFigmaImport}
+                disabled={!figmaUrl || !figmaToken || figmaImporting}
+                style={{
+                  padding: '10px 20px',
+                  background: figmaUrl && figmaToken && !figmaImporting ? '#A259FF' : '#2a2a2a',
+                  border: 'none',
+                  borderRadius: 8,
+                  color: figmaUrl && figmaToken && !figmaImporting ? '#fff' : '#6b6b6b',
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: figmaUrl && figmaToken && !figmaImporting ? 'pointer' : 'not-allowed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 8,
+                }}
+              >
+                {figmaImporting ? (
+                  <>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                      <path d="M21 12a9 9 0 1 1-6.219-8.56" />
+                    </svg>
+                    Importing...
+                  </>
+                ) : (
+                  'Import'
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notes Sidebar - Professional right side panel */}
+      {showNotesPanel && (
+      <div
+        style={{
+          position: 'fixed',
+          top: 56,
+          right: 0,
+          bottom: 0,
+          width: 380,
+          background: 'linear-gradient(180deg, #141414 0%, #0f0f0f 100%)',
+          borderLeft: '1px solid rgba(255, 255, 255, 0.06)',
+          zIndex: 9999,
+          display: 'flex',
+          flexDirection: 'column',
+          boxShadow: '-20px 0 60px rgba(0, 0, 0, 0.5)',
+          animation: 'slideInFromRight 0.25s cubic-bezier(0.16, 1, 0.3, 1)',
+        }}
+      >
+        {/* Notes Header */}
+        <div style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '20px 24px 16px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.06)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              background: 'linear-gradient(135deg, rgba(168, 50, 72, 0.2) 0%, rgba(168, 50, 72, 0.1) 100%)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A83248" strokeWidth="2">
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/>
+                <polyline points="14 2 14 8 20 8"/>
+                <line x1="16" y1="13" x2="8" y2="13"/>
+                <line x1="16" y1="17" x2="8" y2="17"/>
+              </svg>
+            </div>
+            <div>
+              <div style={{ fontSize: 15, fontWeight: 600, color: '#fff', letterSpacing: '-0.01em' }}>
+                Design Notes
+              </div>
+              <div style={{ fontSize: 11, color: '#52525b', marginTop: 2 }}>
+                Documenta le specifiche
+              </div>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowNotesPanel(false)}
+            style={{
+              width: 32,
+              height: 32,
+              borderRadius: 8,
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              background: 'rgba(255, 255, 255, 0.03)',
+              color: '#52525b',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              transition: 'all 0.15s',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+              e.currentTarget.style.color = '#a1a1aa';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+              e.currentTarget.style.color = '#52525b';
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </button>
+        </div>
+
+        {/* Page Context */}
+        <div style={{
+          padding: '16px 24px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 12,
+        }}>
+          <div style={{
+            width: 40,
+            height: 40,
+            borderRadius: 8,
+            background: 'rgba(255, 255, 255, 0.04)',
+            border: '1px solid rgba(255, 255, 255, 0.06)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}>
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="1.5">
+              <rect x="3" y="3" width="18" height="18" rx="2"/>
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 500, color: '#e4e4e7' }}>
+              {currentCanvasPage?.name || 'Nessuna pagina'}
+            </div>
+            <div style={{ fontSize: 11, color: '#52525b', marginTop: 2 }}>
+              {Object.keys(canvasElements).length - 1} elementi
+            </div>
+          </div>
+          <div style={{
+            padding: '4px 10px',
+            borderRadius: 20,
+            background: currentCanvasPage?.notes ? 'rgba(34, 197, 94, 0.1)' : 'rgba(255, 255, 255, 0.04)',
+            fontSize: 11,
+            fontWeight: 500,
+            color: currentCanvasPage?.notes ? '#22c55e' : '#52525b',
+          }}>
+            {currentCanvasPage?.notes ? 'Documentato' : 'Vuoto'}
+          </div>
+        </div>
+
+        {/* Quick Actions */}
+        <div style={{
+          padding: '12px 24px',
+          borderBottom: '1px solid rgba(255, 255, 255, 0.04)',
+          display: 'flex',
+          gap: 8,
+        }}>
+          {[
+            { icon: 'list', label: 'Lista', insert: '\n• ' },
+            { icon: 'check', label: 'Todo', insert: '\n☐ ' },
+            { icon: 'code', label: 'Code', insert: '\n```\n\n```' },
+            { icon: 'link', label: 'Link', insert: '[testo](url)' },
+          ].map((action) => (
+            <button
+              key={action.label}
+              onClick={() => {
+                if (currentCanvasPage) {
+                  const currentNotes = currentCanvasPage.notes || '';
+                  updatePageNotes(canvasCurrentPageId, currentNotes + action.insert);
+                }
+              }}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                borderRadius: 6,
+                border: '1px solid rgba(255, 255, 255, 0.06)',
+                background: 'rgba(255, 255, 255, 0.02)',
+                color: '#71717a',
+                fontSize: 11,
+                fontWeight: 500,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+                transition: 'all 0.15s',
+              }}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.06)';
+                e.currentTarget.style.color = '#a1a1aa';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                e.currentTarget.style.color = '#71717a';
+                e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+              }}
+            >
+              {action.icon === 'list' && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="8" y1="6" x2="21" y2="6"/><line x1="8" y1="12" x2="21" y2="12"/><line x1="8" y1="18" x2="21" y2="18"/>
+                  <circle cx="4" cy="6" r="1.5" fill="currentColor"/><circle cx="4" cy="12" r="1.5" fill="currentColor"/><circle cx="4" cy="18" r="1.5" fill="currentColor"/>
+                </svg>
+              )}
+              {action.icon === 'check' && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <rect x="3" y="3" width="18" height="18" rx="2"/><polyline points="9 11 12 14 22 4"/>
+                </svg>
+              )}
+              {action.icon === 'code' && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <polyline points="16 18 22 12 16 6"/><polyline points="8 6 2 12 8 18"/>
+                </svg>
+              )}
+              {action.icon === 'link' && (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>
+                </svg>
+              )}
+              {action.label}
+            </button>
+          ))}
+        </div>
+
+        {/* Notes Editor */}
+        <div style={{ flex: 1, padding: '20px 24px', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+          <textarea
+            value={currentCanvasPage?.notes || ''}
+            onChange={(e) => {
+              if (currentCanvasPage) {
+                updatePageNotes(canvasCurrentPageId, e.target.value);
+              }
+            }}
+            placeholder={`Scrivi le specifiche per "${currentCanvasPage?.name || 'questa pagina'}"...
+
+Esempi di cosa documentare:
+
+• Comportamenti interattivi
+  - Cosa succede al click?
+  - Stati hover, focus, disabled
+
+• Dati dinamici
+  - Da dove arrivano i dati?
+  - API endpoints
+
+• Note per sviluppatori
+  - Componenti da usare
+  - Librerie richieste
+
+• Todo e reminder
+  ☐ Aggiungere animazioni
+  ☐ Testare responsive`}
+            style={{
+              flex: 1,
+              width: '100%',
+              padding: 20,
+              background: 'rgba(0, 0, 0, 0.3)',
+              border: '1px solid rgba(255, 255, 255, 0.06)',
+              borderRadius: 12,
+              color: '#e4e4e7',
+              fontSize: 13,
+              lineHeight: 1.7,
+              resize: 'none',
+              outline: 'none',
+              fontFamily: "'SF Mono', 'Monaco', 'Inconsolata', 'Fira Code', monospace",
+              letterSpacing: '-0.01em',
+            }}
+            onFocus={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(168, 50, 72, 0.4)';
+              e.currentTarget.style.boxShadow = '0 0 0 3px rgba(168, 50, 72, 0.1)';
+            }}
+            onBlur={(e) => {
+              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.06)';
+              e.currentTarget.style.boxShadow = 'none';
+            }}
+          />
+        </div>
+
+        {/* Notes Footer */}
+        <div style={{
+          padding: '16px 24px',
+          borderTop: '1px solid rgba(255, 255, 255, 0.06)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          background: 'rgba(0, 0, 0, 0.2)',
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{
+              width: 6,
+              height: 6,
+              borderRadius: '50%',
+              background: '#22c55e',
+              animation: 'pulse 2s infinite',
+            }} />
+            <span style={{ fontSize: 11, color: '#52525b' }}>
+              Salvataggio automatico attivo
+            </span>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <span style={{ fontSize: 11, color: '#3f3f46' }}>
+              {(currentCanvasPage?.notes || '').split('\n').length} righe
+            </span>
+            <span style={{ fontSize: 11, color: '#3f3f46' }}>•</span>
+            <span style={{ fontSize: 11, color: '#3f3f46' }}>
+              {currentCanvasPage?.notes?.length || 0} caratteri
+            </span>
+          </div>
+        </div>
+      </div>
       )}
 
       {/* Agentic Error Alerts (bolt.diy pattern) */}

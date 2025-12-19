@@ -117,7 +117,7 @@ export const RightSidebar: React.FC<RightSidebarProps> = ({
   ];
 
   return (
-    <div className="w-72 min-w-72 bg-[#1a1a1a] border-l border-white/10 flex flex-col h-full overflow-hidden">
+    <div className="bg-[#1a1a1a] flex flex-col flex-1 min-h-0 overflow-hidden">
       {/* Header with element info */}
       <div className="flex items-center justify-between px-3 py-2 border-b border-white/10">
         <div className="flex items-center gap-2">

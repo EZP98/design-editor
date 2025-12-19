@@ -261,7 +261,7 @@ export const PreviewManager = forwardRef<PreviewManagerRef, PreviewManagerProps>
                 transform: 'translateX(-50%)',
                 background: isReady
                   ? 'linear-gradient(135deg, rgba(34, 197, 94, 0.9) 0%, rgba(22, 163, 74, 0.9) 100%)'
-                  : 'linear-gradient(135deg, rgba(139, 92, 246, 0.9) 0%, rgba(99, 102, 241, 0.9) 100%)',
+                  : 'linear-gradient(135deg, rgba(168, 50, 72, 0.9) 0%, rgba(139, 30, 43, 0.9) 100%)',
                 color: '#fff',
                 padding: '6px 14px',
                 borderRadius: 20,
@@ -329,7 +329,7 @@ export const PreviewManager = forwardRef<PreviewManagerRef, PreviewManagerProps>
                 left: selectedRect.left * zoom,
                 width: selectedRect.width * zoom,
                 height: selectedRect.height * zoom,
-                border: '2px solid #3b82f6',
+                border: '2px solid #8B1E2B',
                 background: 'rgba(59, 130, 246, 0.1)',
                 borderRadius: 2,
                 pointerEvents: 'none',
@@ -411,7 +411,7 @@ export const PreviewManager = forwardRef<PreviewManagerRef, PreviewManagerProps>
               left: selectedRect.left * zoom,
               width: selectedRect.width * zoom,
               height: selectedRect.height * zoom,
-              border: '2px solid #3b82f6',
+              border: '2px solid #8B1E2B',
               borderRadius: 2,
               pointerEvents: 'none',
               zIndex: 1001,

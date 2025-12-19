@@ -11,6 +11,7 @@
  */
 
 import React, { useState, useCallback } from 'react';
+import { ColorPicker } from '../ui/ColorPicker';
 
 // ============================================
 // TYPES
@@ -220,38 +221,11 @@ interface ColorInputProps {
 
 function ColorInput({ value, onChange }: ColorInputProps) {
   return (
-    <div style={{ display: 'flex', gap: 6 }}>
-      <input
-        type="color"
-        value={value || '#000000'}
-        onChange={(e) => onChange(e.target.value)}
-        style={{
-          width: 28,
-          height: 28,
-          padding: 0,
-          border: '1px solid #333',
-          borderRadius: 4,
-          cursor: 'pointer',
-          background: value || '#000',
-        }}
-      />
-      <input
-        type="text"
-        value={value || ''}
-        onChange={(e) => onChange(e.target.value)}
-        placeholder="#000000"
-        style={{
-          flex: 1,
-          padding: '6px 8px',
-          background: '#1a1a1a',
-          border: '1px solid #333',
-          borderRadius: 4,
-          color: '#fff',
-          fontSize: 12,
-          fontFamily: 'monospace',
-        }}
-      />
-    </div>
+    <ColorPicker
+      value={value || '#000000'}
+      onChange={onChange}
+      compact
+    />
   );
 }
 
@@ -507,7 +481,7 @@ export function StylePanel({ element, onStyleChange, onTextChange, onApplyToCode
             width: 24,
             height: 24,
             borderRadius: 4,
-            background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+            background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -833,7 +807,7 @@ export function StylePanel({ element, onStyleChange, onTextChange, onApplyToCode
               width: '100%',
               padding: '10px 16px',
               background: hasChanges
-                ? 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)'
+                ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
                 : '#333',
               border: 'none',
               borderRadius: 6,

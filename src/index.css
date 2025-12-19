@@ -56,9 +56,59 @@ textarea {
   font-family: inherit;
 }
 
+/* Hide number input spinners */
+input[type="number"]::-webkit-inner-spin-button,
+input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+/* Style color inputs to be more subtle */
+input[type="color"] {
+  -webkit-appearance: none;
+  appearance: none;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 6px;
+  cursor: pointer;
+  padding: 0 !important;
+  overflow: hidden;
+}
+
+input[type="color"]::-webkit-color-swatch-wrapper {
+  padding: 2px;
+}
+
+input[type="color"]::-webkit-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
+input[type="color"]::-moz-color-swatch {
+  border: none;
+  border-radius: 4px;
+}
+
 /* Focus visible for accessibility */
 :focus:not(:focus-visible) {
   outline: none;
+}
+
+/* Remove all focus rings globally */
+*:focus {
+  outline: none;
+}
+
+/* Remove Tailwind ring utilities */
+.ring-0,
+[class*="ring-"] {
+  --tw-ring-offset-shadow: none !important;
+  --tw-ring-shadow: none !important;
+  box-shadow: none !important;
 }
 
 /* Selection color */

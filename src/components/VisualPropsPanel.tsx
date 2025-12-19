@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect, useCallback } from 'react';
+import { ColorPicker } from './ui/ColorPicker';
 
 // Types (previously from SelectionOverlay, now local)
 export interface SourceLocation {
@@ -151,37 +152,14 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
     </div>
   );
 
-  const ColorInput: React.FC<{ label: string; property: string }> = ({ label, property }) => (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-      <span style={{ fontSize: 11, color: '#71717a', width: 70 }}>{label}</span>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: 1 }}>
-        <input
-          type="color"
+  const ColorInputRow: React.FC<{ label: string; property: string }> = ({ label, property }) => (
+    <div style={{ display: 'flex', alignItems: 'flex-start', gap: 8, marginBottom: 8 }}>
+      <span style={{ fontSize: 11, color: '#71717a', width: 70, paddingTop: 8 }}>{label}</span>
+      <div style={{ flex: 1 }}>
+        <ColorPicker
           value={localStyles[property] || '#000000'}
-          onChange={(e) => handleStyleChange(property, e.target.value)}
-          style={{
-            width: 28,
-            height: 28,
-            border: 'none',
-            borderRadius: 6,
-            cursor: 'pointer',
-            background: 'transparent',
-          }}
-        />
-        <input
-          type="text"
-          value={localStyles[property] || ''}
-          onChange={(e) => handleStyleChange(property, e.target.value)}
-          style={{
-            flex: 1,
-            background: 'rgba(0,0,0,0.3)',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 6,
-            padding: '6px 10px',
-            color: '#e5e5e5',
-            fontSize: 12,
-            fontFamily: 'monospace',
-          }}
+          onChange={(value) => handleStyleChange(property, value)}
+          compact
         />
       </div>
     </div>
@@ -204,7 +182,7 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
           max={max}
           value={value}
           onChange={(e) => handleStyleChange(property, `${e.target.value}${unit}`)}
-          style={{ flex: 1, accentColor: '#8b5cf6' }}
+          style={{ flex: 1, accentColor: '#A83248' }}
         />
         <input
           type="number"
@@ -257,7 +235,7 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
       {/* Element Info Header */}
       <div style={{
         padding: '12px',
-        background: 'linear-gradient(135deg, rgba(139, 92, 246, 0.15) 0%, rgba(99, 102, 241, 0.1) 100%)',
+        background: 'linear-gradient(135deg, rgba(168, 50, 72, 0.15) 0%, rgba(139, 30, 43, 0.1) 100%)',
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
         {/* Component/Tag Name */}
@@ -380,9 +358,9 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
             style={{
               flex: 1,
               padding: '10px',
-              background: activeSection === tab ? 'rgba(139, 92, 246, 0.1)' : 'transparent',
+              background: activeSection === tab ? 'rgba(168, 50, 72, 0.1)' : 'transparent',
               border: 'none',
-              borderBottom: activeSection === tab ? '2px solid #8b5cf6' : '2px solid transparent',
+              borderBottom: activeSection === tab ? '2px solid #A83248' : '2px solid transparent',
               color: activeSection === tab ? '#a78bfa' : '#71717a',
               fontSize: 11,
               fontWeight: 500,
@@ -439,8 +417,8 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
                 title="Colors"
                 icon={<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10" /><path d="M12 2a10 10 0 0 1 0 20" /></svg>}
               />
-              <ColorInput label="Background" property="backgroundColor" />
-              <ColorInput label="Text" property="color" />
+              <ColorInputRow label="Background" property="backgroundColor" />
+              <ColorInputRow label="Text" property="color" />
             </div>
 
             {/* Typography */}
@@ -635,14 +613,14 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
         <div style={{
           padding: '12px',
           borderTop: '1px solid rgba(255,255,255,0.06)',
-          background: 'rgba(139, 92, 246, 0.05)',
+          background: 'rgba(168, 50, 72, 0.05)',
         }}>
           <button
             onClick={handleApplyWithAI}
             style={{
               width: '100%',
               padding: '12px',
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+              background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
               border: 'none',
               borderRadius: 8,
               color: '#fff',

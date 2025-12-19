@@ -2,34 +2,37 @@
 
 /* CSS Variables */
 :root {
-  /* Colors - Dark Theme (Cosmos-inspired) */
-  --bg-canvas: #0a0a0a;
-  --bg-panel: #141414;
-  --bg-panel-header: #1a1a1a;
-  --bg-input: #1f1f1f;
-  --bg-input-hover: #252525;
-  --bg-hover: rgba(255, 255, 255, 0.04);
-  --bg-active: rgba(255, 255, 255, 0.08);
-  --bg-selected: rgba(255, 255, 255, 0.1);
+  /* Colors - Dark Glassmorphism Theme */
+  --bg-canvas: #0a0808;
+  --bg-panel: rgba(20, 20, 20, 0.98);
+  --bg-panel-header: rgba(30, 30, 30, 0.98);
+  --bg-input: rgba(255, 255, 255, 0.04);
+  --bg-input-hover: rgba(255, 255, 255, 0.06);
+  --bg-hover: rgba(255, 255, 255, 0.06);
+  --bg-active: rgba(255, 255, 255, 0.12);
+  --bg-selected: rgba(139, 30, 43, 0.3);
 
   /* Borders */
-  --border-subtle: rgba(255, 255, 255, 0.06);
-  --border-default: rgba(255, 255, 255, 0.1);
+  --border-subtle: rgba(255, 255, 255, 0.08);
+  --border-default: rgba(255, 255, 255, 0.12);
   --border-hover: rgba(255, 255, 255, 0.15);
-  --border-focus: rgba(255, 255, 255, 0.3);
+  --border-focus: rgba(168, 50, 72, 0.6);
 
   /* Text */
   --text-primary: #fafafa;
-  --text-secondary: #a1a1a1;
-  --text-tertiary: #6b6b6b;
-  --text-muted: #404040;
+  --text-secondary: #b8a8a8;
+  --text-tertiary: #7a6666;
+  --text-muted: #4a3838;
 
-  /* Accent */
-  --accent-blue: #3b82f6;
-  --accent-purple: #8b5cf6;
+  /* Accent - Salernitana Granata */
+  --accent-primary: #8B1E2B;
+  --accent-light: #C94C5C;
+  --accent-dark: #5C1018;
+  --accent-blue: #8B1E2B;
+  --accent-purple: #A83248;
   --accent-green: #22c55e;
-  --accent-orange: #f97316;
-  --accent-red: #ef4444;
+  --accent-orange: #D4654A;
+  --accent-red: #8B1E2B;
 
   /* Spacing (8pt grid) */
   --space-1: 4px;
@@ -80,8 +83,9 @@
    TOP HEADER BAR
    ===================== */
 .de-header {
-  height: 48px;
+  height: 52px;
   background: var(--bg-panel);
+  backdrop-filter: blur(20px);
   border-bottom: 1px solid var(--border-subtle);
   display: flex;
   align-items: center;
@@ -513,14 +517,17 @@
   width: var(--panel-right-width);
   min-width: 240px;
   max-width: 400px;
+  height: 100%; /* Fill parent height */
   background: var(--bg-panel);
+  backdrop-filter: blur(20px);
   border-left: 1px solid var(--border-subtle);
   display: flex;
   flex-direction: column;
   flex-shrink: 0;
-  overflow-x: hidden;
-  overflow-y: auto;
+  min-height: 0; /* Required for flex child to properly constrain height */
+  overflow: hidden; /* Let child handle scrolling */
   transition: width var(--transition-slow);
+  position: relative; /* For absolute positioned children */
 }
 
 .de-right-panel.collapsed {
@@ -845,16 +852,16 @@
   position: absolute;
   top: 6px;
   height: 24px;
-  background: rgba(139, 92, 246, 0.2);
+  background: rgba(139, 30, 43, 0.3);
   border-radius: var(--radius-sm);
-  border: 1px solid var(--accent-purple);
+  border: 1px solid var(--accent-primary);
 }
 
 .de-keyframe-dot {
   position: absolute;
   width: 8px;
   height: 8px;
-  background: var(--accent-purple);
+  background: var(--accent-primary);
   border-radius: 2px;
   top: 50%;
   transform: translateY(-50%) rotate(45deg);
@@ -911,18 +918,61 @@
   50% { opacity: 0.5; transform: scale(1.2); }
 }
 
+@keyframes slideInRight {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(100%);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
 .de-prop-group-content {
   animation: fadeIn 0.15s ease;
 }
 
 /* =====================
    FOCUS STATES
+   Remove default browser focus rings
    ===================== */
-button:focus-visible,
+button:focus,
+button:focus-visible {
+  outline: none;
+  box-shadow: none;
+}
+
 input:focus-visible,
 select:focus-visible {
-  outline: 2px solid var(--accent-blue);
-  outline-offset: 2px;
+  outline: none;
+  border-color: var(--border-focus);
+}
+
+/* Remove all focus rings from interactive elements in the editor */
+.de-btn:focus,
+.de-btn:focus-visible,
+.de-tool-btn:focus,
+.de-tool-btn:focus-visible,
+.de-icon-btn:focus,
+.de-icon-btn:focus-visible,
+.de-segment:focus,
+.de-segment:focus-visible,
+.de-layer-btn:focus,
+.de-layer-btn:focus-visible,
+.de-page-btn:focus,
+.de-page-btn:focus-visible,
+.de-zoom-btn:focus,
+.de-zoom-btn:focus-visible,
+.de-category-btn:focus,
+.de-category-btn:focus-visible {
+  outline: none;
+  box-shadow: none;
 }
 
 /* =====================
@@ -1288,7 +1338,7 @@ select:focus-visible {
 
 .device-dropdown-scroll {
   scrollbar-width: thin;
-  scrollbar-color: rgba(139, 92, 246, 0.4) rgba(255, 255, 255, 0.05);
+  scrollbar-color: rgba(139, 30, 43, 0.5) rgba(255, 255, 255, 0.05);
 }
 
 .device-dropdown-scroll::-webkit-scrollbar {
@@ -1301,10 +1351,36 @@ select:focus-visible {
 }
 
 .device-dropdown-scroll::-webkit-scrollbar-thumb {
-  background: rgba(139, 92, 246, 0.4);
+  background: rgba(139, 30, 43, 0.5);
   border-radius: 3px;
 }
 
 .device-dropdown-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(139, 92, 246, 0.6);
+  background: rgba(139, 30, 43, 0.7);
+}
+
+/* =====================
+   DROP TARGET HIGHLIGHT
+   ===================== */
+[data-drop-target="true"] {
+  outline: 2px dashed var(--accent-primary) !important;
+  outline-offset: -2px;
+  background-color: rgba(139, 30, 43, 0.1) !important;
+  transition: all 0.15s ease;
+}
+
+[data-drop-target="true"]::after {
+  content: 'Drop here';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: var(--accent-primary);
+  color: white;
+  padding: 4px 12px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  pointer-events: none;
+  z-index: 1000;
 }

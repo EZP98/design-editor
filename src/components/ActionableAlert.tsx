@@ -68,7 +68,7 @@ const ActionableAlert: React.FC<ActionableAlertProps> = ({
   const typeColors: Record<AlertError['type'], { bg: string; border: string; icon: string }> = {
     build: { bg: 'rgba(239, 68, 68, 0.1)', border: '#ef4444', icon: '#ef4444' },
     runtime: { bg: 'rgba(249, 115, 22, 0.1)', border: '#f97316', icon: '#f97316' },
-    typescript: { bg: 'rgba(59, 130, 246, 0.1)', border: '#3b82f6', icon: '#3b82f6' },
+    typescript: { bg: 'rgba(59, 130, 246, 0.1)', border: '#8B1E2B', icon: '#8B1E2B' },
     eslint: { bg: 'rgba(234, 179, 8, 0.1)', border: '#eab308', icon: '#eab308' },
     network: { bg: 'rgba(168, 85, 247, 0.1)', border: '#a855f7', icon: '#a855f7' },
   };
@@ -211,8 +211,8 @@ const ActionableAlert: React.FC<ActionableAlertProps> = ({
             flex: 1,
             padding: '10px 16px',
             background: isFixing
-              ? 'rgba(139, 92, 246, 0.3)'
-              : 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+              ? 'rgba(168, 50, 72, 0.3)'
+              : 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
             border: 'none',
             borderRadius: 8,
             color: '#fff',

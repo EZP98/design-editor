@@ -15,12 +15,12 @@ interface ModelOption {
 }
 
 const AI_MODELS: ModelOption[] = [
-  { id: 'claude', name: 'Claude', icon: '✨', description: 'Code & Design', color: '#8b5cf6' },
+  { id: 'claude', name: 'Claude', icon: '✨', description: 'Code & Design', color: '#A83248' },
   // Coming soon:
   // { id: 'gpt4', name: 'GPT-4', icon: '🧠', description: 'General AI', color: '#10b981' },
   // { id: 'image', name: 'Image', icon: '🎨', description: 'DALL-E / Midjourney', color: '#f59e0b' },
   // { id: 'video', name: 'Video', icon: '🎬', description: 'Runway / Sora', color: '#ef4444' },
-  // { id: 'audio', name: 'Audio', icon: '🎵', description: 'ElevenLabs / Suno', color: '#3b82f6' },
+  // { id: 'audio', name: 'Audio', icon: '🎵', description: 'ElevenLabs / Suno', color: '#8B1E2B' },
 ];
 
 interface AIChatPanelProps {
@@ -335,7 +335,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+              background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -362,10 +362,10 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                 padding: '10px 12px',
                 borderRadius: 10,
                 background: message.role === 'user'
-                  ? 'rgba(139, 92, 246, 0.15)'
+                  ? 'rgba(168, 50, 72, 0.15)'
                   : 'rgba(255,255,255,0.03)',
                 border: message.role === 'user'
-                  ? '1px solid rgba(139, 92, 246, 0.2)'
+                  ? '1px solid rgba(168, 50, 72, 0.2)'
                   : '1px solid rgba(255,255,255,0.05)',
                 marginLeft: message.role === 'user' ? 'auto' : 0,
                 maxWidth: message.role === 'user' ? '90%' : '100%',
@@ -404,7 +404,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                       gap: 4,
                     }}
                     onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)';
+                      e.currentTarget.style.background = 'rgba(168, 50, 72, 0.2)';
                       e.currentTarget.style.color = '#a78bfa';
                     }}
                     onMouseLeave={e => {
@@ -429,8 +429,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             <div style={{
               width: 16,
               height: 16,
-              border: '2px solid #27272a',
-              borderTopColor: '#8b5cf6',
+              border: '2px solid rgba(255, 255, 255, 0.08)',
+              borderTopColor: '#A83248',
               borderRadius: '50%',
               animation: 'spin 1s linear infinite',
             }} />
@@ -513,7 +513,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
         <div style={{
           background: '#18181b',
-          border: '1px solid #27272a',
+          border: '1px solid rgba(255, 255, 255, 0.08)',
           borderRadius: 12,
           overflow: 'hidden',
         }}>
@@ -622,8 +622,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                   borderRadius: 8,
                   border: 'none',
                   background: input.trim()
-                    ? AI_MODELS.find(m => m.id === selectedModel)?.color || '#8b5cf6'
-                    : '#27272a',
+                    ? AI_MODELS.find(m => m.id === selectedModel)?.color || '#A83248'
+                    : 'rgba(255, 255, 255, 0.08)',
                   color: input.trim() ? '#fff' : '#52525b',
                   cursor: input.trim() ? 'pointer' : 'not-allowed',
                   display: 'flex',

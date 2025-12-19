@@ -492,7 +492,7 @@ export function Editable({ id, component: Component, props, displayName, childre
     style: {
       position: 'relative',
       cursor: 'pointer',
-      outline: isSelected ? '2px solid #3b82f6' : isHovered ? '2px solid #93c5fd' : 'none',
+      outline: isSelected ? '2px solid #8B1E2B' : isHovered ? '2px solid #93c5fd' : 'none',
       outlineOffset: '2px',
     },
   }, [
@@ -503,7 +503,7 @@ export function Editable({ id, component: Component, props, displayName, childre
         position: 'absolute',
         top: -24,
         left: 0,
-        background: '#3b82f6',
+        background: '#8B1E2B',
         color: 'white',
         padding: '2px 8px',
         fontSize: 11,
@@ -516,18 +516,8 @@ export function Editable({ id, component: Component, props, displayName, childre
 }
 `.trim();
 
-  // Default components if none provided
-  const defaultComponents = components || [
-    {
-      id: 'hero-section',
-      component: 'Hero',
-      props: {
-        title: 'Welcome to Your App',
-        subtitle: 'Click on elements to edit them',
-        buttonText: 'Get Started',
-      },
-    },
-  ];
+  // Default components if none provided - start with empty canvas
+  const defaultComponents = components || [];
 
   // Generate component imports and renders
   const componentRenders = defaultComponents.map(c =>
@@ -539,33 +529,44 @@ export function Editable({ id, component: Component, props, displayName, childre
       />`
   ).join('\n');
 
-  // Generate component definitions (simple example components)
+  // Generate component definitions
   const componentDefinitions = `
-// Example components - replace with your own
-function Hero({ title, subtitle, buttonText }) {
+// Empty canvas placeholder
+function EmptyCanvas() {
   return (
     <div style={{
-      padding: '80px 20px',
-      textAlign: 'center',
-      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-      color: 'white',
+      minHeight: '100vh',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      background: '#fafafa',
+      color: '#666',
+      fontFamily: 'system-ui, sans-serif',
     }}>
-      <h1 style={{ fontSize: '3rem', marginBottom: '1rem' }}>{title}</h1>
-      <p style={{ fontSize: '1.25rem', opacity: 0.9, marginBottom: '2rem' }}>{subtitle}</p>
-      <button style={{
-        padding: '12px 32px',
-        fontSize: '1rem',
-        fontWeight: 600,
-        color: '#667eea',
-        background: 'white',
-        border: 'none',
-        borderRadius: '8px',
-        cursor: 'pointer',
-      }}>{buttonText}</button>
+      <div style={{
+        width: 64,
+        height: 64,
+        borderRadius: 16,
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginBottom: 24,
+      }}>
+        <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="2">
+          <line x1="12" y1="5" x2="12" y2="19" />
+          <line x1="5" y1="12" x2="19" y2="12" />
+        </svg>
+      </div>
+      <h2 style={{ fontSize: '1.5rem', marginBottom: 8, color: '#333' }}>Start Building</h2>
+      <p style={{ fontSize: '1rem', opacity: 0.7 }}>Click "+ Add" to add your first element</p>
     </div>
   );
 }
 `;
+
+  const hasComponents = defaultComponents.length > 0;
 
   const appCode = `
 import React from 'react';
@@ -577,7 +578,7 @@ function App() {
   return (
     <EditableProvider>
       <div style={{ minHeight: '100vh' }}>
-${componentRenders}
+${hasComponents ? componentRenders : '        <EmptyCanvas />'}
       </div>
     </EditableProvider>
   );

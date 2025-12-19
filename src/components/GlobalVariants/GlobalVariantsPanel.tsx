@@ -45,7 +45,7 @@ export const DEFAULT_GLOBAL_VARIANTS: GlobalVariantGroup[] = [
           '--text-primary': '#111827',
           '--text-secondary': '#6b7280',
           '--border-color': '#e5e7eb',
-          '--accent-color': '#3b82f6',
+          '--accent-color': '#8B1E2B',
         },
       },
       {
@@ -93,7 +93,7 @@ export const DEFAULT_GLOBAL_VARIANTS: GlobalVariantGroup[] = [
         tokens: {
           '--primary-50': '#eff6ff',
           '--primary-100': '#dbeafe',
-          '--primary-500': '#3b82f6',
+          '--primary-500': '#8B1E2B',
           '--primary-600': '#2563eb',
           '--primary-700': '#1d4ed8',
         },

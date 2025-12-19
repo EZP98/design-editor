@@ -6,6 +6,7 @@
 
 import React, { useState, useEffect, useCallback } from 'react';
 import type { SelectedElement } from './PreviewManager';
+import { ColorPicker } from '../ui/ColorPicker';
 
 // ============================================
 // TYPES
@@ -39,21 +40,11 @@ function StringEditor({ name, value, onChange }: PropEditorProps) {
 
   if (isColor) {
     return (
-      <div className="flex gap-2 items-center">
-        <input
-          type="color"
-          value={String(value) || '#000000'}
-          onChange={(e) => onChange(e.target.value)}
-          className="w-10 h-8 rounded border border-zinc-700 cursor-pointer"
-        />
-        <input
-          type="text"
-          value={String(value) || ''}
-          onChange={(e) => onChange(e.target.value)}
-          className="flex-1 bg-zinc-800 border border-zinc-700 rounded px-2 py-1 text-sm"
-          placeholder="Color value"
-        />
-      </div>
+      <ColorPicker
+        value={String(value) || '#000000'}
+        onChange={(v) => onChange(v)}
+        compact
+      />
     );
   }
 

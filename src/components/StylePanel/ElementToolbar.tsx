@@ -21,6 +21,7 @@ export interface NewElement {
 
 interface ElementToolbarProps {
   onAddElement: (element: NewElement) => void;
+  onDescribeWithAI?: (description: string) => void;
   disabled?: boolean;
 }
 
@@ -115,7 +116,7 @@ const ELEMENTS: Array<{
     ),
     defaultStyles: {
       padding: '12px 24px',
-      backgroundColor: '#6366f1',
+      backgroundColor: '#8B1E2B',
       color: '#ffffff',
       borderRadius: '8px',
       fontWeight: '500',
@@ -173,7 +174,7 @@ const ELEMENTS: Array<{
       </svg>
     ),
     defaultStyles: {
-      color: '#6366f1',
+      color: '#8B1E2B',
       textDecoration: 'underline',
       fontSize: '16px',
       cursor: 'pointer',
@@ -182,8 +183,9 @@ const ELEMENTS: Array<{
   },
 ];
 
-export function ElementToolbar({ onAddElement, disabled }: ElementToolbarProps) {
+export function ElementToolbar({ onAddElement, onDescribeWithAI, disabled }: ElementToolbarProps) {
   const [isOpen, setIsOpen] = useState(false);
+  const [aiPrompt, setAiPrompt] = useState('');
 
   const handleAddElement = (element: typeof ELEMENTS[number]) => {
     onAddElement({
@@ -329,6 +331,8 @@ export function ElementToolbar({ onAddElement, disabled }: ElementToolbarProps) 
                 <input
                   type="text"
                   placeholder="A card with image and title..."
+                  value={aiPrompt}
+                  onChange={(e) => setAiPrompt(e.target.value)}
                   style={{
                     flex: 1,
                     padding: '8px 10px',
@@ -339,23 +343,34 @@ export function ElementToolbar({ onAddElement, disabled }: ElementToolbarProps) 
                     fontSize: 12,
                   }}
                   onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      // TODO: Send to AI
-                      console.log('AI prompt:', e.currentTarget.value);
+                    if (e.key === 'Enter' && aiPrompt.trim()) {
+                      onDescribeWithAI?.(aiPrompt.trim());
+                      setAiPrompt('');
                       setIsOpen(false);
                     }
                   }}
                 />
                 <button
+                  onClick={() => {
+                    if (aiPrompt.trim()) {
+                      onDescribeWithAI?.(aiPrompt.trim());
+                      setAiPrompt('');
+                      setIsOpen(false);
+                    }
+                  }}
+                  disabled={!aiPrompt.trim()}
                   style={{
                     padding: '8px 12px',
-                    background: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)',
+                    background: aiPrompt.trim()
+                      ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                      : '#333',
                     border: 'none',
                     borderRadius: 4,
                     color: '#fff',
                     fontSize: 12,
                     fontWeight: 500,
-                    cursor: 'pointer',
+                    cursor: aiPrompt.trim() ? 'pointer' : 'not-allowed',
+                    opacity: aiPrompt.trim() ? 1 : 0.5,
                   }}
                 >
                   <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">

@@ -22,11 +22,13 @@
     "buffer": "^6.0.3",
     "cors": "^2.8.5",
     "express": "^5.2.1",
+    "framer-motion": "^12.23.26",
     "isomorphic-git": "^1.36.1",
     "prettier": "^3.7.4",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "react-router-dom": "^7.10.1"
+    "react-router-dom": "^7.10.1",
+    "zustand": "^5.0.9"
   },
   "devDependencies": {
     "@playwright/test": "^1.57.0",
