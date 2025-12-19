@@ -276,29 +276,29 @@ export const THEME_COLORS = {
   },
   light: {
     // Editor UI
-    editorBg: '#f5f5f5',
+    editorBg: '#fafafa',
     sidebarBg: '#ffffff',
     panelBg: '#ffffff',
-    borderColor: 'rgba(0, 0, 0, 0.08)',
-    borderColorStrong: 'rgba(0, 0, 0, 0.12)',
+    borderColor: 'rgba(0, 0, 0, 0.06)',
+    borderColorStrong: 'rgba(0, 0, 0, 0.1)',
     textPrimary: '#1a1a1a',
     textSecondary: '#525252',
     textMuted: '#737373',
     textDimmed: '#a3a3a3',
     // Canvas
-    canvasBg: '#e5e5e5',
-    canvasGrid: 'rgba(0, 0, 0, 0.06)',
+    canvasBg: '#f5f5f5',
+    canvasGrid: 'rgba(0, 0, 0, 0.04)',
     // Accent
     accent: '#8B1E2B',
-    accentLight: 'rgba(139, 30, 43, 0.1)',
-    accentMedium: 'rgba(139, 30, 43, 0.2)',
+    accentLight: 'rgba(139, 30, 43, 0.08)',
+    accentMedium: 'rgba(139, 30, 43, 0.15)',
     // Interactive
-    hoverBg: 'rgba(0, 0, 0, 0.04)',
-    activeBg: 'rgba(0, 0, 0, 0.08)',
-    inputBg: 'rgba(0, 0, 0, 0.05)',
+    hoverBg: 'rgba(0, 0, 0, 0.03)',
+    activeBg: 'rgba(0, 0, 0, 0.06)',
+    inputBg: 'rgba(0, 0, 0, 0.04)',
     // Toolbar
     toolbarBg: 'rgba(255, 255, 255, 0.98)',
-    toolbarBorder: 'rgba(0, 0, 0, 0.1)',
+    toolbarBorder: 'rgba(0, 0, 0, 0.08)',
   },
 } as const;
 

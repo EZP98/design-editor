@@ -8,7 +8,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
-import { CanvasElement, ElementStyles } from '../../lib/canvas/types';
+import { CanvasElement, ElementStyles, THEME_COLORS } from '../../lib/canvas/types';
 import { InteractionsPanel } from './InteractionsPanel';
 import { BreakpointSelector } from './ResponsiveToolbar';
 import { useResponsiveStore } from '../../lib/canvas/responsive';
@@ -686,7 +686,11 @@ const BLEND_MODES = [
 ];
 
 export function PropertiesPanel() {
-  const { selectedElementIds, elements, updateElementStyles, resizeElement, moveElement, renameElement } = useCanvasStore();
+  const { selectedElementIds, elements, updateElementStyles, resizeElement, moveElement, renameElement, canvasSettings } = useCanvasStore();
+
+  // Theme
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
 
   // Get selected element
   const selectedElement = selectedElementIds.length === 1 ? elements[selectedElementIds[0]] : null;
@@ -704,8 +708,8 @@ export function PropertiesPanel() {
           background: 'transparent',
         }}
       >
-        <div style={{ padding: 16, borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: '#a1a1aa' }}>Properties</div>
+        <div style={{ padding: 16, borderBottom: `1px solid ${colors.borderColor}` }}>
+          <div style={{ fontSize: 13, fontWeight: 600, color: colors.textSecondary }}>Properties</div>
         </div>
         <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
           <div style={{ textAlign: 'center' }}>
@@ -718,17 +722,17 @@ export function PropertiesPanel() {
                 alignItems: 'center',
                 justifyContent: 'center',
                 borderRadius: 10,
-                background: 'rgba(255, 255, 255, 0.04)',
-                border: '1px solid rgba(255, 255, 255, 0.08)',
+                background: colors.hoverBg,
+                border: `1px solid ${colors.borderColor}`,
               }}
             >
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="1.5">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.textDimmed} strokeWidth="1.5">
                 <circle cx="12" cy="12" r="3" />
                 <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z" />
               </svg>
             </div>
-            <div style={{ fontSize: 13, fontWeight: 500, color: '#71717a', marginBottom: 4 }}>No selection</div>
-            <div style={{ fontSize: 12, color: '#52525b' }}>Select an element to edit</div>
+            <div style={{ fontSize: 13, fontWeight: 500, color: colors.textMuted, marginBottom: 4 }}>No selection</div>
+            <div style={{ fontSize: 12, color: colors.textDimmed }}>Select an element to edit</div>
           </div>
         </div>
       </div>

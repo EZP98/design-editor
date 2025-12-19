@@ -132,7 +132,8 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         onClick={(e) => e.stopPropagation()}
         style={{
           width: 520,
-          maxHeight: '80vh',
+          maxWidth: 'calc(100vw - 48px)',
+          height: 'min(600px, calc(100vh - 48px))',
           background: '#141414',
           borderRadius: 16,
           border: '1px solid rgba(255, 255, 255, 0.08)',
@@ -282,6 +283,7 @@ export const IconPicker: React.FC<IconPickerProps> = ({ onSelect, onClose, selec
         {/* Icons Grid - Scroll by category blocks */}
         <div style={{
           flex: 1,
+          minHeight: 0,
           overflowY: 'auto',
           padding: '16px 20px',
           scrollBehavior: 'smooth',

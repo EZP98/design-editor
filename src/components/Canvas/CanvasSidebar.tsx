@@ -6,7 +6,7 @@
 
 import React, { useState } from 'react';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
-import { CanvasElement, ElementType } from '../../lib/canvas/types';
+import { CanvasElement, ElementType, THEME_COLORS } from '../../lib/canvas/types';
 
 // Element type icons
 const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
@@ -106,7 +106,12 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
     setHoveredElement,
     toggleVisibility,
     renameElement,
+    canvasSettings,
   } = useCanvasStore();
+
+  // Theme
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
 
   const isSelected = selectedElementIds.includes(element.id);
   const isHovered = hoveredElementId === element.id;
@@ -128,8 +133,8 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
           marginLeft: 4,
           marginRight: 4,
           borderRadius: 6,
-          background: isSelected ? 'rgba(168, 50, 72, 0.15)' : isHovered ? 'rgba(255,255,255,0.04)' : 'transparent',
-          borderLeft: isSelected ? '2px solid #A83248' : '2px solid transparent',
+          background: isSelected ? colors.accentLight : isHovered ? colors.hoverBg : 'transparent',
+          borderLeft: isSelected ? `2px solid ${colors.accent}` : '2px solid transparent',
           cursor: 'pointer',
           transition: 'background 0.1s',
         }}
@@ -151,7 +156,7 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              color: '#71717a',
+              color: colors.textMuted,
               background: 'none',
               border: 'none',
               cursor: 'pointer',
@@ -178,7 +183,7 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
         )}
 
         {/* Type icon */}
-        <span style={{ color: isSelected ? '#A83248' : '#71717a', flexShrink: 0, display: 'flex' }}>
+        <span style={{ color: isSelected ? colors.accent : colors.textMuted, flexShrink: 0, display: 'flex' }}>
           {TYPE_ICONS[element.type]}
         </span>
 
@@ -205,11 +210,11 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
             style={{
               flex: 1,
               minWidth: 0,
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid #A83248',
+              background: colors.inputBg,
+              border: `1px solid ${colors.accent}`,
               borderRadius: 4,
               padding: '2px 8px',
-              color: '#fff',
+              color: colors.textPrimary,
               fontSize: 13,
               outline: 'none',
             }}
@@ -223,7 +228,7 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
               minWidth: 0,
               fontSize: 13,
               fontWeight: isSelected ? 500 : 400,
-              color: isSelected ? '#fff' : '#a1a1aa',
+              color: isSelected ? colors.textPrimary : colors.textSecondary,
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
@@ -248,7 +253,7 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
             borderRadius: 4,
             border: 'none',
             background: 'transparent',
-            color: element.visible ? '#71717a' : '#A83248',
+            color: element.visible ? colors.textMuted : colors.accent,
             cursor: 'pointer',
             opacity: element.visible ? 0.6 : 1,
             flexShrink: 0,
@@ -300,7 +305,12 @@ export function CanvasSidebar() {
     deleteElement,
     projectName,
     setProjectName,
+    canvasSettings,
   } = useCanvasStore();
+
+  // Theme
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
 
   const currentPage = pages[currentPageId];
   const rootElement = currentPage ? elements[currentPage.rootElementId] : null;
@@ -324,7 +334,7 @@ export function CanvasSidebar() {
       {/* Project Name */}
       <div style={{
         padding: '12px',
-        borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+        borderBottom: `1px solid ${colors.borderColor}`,
       }}>
         {editingProjectName ? (
           <input
@@ -338,12 +348,12 @@ export function CanvasSidebar() {
             style={{
               width: '100%',
               padding: '6px 10px',
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid #A83248',
+              background: colors.inputBg,
+              border: `1px solid ${colors.accent}`,
               borderRadius: 6,
               fontSize: 14,
               fontWeight: 600,
-              color: '#fff',
+              color: colors.textPrimary,
               outline: 'none',
             }}
             autoFocus
@@ -364,7 +374,7 @@ export function CanvasSidebar() {
               <path d="M2 17l10 5 10-5"/>
               <path d="M2 12l10 5 10-5"/>
             </svg>
-            <span style={{ fontSize: 14, fontWeight: 600, color: '#fff' }}>
+            <span style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>
               {projectName || 'Untitled Project'}
             </span>
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="2" style={{ marginLeft: 'auto' }}>
@@ -379,7 +389,7 @@ export function CanvasSidebar() {
       <div
         style={{
           display: 'flex',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.08)',
+          borderBottom: `1px solid ${colors.borderColor}`,
         }}
       >
         <button
@@ -389,10 +399,10 @@ export function CanvasSidebar() {
             padding: '12px 16px',
             fontSize: 13,
             fontWeight: 500,
-            color: activeTab === 'pages' ? '#fff' : '#52525b',
+            color: activeTab === 'pages' ? colors.textPrimary : colors.textMuted,
             background: 'transparent',
             border: 'none',
-            borderBottom: activeTab === 'pages' ? '2px solid #A83248' : '2px solid transparent',
+            borderBottom: activeTab === 'pages' ? `2px solid ${colors.accent}` : '2px solid transparent',
             cursor: 'pointer',
             transition: 'all 0.15s',
           }}
@@ -406,10 +416,10 @@ export function CanvasSidebar() {
             padding: '12px 16px',
             fontSize: 13,
             fontWeight: 500,
-            color: activeTab === 'layers' ? '#fff' : '#52525b',
+            color: activeTab === 'layers' ? colors.textPrimary : colors.textMuted,
             background: 'transparent',
             border: 'none',
-            borderBottom: activeTab === 'layers' ? '2px solid #A83248' : '2px solid transparent',
+            borderBottom: activeTab === 'layers' ? `2px solid ${colors.accent}` : '2px solid transparent',
             cursor: 'pointer',
             transition: 'all 0.15s',
           }}
@@ -427,7 +437,7 @@ export function CanvasSidebar() {
               left: 8,
               top: '50%',
               transform: 'translateY(-50%)',
-              color: '#52525b',
+              color: colors.textDimmed,
               pointerEvents: 'none',
             }}
             width="13"
@@ -446,11 +456,11 @@ export function CanvasSidebar() {
             style={{
               width: '100%',
               padding: '6px 8px 6px 28px',
-              background: 'rgba(255, 255, 255, 0.03)',
+              background: colors.inputBg,
               border: 'none',
               borderRadius: 6,
               fontSize: 12,
-              color: '#a1a1aa',
+              color: colors.textSecondary,
               outline: 'none',
             }}
           />
@@ -474,7 +484,7 @@ export function CanvasSidebar() {
                 style={{
                   fontSize: 11,
                   fontWeight: 500,
-                  color: '#52525b',
+                  color: colors.textDimmed,
                   textTransform: 'uppercase',
                   letterSpacing: '0.05em',
                 }}
@@ -492,7 +502,7 @@ export function CanvasSidebar() {
                   borderRadius: 4,
                   border: 'none',
                   background: 'transparent',
-                  color: '#52525b',
+                  color: colors.textDimmed,
                   cursor: 'pointer',
                 }}
                 title="Add page"
@@ -518,8 +528,8 @@ export function CanvasSidebar() {
                     borderRadius: 6,
                     cursor: 'pointer',
                     transition: 'all 0.15s',
-                    background: page.id === currentPageId ? 'rgba(255, 255, 255, 0.04)' : 'transparent',
-                    border: page.id === currentPageId ? '1px solid rgba(255, 255, 255, 0.08)' : '1px solid transparent',
+                    background: page.id === currentPageId ? colors.hoverBg : 'transparent',
+                    border: page.id === currentPageId ? `1px solid ${colors.borderColor}` : '1px solid transparent',
                   }}
                   onClick={() => setCurrentPage(page.id)}
                   onDoubleClick={() => {
@@ -536,7 +546,7 @@ export function CanvasSidebar() {
                       alignItems: 'center',
                       justifyContent: 'center',
                       borderRadius: 6,
-                      background: page.id === currentPageId ? '#A83248' : 'rgba(255, 255, 255, 0.08)',
+                      background: page.id === currentPageId ? colors.accent : colors.hoverBg,
                     }}
                   >
                     <svg
@@ -544,7 +554,7 @@ export function CanvasSidebar() {
                       height="14"
                       viewBox="0 0 24 24"
                       fill="none"
-                      stroke={page.id === currentPageId ? '#fff' : '#71717a'}
+                      stroke={page.id === currentPageId ? '#fff' : colors.textMuted}
                       strokeWidth="1.5"
                     >
                       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -570,11 +580,11 @@ export function CanvasSidebar() {
                       }}
                       style={{
                         flex: 1,
-                        background: 'rgba(255, 255, 255, 0.08)',
-                        border: '1px solid #A83248',
+                        background: colors.inputBg,
+                        border: `1px solid ${colors.accent}`,
                         borderRadius: 4,
                         padding: '4px 8px',
-                        color: '#fff',
+                        color: colors.textPrimary,
                         fontSize: 13,
                         outline: 'none',
                       }}
@@ -587,7 +597,7 @@ export function CanvasSidebar() {
                         flex: 1,
                         fontSize: 13,
                         fontWeight: 500,
-                        color: page.id === currentPageId ? '#fff' : '#a1a1aa',
+                        color: page.id === currentPageId ? colors.textPrimary : colors.textSecondary,
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
@@ -613,7 +623,7 @@ export function CanvasSidebar() {
                       borderRadius: 4,
                       border: 'none',
                       background: 'transparent',
-                      color: '#52525b',
+                      color: colors.textDimmed,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
                     }}
@@ -642,7 +652,7 @@ export function CanvasSidebar() {
                         borderRadius: 4,
                         border: 'none',
                         background: 'transparent',
-                        color: '#52525b',
+                        color: colors.textDimmed,
                         cursor: 'pointer',
                         transition: 'all 0.15s',
                       }}
@@ -668,13 +678,13 @@ export function CanvasSidebar() {
               alignItems: 'center',
               justifyContent: 'space-between',
               padding: '6px 8px',
-              borderBottom: '1px solid rgba(255,255,255,0.04)',
+              borderBottom: `1px solid ${colors.borderColor}`,
               gap: 4,
             }}>
               <span style={{
                 fontSize: 10,
                 fontWeight: 600,
-                color: '#52525b',
+                color: colors.textDimmed,
                 textTransform: 'uppercase',
                 letterSpacing: '0.05em',
               }}>
@@ -694,8 +704,8 @@ export function CanvasSidebar() {
                     justifyContent: 'center',
                     borderRadius: 4,
                     border: 'none',
-                    background: hasSelection ? 'rgba(168, 50, 72, 0.2)' : 'transparent',
-                    color: hasSelection ? '#A83248' : '#3f3f46',
+                    background: hasSelection ? colors.accentMedium : 'transparent',
+                    color: hasSelection ? colors.accent : colors.textDimmed,
                     cursor: hasSelection ? 'pointer' : 'not-allowed',
                     transition: 'all 0.15s',
                   }}
@@ -719,7 +729,7 @@ export function CanvasSidebar() {
                     borderRadius: 4,
                     border: 'none',
                     background: 'transparent',
-                    color: selectedElementIds.length === 1 ? '#71717a' : '#3f3f46',
+                    color: selectedElementIds.length === 1 ? colors.textMuted : colors.textDimmed,
                     cursor: selectedElementIds.length === 1 ? 'pointer' : 'not-allowed',
                     transition: 'all 0.15s',
                   }}
@@ -745,7 +755,7 @@ export function CanvasSidebar() {
                     borderRadius: 4,
                     border: 'none',
                     background: 'transparent',
-                    color: hasSelection ? '#71717a' : '#3f3f46',
+                    color: hasSelection ? colors.textMuted : colors.textDimmed,
                     cursor: hasSelection ? 'pointer' : 'not-allowed',
                     transition: 'all 0.15s',
                   }}
@@ -777,24 +787,24 @@ export function CanvasSidebar() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     borderRadius: 10,
-                    background: 'rgba(255, 255, 255, 0.04)',
-                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: colors.hoverBg,
+                    border: `1px solid ${colors.borderColor}`,
                   }}
                 >
-                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#52525b" strokeWidth="1.5">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke={colors.textDimmed} strokeWidth="1.5">
                     <rect x="3" y="3" width="18" height="18" rx="2" />
                     <line x1="12" y1="8" x2="12" y2="16" />
                     <line x1="8" y1="12" x2="16" y2="12" />
                   </svg>
                 </div>
-                <div style={{ fontSize: 13, fontWeight: 500, color: '#71717a', marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 500, color: colors.textMuted, marginBottom: 6 }}>
                   No layers yet
                 </div>
-                <div style={{ fontSize: 12, color: '#52525b' }}>
+                <div style={{ fontSize: 12, color: colors.textDimmed }}>
                   Press{' '}
-                  <kbd style={{ padding: '2px 6px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: 4, fontSize: 11, color: '#a1a1aa' }}>F</kbd>{' '}
+                  <kbd style={{ padding: '2px 6px', background: colors.hoverBg, borderRadius: 4, fontSize: 11, color: colors.textSecondary }}>F</kbd>{' '}
                   or{' '}
-                  <kbd style={{ padding: '2px 6px', background: 'rgba(255, 255, 255, 0.08)', borderRadius: 4, fontSize: 11, color: '#a1a1aa' }}>T</kbd>{' '}
+                  <kbd style={{ padding: '2px 6px', background: colors.hoverBg, borderRadius: 4, fontSize: 11, color: colors.textSecondary }}>T</kbd>{' '}
                   to add
                 </div>
               </div>

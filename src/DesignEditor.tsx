@@ -2569,8 +2569,8 @@ const DesignEditor: React.FC = () => {
         <div style={{
           width: leftPanelCollapsed ? 48 : 320,
           minWidth: leftPanelCollapsed ? 48 : 320,
-          background: '#111',
-          borderRight: '1px solid rgba(255,255,255,0.06)',
+          background: themeColors.sidebarBg,
+          borderRight: `1px solid ${themeColors.borderColor}`,
           display: 'flex',
           flexDirection: 'column',
           height: '100%',
@@ -2587,8 +2587,8 @@ const DesignEditor: React.FC = () => {
                   height: 32,
                   borderRadius: 8,
                   border: 'none',
-                  background: 'rgba(255,255,255,0.05)',
-                  color: '#a1a1a1',
+                  background: themeColors.hoverBg,
+                  color: themeColors.textSecondary,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -2608,7 +2608,7 @@ const DesignEditor: React.FC = () => {
                   borderRadius: 8,
                   border: 'none',
                   background: 'transparent',
-                  color: '#6b6b6b',
+                  color: themeColors.textMuted,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -2631,7 +2631,7 @@ const DesignEditor: React.FC = () => {
                   borderRadius: 8,
                   border: 'none',
                   background: 'transparent',
-                  color: '#6b6b6b',
+                  color: themeColors.textMuted,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -2651,7 +2651,7 @@ const DesignEditor: React.FC = () => {
             <div style={{
               flex: chatCollapsed ? 1 : '0 0 50%',
               overflow: 'hidden',
-              borderBottom: '1px solid rgba(255,255,255,0.06)',
+              borderBottom: `1px solid ${themeColors.borderColor}`,
               transition: 'flex 0.2s ease',
             }}>
               <CanvasSidebar />
@@ -4227,8 +4227,8 @@ Auth: Bearer
                     height: '100%',
                     display: 'flex',
                     flexDirection: 'column',
-                    background: 'rgba(20, 20, 20, 0.98)',
-                    borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                    background: themeColors.sidebarBg,
+                    borderLeft: `1px solid ${themeColors.borderColor}`,
                     overflow: 'hidden',
                   }}
                 >
@@ -4250,8 +4250,8 @@ Auth: Bearer
                 height: '100%',
                 display: 'flex',
                 flexDirection: 'column',
-                background: 'rgba(20, 20, 20, 0.98)',
-                borderLeft: '1px solid rgba(255, 255, 255, 0.08)',
+                background: themeColors.sidebarBg,
+                borderLeft: `1px solid ${themeColors.borderColor}`,
                 overflow: 'hidden',
               }}>
                 <div className="de-panel-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
@@ -4265,7 +4265,7 @@ Auth: Bearer
                     style={{
                       background: 'transparent',
                       border: 'none',
-                      color: '#6b6b6b',
+                      color: themeColors.textMuted,
                       cursor: 'pointer',
                       padding: 4,
                       borderRadius: 4,
@@ -4273,8 +4273,8 @@ Auth: Bearer
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
-                    onMouseEnter={(e) => e.currentTarget.style.color = '#a1a1a1'}
-                    onMouseLeave={(e) => e.currentTarget.style.color = '#6b6b6b'}
+                    onMouseEnter={(e) => e.currentTarget.style.color = themeColors.textSecondary}
+                    onMouseLeave={(e) => e.currentTarget.style.color = themeColors.textMuted}
                     title="Close panel"
                   >
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
