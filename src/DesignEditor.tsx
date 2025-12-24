@@ -23,6 +23,7 @@ import { useGit } from './lib/hooks/useGit';
 import { getWebContainer, createEditableViteProject } from './lib/webcontainer';
 import { useAgenticErrors, buildErrorContext } from './lib/hooks/useAgenticErrors';
 import { Canvas, CanvasSidebar, ComponentLibrary, PropertiesPanel } from './components/Canvas';
+import { AIImagePlugin } from './components/Canvas/plugins';
 import { useCanvasStore, setCurrentProjectId, saveProjectToRecents, loadProjectCanvasState, saveProjectCanvasState, generateCanvasThumbnail } from './lib/canvas/canvasStore';
 import { generateProjectFiles } from './lib/canvas/codeGenerator';
 import type { ElementType } from './lib/canvas/types';
@@ -30,6 +31,9 @@ import { THEME_COLORS } from './lib/canvas/types';
 import { importFromFigma, saveFigmaToken, getFigmaToken, parseFigmaUrl } from './lib/figma/figmaImport';
 import { importFromFramer, parseFramerUrl } from './lib/framer/framerImport';
 import { useCanvasToCode } from './lib/codegen';
+import { AuthModal } from './components/AuthModal';
+import { ProjectsPanel } from './components/ProjectsPanel';
+import { useAuth } from './lib/hooks/useAuth';
 
 // API URL for production/development
 const API_URL = import.meta.env.PROD
@@ -847,21 +851,21 @@ const sampleAboutElements: DesignElement[] = [
 ];
 
 const DesignEditor: React.FC = () => {
-  // DEBUG: Global message listener to catch ALL postMessage events
-  useEffect(() => {
-    const globalMessageHandler = (event: MessageEvent) => {
-      if (event.data && typeof event.data === 'object') {
-        console.log('%c[GLOBAL] postMessage received:', 'color: #f59e0b; font-weight: bold;', {
-          type: event.data.type,
-          origin: event.origin,
-          data: event.data,
-        });
-      }
-    };
-    window.addEventListener('message', globalMessageHandler);
-    console.log('%c[GLOBAL] Message listener attached', 'color: #10b981; font-weight: bold;');
-    return () => window.removeEventListener('message', globalMessageHandler);
-  }, []);
+  // DEBUG: Global message listener to catch ALL postMessage events (disabled to reduce noise)
+  // useEffect(() => {
+  //   const globalMessageHandler = (event: MessageEvent) => {
+  //     if (event.data && typeof event.data === 'object') {
+  //       console.log('%c[GLOBAL] postMessage received:', 'color: #f59e0b; font-weight: bold;', {
+  //         type: event.data.type,
+  //         origin: event.origin,
+  //         data: event.data,
+  //       });
+  //     }
+  //   };
+  //   window.addEventListener('message', globalMessageHandler);
+  //   console.log('%c[GLOBAL] Message listener attached', 'color: #10b981; font-weight: bold;');
+  //   return () => window.removeEventListener('message', globalMessageHandler);
+  // }, []);
 
   // Get project ID from URL
   const { projectId } = useParams<{ projectId: string }>();
@@ -963,6 +967,8 @@ const DesignEditor: React.FC = () => {
   const projectName = useCanvasStore((state) => state.projectName) || 'Nuovo Progetto';
   const setProjectName = useCanvasStore((state) => state.setProjectName);
   const canvasSettings = useCanvasStore((state) => state.canvasSettings);
+  const activeRightPanel = useCanvasStore((state) => state.activeRightPanel);
+  const setActiveRightPanel = useCanvasStore((state) => state.setActiveRightPanel);
 
   // Get theme colors
   const editorTheme = canvasSettings?.editorTheme || 'dark';
@@ -977,11 +983,13 @@ const DesignEditor: React.FC = () => {
   } = useCanvasToCode({
     debounceMs: 500,
     enabled: true, // Always enabled, WebContainer will handle if not booted
-    onCodeGenerated: (files) => {
-      console.log('[CanvasToCode] Generated:', Object.keys(files).length, 'files');
+    onCodeGenerated: () => {
+      // Disabled to reduce console noise
+      // console.log('[CanvasToCode] Generated:', Object.keys(files).length, 'files');
     },
-    onFilesWritten: (paths) => {
-      console.log('[CanvasToCode] Written to WebContainer:', paths);
+    onFilesWritten: () => {
+      // Disabled to reduce console noise
+      // console.log('[CanvasToCode] Written to WebContainer:', paths);
     },
     onError: (err) => {
       console.warn('[CanvasToCode] Sync error (WebContainer may not be ready):', err.message);
@@ -1056,6 +1064,11 @@ const DesignEditor: React.FC = () => {
   const [showFigmaModal, setShowFigmaModal] = useState(false);
   const [figmaUrl, setFigmaUrl] = useState('');
   const [figmaToken, setFigmaToken] = useState(() => getFigmaToken() || '');
+
+  // Auth & Projects
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [showProjectsPanel, setShowProjectsPanel] = useState(false);
+  const { user, isAuthenticated } = useAuth();
 
   // Framer Import Modal State
   const [showFramerModal, setShowFramerModal] = useState(false);
@@ -2542,6 +2555,23 @@ const DesignEditor: React.FC = () => {
             </svg>
             Framer
           </button>
+          {/* Projects Button */}
+          <button
+            onClick={() => setShowProjectsPanel(true)}
+            className="de-btn de-btn-ghost"
+            title="I tuoi progetti"
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginLeft: 8,
+            }}
+          >
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+            Progetti
+          </button>
         </div>
 
         <div className="de-header-center">
@@ -2567,8 +2597,8 @@ const DesignEditor: React.FC = () => {
       <div className="de-main">
         {/* Left Sidebar - Pages/Frames (top) + Chat (bottom) */}
         <div style={{
-          width: leftPanelCollapsed ? 48 : 320,
-          minWidth: leftPanelCollapsed ? 48 : 320,
+          width: leftPanelCollapsed ? 48 : 380,
+          minWidth: leftPanelCollapsed ? 48 : 380,
           background: themeColors.sidebarBg,
           borderRight: `1px solid ${themeColors.borderColor}`,
           display: 'flex',
@@ -2647,96 +2677,12 @@ const DesignEditor: React.FC = () => {
           ) : isCanvasMode ? (
           /* Canvas Mode - Show CanvasSidebar + AI Chat */
           <div style={{ display: 'flex', flexDirection: 'column', height: '100%', overflow: 'hidden' }}>
-            {/* Canvas Sidebar */}
+            {/* Canvas Sidebar - Full height with tabs (Chat, Pages, Layers) */}
             <div style={{
-              flex: chatCollapsed ? 1 : '0 0 50%',
+              flex: 1,
               overflow: 'hidden',
-              borderBottom: `1px solid ${themeColors.borderColor}`,
-              transition: 'flex 0.2s ease',
             }}>
               <CanvasSidebar />
-            </div>
-
-            {/* AI Chat Section */}
-            <div style={{
-              flex: chatCollapsed ? '0 0 44px' : '1 1 50%',
-              display: 'flex',
-              flexDirection: 'column',
-              overflow: 'hidden',
-              minHeight: 0,
-              transition: 'flex 0.2s ease',
-            }}>
-              {/* Chat Header */}
-              <div style={{
-                padding: '10px 16px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                cursor: 'pointer',
-                background: 'rgba(0, 0, 0, 0.2)',
-              }}
-              onClick={() => setChatCollapsed(!chatCollapsed)}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  <div style={{
-                    width: 24,
-                    height: 24,
-                    borderRadius: 6,
-                    background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                  }}>
-                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
-                      <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-                    </svg>
-                  </div>
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#fff' }}>
-                    AI Assistant
-                  </span>
-                </div>
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="#52525b"
-                  strokeWidth="2"
-                  style={{
-                    transform: chatCollapsed ? 'rotate(180deg)' : 'rotate(0deg)',
-                    transition: 'transform 0.2s ease',
-                  }}
-                >
-                  <polyline points="6 9 12 15 18 9" />
-                </svg>
-              </div>
-              {!chatCollapsed && (
-                <div style={{ flex: 1, overflow: 'hidden' }}>
-                  <AIChatPanel
-                    ref={chatPanelRef}
-                    currentFile={selectedFile}
-                    currentCode={selectedFile ? fileContents[selectedFile.replace(/^\//, '')] : undefined}
-                    projectName={projectName}
-                    currentFiles={fileContents}
-                    onFilesUpdate={(updatedFiles) => {
-                      setFileContents(prev => ({ ...prev, ...updatedFiles }));
-                      setWebcontainerFiles(prev => ({ ...prev, ...updatedFiles }));
-                    }}
-                    onRestoreSnapshot={(files) => {
-                      setFileContents(files);
-                      setWebcontainerFiles(files);
-                    }}
-                    onApplyCode={(code, filePath) => {
-                      if (filePath) {
-                        setFileContents(prev => ({
-                          ...prev,
-                          [filePath.replace(/^\//, '')]: code
-                        }));
-                      }
-                    }}
-                  />
-                </div>
-              )}
             </div>
           </div>
           ) : (
@@ -4215,10 +4161,10 @@ Auth: Bearer
                 </div>
               )}
 
-              {/* Right Panel - Properties */}
-              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement) || (isCanvasMode && hasCanvasSelection)) && (
-              isCanvasMode && hasCanvasSelection ? (
-                /* Canvas Mode - Show PropertiesPanel component */
+              {/* Right Panel - Properties or AI Image */}
+              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement) || isCanvasMode) && (
+              isCanvasMode ? (
+                /* Canvas Mode - Show PropertiesPanel or AIImagePlugin based on activeRightPanel */
                 <div
                   className="de-right-panel"
                   style={{
@@ -4240,7 +4186,11 @@ Auth: Bearer
                       minHeight: 0,
                     }}
                   >
-                    <PropertiesPanel />
+                    {activeRightPanel === 'ai-image' ? (
+                      <AIImagePlugin onClose={() => setActiveRightPanel('properties')} />
+                    ) : (
+                      <PropertiesPanel />
+                    )}
                   </div>
                 </div>
               ) :
@@ -5421,6 +5371,24 @@ Find the component in the codebase and update the styles. If using Tailwind, con
           }
         }
       `}</style>
+
+      {/* Auth Modal */}
+      <AuthModal
+        isOpen={showAuthModal}
+        onClose={() => setShowAuthModal(false)}
+        theme={editorTheme}
+      />
+
+      {/* Projects Panel */}
+      <ProjectsPanel
+        isOpen={showProjectsPanel}
+        onClose={() => setShowProjectsPanel(false)}
+        onOpenAuth={() => {
+          setShowProjectsPanel(false);
+          setShowAuthModal(true);
+        }}
+        theme={editorTheme}
+      />
 
     </div>
   );

@@ -7,6 +7,7 @@
 import React, { useState } from 'react';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
 import { CanvasElement, ElementType, THEME_COLORS } from '../../lib/canvas/types';
+import AIChatPanel from '../AIChatPanel';
 
 // Element type icons
 const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
@@ -288,7 +289,7 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
 }
 
 export function CanvasSidebar() {
-  const [activeTab, setActiveTab] = useState<'pages' | 'layers'>('pages');
+  const [activeTab, setActiveTab] = useState<'chat' | 'pages' | 'layers'>('pages');
   const {
     pages,
     elements,
@@ -319,7 +320,6 @@ export function CanvasSidebar() {
 
   const [editingPageId, setEditingPageId] = useState<string | null>(null);
   const [newPageName, setNewPageName] = useState('');
-  const [editingProjectName, setEditingProjectName] = useState(false);
 
   return (
     <div
@@ -331,61 +331,7 @@ export function CanvasSidebar() {
         background: 'transparent',
       }}
     >
-      {/* Project Name */}
-      <div style={{
-        padding: '12px',
-        borderBottom: `1px solid ${colors.borderColor}`,
-      }}>
-        {editingProjectName ? (
-          <input
-            type="text"
-            value={projectName}
-            onChange={(e) => setProjectName(e.target.value)}
-            onBlur={() => setEditingProjectName(false)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter' || e.key === 'Escape') setEditingProjectName(false);
-            }}
-            style={{
-              width: '100%',
-              padding: '6px 10px',
-              background: colors.inputBg,
-              border: `1px solid ${colors.accent}`,
-              borderRadius: 6,
-              fontSize: 14,
-              fontWeight: 600,
-              color: colors.textPrimary,
-              outline: 'none',
-            }}
-            autoFocus
-          />
-        ) : (
-          <div
-            onClick={() => setEditingProjectName(true)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 8,
-              cursor: 'pointer',
-              padding: '4px 0',
-            }}
-          >
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#A83248" strokeWidth="2">
-              <path d="M12 2L2 7l10 5 10-5-10-5z"/>
-              <path d="M2 17l10 5 10-5"/>
-              <path d="M2 12l10 5 10-5"/>
-            </svg>
-            <span style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>
-              {projectName || 'Untitled Project'}
-            </span>
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="2" style={{ marginLeft: 'auto' }}>
-              <path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/>
-              <path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/>
-            </svg>
-          </div>
-        )}
-      </div>
-
-      {/* Header with tabs */}
+      {/* Header with tabs - Chat, Pages, Layers */}
       <div
         style={{
           display: 'flex',
@@ -393,11 +339,35 @@ export function CanvasSidebar() {
         }}
       >
         <button
+          onClick={() => setActiveTab('chat')}
+          style={{
+            flex: 1,
+            padding: '12px 8px',
+            fontSize: 12,
+            fontWeight: 500,
+            color: activeTab === 'chat' ? colors.textPrimary : colors.textMuted,
+            background: 'transparent',
+            border: 'none',
+            borderBottom: activeTab === 'chat' ? `2px solid ${colors.accent}` : '2px solid transparent',
+            cursor: 'pointer',
+            transition: 'all 0.15s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+          </svg>
+          Chat
+        </button>
+        <button
           onClick={() => setActiveTab('pages')}
           style={{
             flex: 1,
-            padding: '12px 16px',
-            fontSize: 13,
+            padding: '12px 8px',
+            fontSize: 12,
             fontWeight: 500,
             color: activeTab === 'pages' ? colors.textPrimary : colors.textMuted,
             background: 'transparent',
@@ -405,16 +375,23 @@ export function CanvasSidebar() {
             borderBottom: activeTab === 'pages' ? `2px solid ${colors.accent}` : '2px solid transparent',
             cursor: 'pointer',
             transition: 'all 0.15s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
           }}
         >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <rect x="3" y="3" width="18" height="18" rx="2" />
+          </svg>
           Pages
         </button>
         <button
           onClick={() => setActiveTab('layers')}
           style={{
             flex: 1,
-            padding: '12px 16px',
-            fontSize: 13,
+            padding: '12px 8px',
+            fontSize: 12,
             fontWeight: 500,
             color: activeTab === 'layers' ? colors.textPrimary : colors.textMuted,
             background: 'transparent',
@@ -422,54 +399,70 @@ export function CanvasSidebar() {
             borderBottom: activeTab === 'layers' ? `2px solid ${colors.accent}` : '2px solid transparent',
             cursor: 'pointer',
             transition: 'all 0.15s',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 4,
           }}
         >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+            <polygon points="12 2 2 7 12 12 22 7 12 2" />
+            <polyline points="2 17 12 22 22 17" />
+            <polyline points="2 12 12 17 22 12" />
+          </svg>
           Layers
         </button>
       </div>
 
-      {/* Search */}
-      <div style={{ padding: '8px 12px' }}>
-        <div style={{ position: 'relative' }}>
-          <svg
-            style={{
-              position: 'absolute',
-              left: 8,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              color: colors.textDimmed,
-              pointerEvents: 'none',
-            }}
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-          >
-            <circle cx="11" cy="11" r="8" />
-            <line x1="21" y1="21" x2="16.65" y2="16.65" />
-          </svg>
-          <input
-            type="text"
-            placeholder="Search..."
-            style={{
-              width: '100%',
-              padding: '6px 8px 6px 28px',
-              background: colors.inputBg,
-              border: 'none',
-              borderRadius: 6,
-              fontSize: 12,
-              color: colors.textSecondary,
-              outline: 'none',
-            }}
-          />
+      {/* Search - only show for pages/layers */}
+      {activeTab !== 'chat' && (
+        <div style={{ padding: '8px 12px' }}>
+          <div style={{ position: 'relative' }}>
+            <svg
+              style={{
+                position: 'absolute',
+                left: 8,
+                top: '50%',
+                transform: 'translateY(-50%)',
+                color: colors.textDimmed,
+                pointerEvents: 'none',
+              }}
+              width="13"
+              height="13"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
+              <circle cx="11" cy="11" r="8" />
+              <line x1="21" y1="21" x2="16.65" y2="16.65" />
+            </svg>
+            <input
+              type="text"
+              placeholder="Search..."
+              style={{
+                width: '100%',
+                padding: '6px 8px 6px 28px',
+                background: colors.inputBg,
+                border: 'none',
+                borderRadius: 6,
+                fontSize: 12,
+                color: colors.textSecondary,
+                outline: 'none',
+              }}
+            />
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Content */}
-      <div style={{ flex: 1, overflowY: 'auto' }}>
-        {activeTab === 'pages' ? (
+      <div style={{ flex: 1, overflowY: 'auto', display: 'flex', flexDirection: 'column' }}>
+        {activeTab === 'chat' ? (
+          /* Chat Tab - Full AIChatPanel */
+          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minHeight: 0 }}>
+            <AIChatPanel projectName={projectName} />
+          </div>
+        ) : activeTab === 'pages' ? (
           /* Pages Tab */
           <div style={{ padding: '0 12px' }}>
             <div

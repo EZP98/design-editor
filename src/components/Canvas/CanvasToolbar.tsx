@@ -6,6 +6,8 @@
 
 import React, { useState, useRef, useEffect } from 'react';
 import { IconPicker } from './IconPicker';
+import { PluginPanel, availablePlugins, Plugin } from './plugins';
+import { useCanvasStore } from '../../lib/canvas/canvasStore';
 
 interface CanvasToolbarProps {
   activeTool: 'select' | 'hand' | 'frame' | 'text';
@@ -13,6 +15,7 @@ interface CanvasToolbarProps {
   onAddElement: (type: string) => void;
   onAddBlock?: (blockId: string) => void;
   onAddIcon?: (iconName: string) => void;
+  onPluginInsert?: (data: any) => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
   theme?: 'dark' | 'light';
@@ -221,6 +224,11 @@ const Icons: Record<string, React.ReactNode> = {
       <path d="M2 12l10 5 10-5"/>
     </svg>
   ),
+  puzzle: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M19.439 7.85c-.049.322.059.648.289.878l1.568 1.568c.47.47.706 1.087.706 1.704s-.235 1.233-.706 1.704l-1.611 1.611a.98.98 0 0 1-.837.276c-.47-.07-.802-.48-.968-.925a2.501 2.501 0 1 0-3.214 3.214c.446.166.855.497.925.968a.979.979 0 0 1-.276.837l-1.61 1.61a2.404 2.404 0 0 1-1.705.707 2.402 2.402 0 0 1-1.704-.706l-1.568-1.568a1.026 1.026 0 0 0-.878-.29c-.493.074-.84.504-1.017.968a2.5 2.5 0 1 1-3.237-3.237c.464-.177.894-.524.967-1.017a1.026 1.026 0 0 0-.289-.878l-1.568-1.568A2.402 2.402 0 0 1 1.998 12c0-.617.236-1.234.706-1.704l1.611-1.611a.98.98 0 0 1 .837-.276c.47.07.802.48.968.925a2.501 2.501 0 1 0 3.214-3.214c-.446-.166-.855-.497-.925-.968a.979.979 0 0 1 .276-.837l1.61-1.61a2.404 2.404 0 0 1 1.705-.707c.618 0 1.234.236 1.704.706l1.568 1.568c.23.23.556.338.878.29.493-.074.84-.504 1.017-.968a2.5 2.5 0 1 1 3.237 3.237c-.464.177-.894.524-.967 1.017Z"/>
+    </svg>
+  ),
   sun: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <circle cx="12" cy="12" r="4"/>
@@ -239,6 +247,19 @@ const Icons: Record<string, React.ReactNode> = {
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
     </svg>
   ),
+  wand: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M15 4V2"/>
+      <path d="M15 16v-2"/>
+      <path d="M8 9h2"/>
+      <path d="M20 9h2"/>
+      <path d="M17.8 11.8L19 13"/>
+      <path d="M15 9h.01"/>
+      <path d="M17.8 6.2L19 5"/>
+      <path d="M3 21l9-9"/>
+      <path d="M12.2 6.2L11 5"/>
+    </svg>
+  ),
 };
 
 // ============================================================================
@@ -251,6 +272,7 @@ export function CanvasToolbar({
   onAddElement,
   onAddBlock,
   onAddIcon,
+  onPluginInsert,
   zoom = 1,
   onZoomChange,
   theme = 'dark',
@@ -258,6 +280,12 @@ export function CanvasToolbar({
 }: CanvasToolbarProps) {
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [showPluginPanel, setShowPluginPanel] = useState(false);
+  const [activePlugin, setActivePlugin] = useState<Plugin | null>(null);
+
+  // Use store for AI panel state
+  const activeRightPanel = useCanvasStore((state) => state.activeRightPanel);
+  const setActiveRightPanel = useCanvasStore((state) => state.setActiveRightPanel);
   const [activeTab, setActiveTab] = useState<'primitives' | 'layout' | 'blocks'>('primitives');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const iconPickerRef = useRef<HTMLDivElement>(null);
@@ -321,6 +349,7 @@ export function CanvasToolbar({
             active={activeTool === 'select'}
             onClick={() => onToolChange('select')}
             tooltip="Select (V)"
+            theme={theme}
           >
             {Icons.cursor}
           </ToolButton>
@@ -328,8 +357,18 @@ export function CanvasToolbar({
             active={activeTool === 'hand'}
             onClick={() => onToolChange('hand')}
             tooltip="Hand (H)"
+            theme={theme}
           >
             {Icons.hand}
+          </ToolButton>
+          <ToolButton
+            active={activeRightPanel === 'ai-image'}
+            onClick={() => setActiveRightPanel(activeRightPanel === 'ai-image' ? 'properties' : 'ai-image')}
+            tooltip="AI Generate"
+            accent
+            theme={theme}
+          >
+            {Icons.wand}
           </ToolButton>
         </div>
 
@@ -342,6 +381,7 @@ export function CanvasToolbar({
               key={el.id}
               onClick={() => onAddElement(el.id)}
               tooltip={el.shortcut ? `${el.label} (${el.shortcut})` : el.label}
+              theme={theme}
             >
               {Icons[el.icon]}
             </ToolButton>
@@ -354,6 +394,7 @@ export function CanvasToolbar({
               onClick={() => setShowAddMenu(!showAddMenu)}
               tooltip="Insert element or block"
               accent
+              theme={theme}
             >
               {Icons.plus}
             </ToolButton>
@@ -593,6 +634,7 @@ export function CanvasToolbar({
               active={showIconPicker}
               onClick={() => setShowIconPicker(!showIconPicker)}
               tooltip="Icone (Lucide)"
+              theme={theme}
             >
               {Icons.plugin}
             </ToolButton>
@@ -609,6 +651,36 @@ export function CanvasToolbar({
               />
             )}
           </div>
+
+          {/* Plugins Button */}
+          <ToolButton
+            active={showPluginPanel}
+            onClick={() => setShowPluginPanel(!showPluginPanel)}
+            tooltip="Altri Plugin"
+            theme={theme}
+          >
+            {Icons.puzzle}
+          </ToolButton>
+
+          {/* Plugin Panel */}
+          {showPluginPanel && (
+            <PluginPanel
+              plugins={availablePlugins}
+              onClose={() => setShowPluginPanel(false)}
+              onPluginSelect={(plugin) => {
+                setActivePlugin(plugin);
+                setShowPluginPanel(false);
+              }}
+            />
+          )}
+
+          {/* Active Plugin Component */}
+          {activePlugin && (
+            <activePlugin.component
+              onClose={() => setActivePlugin(null)}
+              onInsert={onPluginInsert}
+            />
+          )}
 
           {/* Theme Toggle */}
           {onThemeToggle && (

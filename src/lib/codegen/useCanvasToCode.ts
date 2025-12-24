@@ -82,7 +82,7 @@ export function useCanvasToCode(
       setGeneratedFiles(files);
       onCodeGenerated?.(files);
 
-      console.log('[CanvasToCode] Generated files:', Object.keys(files));
+      // console.log('[CanvasToCode] Generated files:', Object.keys(files));
 
       // Get or boot WebContainer
       if (!webcontainerRef.current) {
@@ -96,7 +96,7 @@ export function useCanvasToCode(
       onFilesWritten?.(paths);
       setLastSyncAt(Date.now());
 
-      console.log('[CanvasToCode] Files written to WebContainer');
+      // console.log('[CanvasToCode] Files written to WebContainer');
 
     } catch (err) {
       const error = err instanceof Error ? err : new Error(String(err));

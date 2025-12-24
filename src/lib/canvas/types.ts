@@ -45,6 +45,7 @@ export interface ElementStyles {
   flexWrap?: 'nowrap' | 'wrap' | 'wrap-reverse';
   flexGrow?: number;
   flexShrink?: number;
+  flex?: number | string;
   gap?: number;
   rowGap?: number;
   columnGap?: number;
@@ -66,6 +67,7 @@ export interface ElementStyles {
   // Background
   backgroundColor?: string;
   backgroundImage?: string;
+  background?: string; // Shorthand for gradient text effects
   backgroundSize?: string;
   backgroundPosition?: string;
   backgroundRepeat?: string;
@@ -97,6 +99,13 @@ export interface ElementStyles {
   textTransform?: 'none' | 'uppercase' | 'lowercase' | 'capitalize';
   whiteSpace?: 'normal' | 'nowrap' | 'pre' | 'pre-wrap';
 
+  // Text Effects (for Kittl-style effects)
+  textShadow?: string;
+  WebkitTextStroke?: string;
+  WebkitTextFillColor?: string;
+  WebkitBackgroundClip?: string;
+  backgroundClip?: string;
+
   // Effects
   opacity?: number;
   boxShadow?: string;
@@ -121,6 +130,16 @@ export interface ElementStyles {
 
   // Z-index
   zIndex?: number;
+
+  // Sizing constraints
+  minWidth?: number | string;
+  maxWidth?: number | string;
+  minHeight?: number | string;
+  maxHeight?: number | string;
+
+  // Resize mode (like Figma)
+  resizeX?: 'fixed' | 'fill' | 'hug';
+  resizeY?: 'fixed' | 'fill' | 'hug';
 
   // Aspect ratio
   aspectRatio?: string;
@@ -319,6 +338,9 @@ export interface CanvasState {
   // History for undo/redo
   history: CanvasHistoryEntry[];
   historyIndex: number;
+
+  // Right panel state
+  activeRightPanel: 'properties' | 'ai-image' | null;
 }
 
 export interface CanvasHistoryEntry {
@@ -332,7 +354,12 @@ export interface CanvasHistoryEntry {
 export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>> = {
   page: {
     size: { width: 1440, height: 900 },
-    styles: { backgroundColor: '#ffffff' },
+    styles: {
+      backgroundColor: '#ffffff',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'stretch',
+    },
   },
   frame: {
     size: { width: 200, height: 200 },
@@ -347,10 +374,10 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
     styles: {
       display: 'flex',
       flexDirection: 'column',
-      gap: 0,
-      padding: 0,
+      gap: 12,
+      padding: 16,
       backgroundColor: '#f9fafb',
-      borderRadius: 0,
+      borderRadius: 8,
     },
   },
   grid: {
@@ -454,6 +481,7 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
       alignItems: 'center',
       justifyContent: 'center',
       padding: 64,
+      gap: 24,
       backgroundColor: '#ffffff',
     },
   },
@@ -463,6 +491,7 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
       display: 'flex',
       flexDirection: 'column',
       padding: 24,
+      gap: 16,
       backgroundColor: 'transparent',
     },
   },

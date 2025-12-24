@@ -36,7 +36,7 @@ export async function getWebContainer(): Promise<WebContainer> {
 
 async function bootWebContainer(): Promise<WebContainer> {
   try {
-    console.log('[WebContainer] Booting...');
+    // console.log('[WebContainer] Booting...');
 
     const instance = await WebContainer.boot({
       coep: 'credentialless',
@@ -47,11 +47,11 @@ async function bootWebContainer(): Promise<WebContainer> {
     webcontainerContext.loaded = true;
     webcontainerContext.error = null;
 
-    console.log('[WebContainer] Ready!');
+    // console.log('[WebContainer] Ready!');
 
     // Listen for server-ready events
     instance.on('server-ready', (port, url) => {
-      console.log(`[WebContainer] Server ready on port ${port}: ${url}`);
+      // console.log(`[WebContainer] Server ready on port ${port}: ${url}`);
       window.dispatchEvent(new CustomEvent('webcontainer:server-ready', {
         detail: { port, url }
       }));
@@ -86,7 +86,7 @@ export async function writeFiles(
   for (const [path, content] of Object.entries(files)) {
     // Skip binary file placeholders - they're already written by git clone
     if (content === '[binary file]') {
-      console.log(`[WebContainer] Skipping binary file: ${path}`);
+      // console.log(`[WebContainer] Skipping binary file: ${path}`);
       continue;
     }
 
@@ -106,7 +106,7 @@ export async function writeFiles(
 
     // Write the file
     await container.fs.writeFile(absolutePath, content);
-    console.log(`[WebContainer] Wrote file: ${absolutePath}`);
+    // console.log(`[WebContainer] Wrote file: ${absolutePath}`);
   }
 }
 
@@ -118,7 +118,7 @@ export async function installDependencies(
   onLog?: (log: string) => void,
   cwd?: string
 ): Promise<boolean> {
-  console.log('[WebContainer] Installing dependencies...');
+  // console.log('[WebContainer] Installing dependencies...');
   onLog?.('Installing dependencies...');
 
   // Use jsh (WebContainer's shell) to run npm install
@@ -129,7 +129,7 @@ export async function installDependencies(
   installProcess.output.pipeTo(
     new WritableStream({
       write(data) {
-        console.log('[npm]', data);
+        // console.log('[npm]', data);
         onLog?.(data);
       },
     })
@@ -143,7 +143,7 @@ export async function installDependencies(
     return false;
   }
 
-  console.log('[WebContainer] Dependencies installed!');
+  // console.log('[WebContainer] Dependencies installed!');
   onLog?.('Dependencies installed!');
   return true;
 }
@@ -159,7 +159,7 @@ export async function startDevServer(
 ): Promise<void> {
   const [cmd, ...args] = command.split(' ');
 
-  console.log(`[WebContainer] Starting: ${command}`);
+  // console.log(`[WebContainer] Starting: ${command}`);
   onLog?.(`Starting: ${command}`);
 
   const serverProcess = await container.spawn(cmd, args, {
@@ -169,7 +169,7 @@ export async function startDevServer(
   serverProcess.output.pipeTo(
     new WritableStream({
       write(data) {
-        console.log('[dev]', data);
+        // console.log('[dev]', data);
         onLog?.(data);
       },
     })

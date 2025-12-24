@@ -3,24 +3,175 @@ import { useChatHistory } from '../lib/persistence/useChatHistory';
 import { ChatMessage, FileSnapshot } from '../lib/persistence/db';
 import { parseArtifacts, formatFilesForContext, ParsedArtifact } from '../lib/artifactParser';
 import { getSystemPrompt } from '../lib/prompts/system-prompt';
+import { addElementsFromAI, processAIDesignResponse } from '../lib/canvas/addElementsFromAI';
+import { useTokensStore } from '../lib/canvas/tokens';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { useCanvasStore } from '../lib/canvas/canvasStore';
+import { THEME_COLORS } from '../lib/canvas/types';
 
-type AIModel = 'claude' | 'gpt4' | 'image' | 'video' | 'audio';
+// Get Supabase URL for Edge Functions
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
+const SUPABASE_ANON_KEY = import.meta.env.VITE_SUPABASE_ANON_KEY || '';
 
-interface ModelOption {
-  id: AIModel;
-  name: string;
-  icon: string;
-  description: string;
-  color: string;
+// Fallback to Cloudflare Worker if Supabase not configured
+const AI_ENDPOINT = SUPABASE_URL
+  ? `${SUPABASE_URL}/functions/v1/ai-chat`
+  : 'https://design-editor-api.eziopappalardo98.workers.dev/api/ai/chat/stream';
+
+/**
+ * Repair truncated JSON by closing unclosed brackets/braces
+ * and removing incomplete elements
+ */
+function repairTruncatedJSON(json: string): string {
+  // Remove trailing incomplete strings (unclosed quotes)
+  let repaired = json.replace(/"[^"]*$/, '""');
+
+  // Count brackets
+  let openBraces = 0;
+  let openBrackets = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < repaired.length; i++) {
+    const char = repaired[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\') {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === '{') openBraces++;
+      else if (char === '}') openBraces--;
+      else if (char === '[') openBrackets++;
+      else if (char === ']') openBrackets--;
+    }
+  }
+
+  // Remove trailing incomplete object/array entries
+  // Look for last complete element (ends with } or ] followed by optional comma)
+  const lastCompleteMatch = repaired.match(/^([\s\S]*[\}\]])\s*,?\s*[\{\["']?[^,\}\]]*$/);
+  if (lastCompleteMatch) {
+    repaired = lastCompleteMatch[1];
+    // Recount after truncation
+    openBraces = 0;
+    openBrackets = 0;
+    inString = false;
+    escaped = false;
+
+    for (let i = 0; i < repaired.length; i++) {
+      const char = repaired[i];
+      if (escaped) { escaped = false; continue; }
+      if (char === '\\') { escaped = true; continue; }
+      if (char === '"') { inString = !inString; continue; }
+      if (!inString) {
+        if (char === '{') openBraces++;
+        else if (char === '}') openBraces--;
+        else if (char === '[') openBrackets++;
+        else if (char === ']') openBrackets--;
+      }
+    }
+  }
+
+  // Close unclosed brackets
+  while (openBrackets > 0) {
+    repaired += ']';
+    openBrackets--;
+  }
+
+  // Close unclosed braces
+  while (openBraces > 0) {
+    repaired += '}';
+    openBraces--;
+  }
+
+  return repaired;
 }
 
-const AI_MODELS: ModelOption[] = [
-  { id: 'claude', name: 'Claude', icon: '✨', description: 'Code & Design', color: '#A83248' },
-  // Coming soon:
-  // { id: 'gpt4', name: 'GPT-4', icon: '🧠', description: 'General AI', color: '#10b981' },
-  // { id: 'image', name: 'Image', icon: '🎨', description: 'DALL-E / Midjourney', color: '#f59e0b' },
-  // { id: 'video', name: 'Video', icon: '🎬', description: 'Runway / Sora', color: '#ef4444' },
-  // { id: 'audio', name: 'Audio', icon: '🎵', description: 'ElevenLabs / Suno', color: '#8B1E2B' },
+type ClaudeModel = 'claude-sonnet-4-5' | 'claude-haiku-4-5' | 'claude-opus-4-5';
+type OutputMode = 'design' | 'code';
+
+interface ClaudeModelOption {
+  id: ClaudeModel;
+  name: string;
+  fullName: string;
+  apiId: string;
+  description: string;
+  speed: 'Fast' | 'Fastest' | 'Moderate';
+  price: string;
+}
+
+interface OutputModeOption {
+  id: OutputMode;
+  name: string;
+  icon: React.ReactNode;
+  description: string;
+}
+
+const OUTPUT_MODES: OutputModeOption[] = [
+  {
+    id: 'design',
+    name: 'Design',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="18" height="18" rx="2" />
+        <path d="M3 9h18" />
+        <path d="M9 21V9" />
+      </svg>
+    ),
+    description: 'Crea elementi visivi sul canvas',
+  },
+  {
+    id: 'code',
+    name: 'Code',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <polyline points="16 18 22 12 16 6" />
+        <polyline points="8 6 2 12 8 18" />
+      </svg>
+    ),
+    description: 'Genera codice React + Tailwind',
+  },
+];
+
+const CLAUDE_MODELS: ClaudeModelOption[] = [
+  {
+    id: 'claude-sonnet-4-5',
+    name: 'Sonnet 4.5',
+    fullName: 'Claude Sonnet 4.5',
+    apiId: 'claude-sonnet-4-5-20250929',
+    description: 'Smart model for complex agents and coding',
+    speed: 'Fast',
+    price: '$3 / $15',
+  },
+  {
+    id: 'claude-haiku-4-5',
+    name: 'Haiku 4.5',
+    fullName: 'Claude Haiku 4.5',
+    apiId: 'claude-haiku-4-5-20251001',
+    description: 'Fastest model with near-frontier intelligence',
+    speed: 'Fastest',
+    price: '$1 / $5',
+  },
+  {
+    id: 'claude-opus-4-5',
+    name: 'Opus 4.5',
+    fullName: 'Claude Opus 4.5',
+    apiId: 'claude-opus-4-5-20251101',
+    description: 'Premium model with maximum intelligence',
+    speed: 'Moderate',
+    price: '$5 / $25',
+  },
 ];
 
 interface AIChatPanelProps {
@@ -61,16 +212,30 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
     newChat,
     takeSnapshot,
     restoreSnapshot,
+    // Cloud sync
+    syncStatus,
+    syncNow,
+    isCloudEnabled,
   } = useChatHistory({
     projectName,
     currentFiles,
     onRestoreSnapshot,
   });
 
+  // Get design tokens for AI context
+  const designTokens = useTokensStore((state) => state.tokens);
+
+  // Theme support
+  const canvasSettings = useCanvasStore((state) => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
+
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
-  const [selectedModel, setSelectedModel] = useState<AIModel>('claude');
+  const [selectedModel, setSelectedModel] = useState<ClaudeModel>('claude-sonnet-4-5');
   const [showModelSelector, setShowModelSelector] = useState(false);
+  const [outputMode, setOutputMode] = useState<OutputMode>('design');
+  const [createAsNewPage, setCreateAsNewPage] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -138,11 +303,20 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
     // Create placeholder for streaming response
     const assistantMessage = addMessage('assistant', '');
 
+    // Track streamed content outside try block so it's accessible in catch
+    let fullContent = '';
+
+    // Create abort controller and timeout outside try block
+    abortControllerRef.current = new AbortController();
+    const timeoutId = setTimeout(() => {
+      abortControllerRef.current?.abort();
+    }, 60000); // 60 second timeout
+
     try {
-      // Build full project context for AI
-      const projectContext = currentFiles
+      // Build full project context for AI (only for code mode)
+      const projectContext = outputMode === 'code' && currentFiles
         ? formatFilesForContext(currentFiles, 8, 6000)
-        : currentCode
+        : outputMode === 'code' && currentCode
         ? `### ${currentFile || 'src/App.tsx'}\n\`\`\`tsx\n${currentCode}\n\`\`\`\n\n`
         : '';
 
@@ -150,24 +324,43 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
         ? `## Current Project Files\n\n${projectContext}`
         : '';
 
-      // Build system prompt with project context
+      // Build system prompt based on mode
       const systemPrompt = getSystemPrompt({
-        projectFiles: projectContext,
+        mode: outputMode,
+        projectFiles: outputMode === 'code' ? projectContext : undefined,
+        designTokens: outputMode === 'design' ? {
+          colors: designTokens.colors,
+          radii: designTokens.radii,
+          spacing: designTokens.spacing,
+        } : undefined,
       });
 
-      // Create abort controller for this request
-      abortControllerRef.current = new AbortController();
+      // Build headers - include auth for Supabase Edge Functions
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
 
-      const response = await fetch('https://design-editor-api.eziopappalardo98.workers.dev/api/ai/chat/stream', {
+      // Add Supabase auth headers if using Supabase endpoint
+      if (SUPABASE_URL && SUPABASE_ANON_KEY) {
+        headers['apikey'] = SUPABASE_ANON_KEY;
+        headers['Authorization'] = `Bearer ${SUPABASE_ANON_KEY}`;
+      }
+
+      // Get the API model ID for the selected model
+      const modelConfig = CLAUDE_MODELS.find(m => m.id === selectedModel);
+      const modelApiId = modelConfig?.apiId || 'claude-sonnet-4-5-20250929';
+
+      console.log(`[AIChatPanel] Sending request to ${AI_ENDPOINT} in ${outputMode} mode with model ${modelApiId}`);
+
+      const response = await fetch(AI_ENDPOINT, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify({
           message: userMessage.content,
-          currentFile,
-          currentCode,
-          projectName,
-          systemPrompt, // Full OBJECTS system prompt
-          projectContext: systemContext, // Full project context
+          mode: outputMode, // Pass the mode to Edge Function
+          model: modelApiId, // Pass the selected Claude model
+          systemPrompt, // Full system prompt based on mode
+          projectContext: systemContext,
           history: messages.slice(-10).map(m => ({ role: m.role, content: m.content })),
         }),
         signal: abortControllerRef.current.signal,
@@ -177,7 +370,6 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
-      let fullContent = '';
 
       if (reader) {
         while (true) {
@@ -209,47 +401,164 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       // Take snapshot after AI response
       await takeSnapshot(assistantMessage.id);
 
-      // Parse artifacts from AI response
-      const { artifacts, explanation } = parseArtifacts(fullContent);
+      // Handle response based on output mode
+      if (outputMode === 'design') {
+        // DESIGN MODE: Parse JSON and add elements to canvas
+        console.log('[AIChatPanel] Design mode - parsing JSON response');
 
-      if (artifacts.length > 0) {
-        console.log('[AIChatPanel] Parsed artifacts:', artifacts.map(a => a.path || a.type));
+        try {
+          // Extract JSON from response (might be in ```json block or raw)
+          let jsonStr = fullContent.trim();
 
-        // Apply each file artifact
-        const updatedFiles: Record<string, string> = {};
-        for (const artifact of artifacts) {
-          if (artifact.type === 'file' && artifact.path) {
-            updatedFiles[artifact.path] = artifact.content;
-
-            // Also call single file callback for backwards compatibility
-            if (onApplyCode) {
-              onApplyCode(artifact.content, artifact.path);
+          // Try to extract from ```json block first
+          const jsonMatch = fullContent.match(/```json\s*([\s\S]*?)```/);
+          if (jsonMatch) {
+            jsonStr = jsonMatch[1].trim();
+          } else {
+            // Find raw JSON object (from first { to last })
+            const jsonStartIdx = fullContent.indexOf('{');
+            const jsonEndIdx = fullContent.lastIndexOf('}');
+            if (jsonStartIdx !== -1 && jsonEndIdx !== -1 && jsonEndIdx > jsonStartIdx) {
+              jsonStr = fullContent.slice(jsonStartIdx, jsonEndIdx + 1);
+            } else if (jsonStartIdx !== -1) {
+              jsonStr = fullContent.slice(jsonStartIdx);
+            } else {
+              // No JSON found at all - AI returned plain text
+              console.warn('[AIChatPanel] No JSON found in response, AI returned plain text');
+              updateMessage(
+                assistantMessage.id,
+                `ℹ️ ${fullContent.substring(0, 500)}${fullContent.length > 500 ? '...' : ''}\n\n⚠️ L'AI non ha generato elementi. Prova a essere più specifico (es: "crea un hero con titolo e bottone")`
+              );
+              return;
             }
           }
-        }
 
-        // Batch update all files
-        if (Object.keys(updatedFiles).length > 0 && onFilesUpdate) {
-          onFilesUpdate(updatedFiles);
-        }
+          // Try to parse, with repair for truncated JSON
+          let parsed;
+          try {
+            parsed = JSON.parse(jsonStr);
+          } catch {
+            // JSON is truncated, try to repair it
+            console.log('[AIChatPanel] JSON truncated, attempting repair...');
+            const repaired = repairTruncatedJSON(jsonStr);
+            parsed = JSON.parse(repaired);
+            console.log('[AIChatPanel] JSON repaired successfully');
+          }
 
-        // Notify about applied artifacts
-        if (onArtifactsApplied) {
-          onArtifactsApplied(artifacts);
+          // Process the AI response
+          const elements = parsed.elements || (Array.isArray(parsed) ? parsed : [parsed]);
+
+          // Validate elements have required properties
+          const validElements = elements.filter((e: any) => e && (e.type || e.name));
+          if (validElements.length === 0) {
+            console.warn('[AIChatPanel] No valid elements in parsed JSON');
+            updateMessage(
+              assistantMessage.id,
+              `⚠️ Nessun elemento valido trovato nella risposta. Riprova.`
+            );
+            return;
+          }
+
+          // Use createAsNewPage toggle from UI (or AI response as fallback)
+          const wantsNewPage = createAsNewPage || parsed.createNewPage === true;
+          const pageName = parsed.pageName || (validElements[0]?.name || 'New Page');
+
+          const result = processAIDesignResponse({
+            createNewPage: wantsNewPage,
+            pageName,
+            elements: validElements,
+          });
+
+          console.log('[AIChatPanel] Design elements created:', result.elementIds, 'pageId:', result.pageId);
+
+          // Reset the toggle after use
+          if (createAsNewPage) {
+            setCreateAsNewPage(false);
+          }
+
+          // Update message to show success
+          const elementNames = validElements.map((e: { name?: string; type: string }) => e.name || e.type).join(', ');
+          const pageInfo = result.pageId ? `\n📄 Nuova pagina: ${pageName}` : '';
+          updateMessage(
+            assistantMessage.id,
+            `✅ Creati ${result.elementIds.length} elementi sul canvas:${pageInfo}\n${elementNames}`
+          );
+        } catch (parseErr) {
+          console.error('[AIChatPanel] Failed to parse design JSON:', parseErr);
+          // Show error to user
+          updateMessage(
+            assistantMessage.id,
+            `⚠️ Errore parsing JSON: ${parseErr instanceof Error ? parseErr.message : 'Unknown error'}\n\nRisposta troppo lunga o incompleta. Prova a chiedere qualcosa di più semplice.`
+          );
         }
       } else {
-        // Fallback: try simple code extraction (backwards compatibility)
-        const codeMatch = fullContent.match(/```(?:jsx?|tsx?|css)?\n([\s\S]*?)```/);
-        if (codeMatch && onApplyCode) {
-          const code = codeMatch[1].trim();
-          onApplyCode(code, currentFile || 'src/App.tsx');
+        // CODE MODE: Parse artifacts (boltArtifact format)
+        const { artifacts, explanation } = parseArtifacts(fullContent);
+
+        if (artifacts.length > 0) {
+          console.log('[AIChatPanel] Parsed artifacts:', artifacts.map(a => a.path || a.type));
+
+          // Apply each artifact based on type
+          const updatedFiles: Record<string, string> = {};
+          let canvasElementsAdded = 0;
+
+          for (const artifact of artifacts) {
+            if (artifact.type === 'canvas' && artifact.canvasElements) {
+              // Add elements to the visual canvas
+              console.log('[AIChatPanel] Adding canvas elements:', artifact.canvasElements.length);
+              try {
+                const createdIds = addElementsFromAI(artifact.canvasElements);
+                canvasElementsAdded += createdIds.length;
+                console.log('[AIChatPanel] Canvas elements created:', createdIds);
+              } catch (err) {
+                console.error('[AIChatPanel] Failed to add canvas elements:', err);
+              }
+            } else if (artifact.type === 'file' && artifact.path) {
+              updatedFiles[artifact.path] = artifact.content;
+
+              // Also call single file callback for backwards compatibility
+              if (onApplyCode) {
+                onApplyCode(artifact.content, artifact.path);
+              }
+            }
+          }
+
+          // Batch update all files
+          if (Object.keys(updatedFiles).length > 0 && onFilesUpdate) {
+            onFilesUpdate(updatedFiles);
+          }
+
+          // Notify about applied artifacts
+          if (onArtifactsApplied) {
+            onArtifactsApplied(artifacts);
+          }
+
+          // Log summary
+          if (canvasElementsAdded > 0) {
+            console.log(`[AIChatPanel] Summary: ${canvasElementsAdded} canvas elements, ${Object.keys(updatedFiles).length} files`);
+          }
+        } else {
+          // Fallback: try simple code extraction (backwards compatibility)
+          const codeMatch = fullContent.match(/```(?:jsx?|tsx?|css)?\n([\s\S]*?)```/);
+          if (codeMatch && onApplyCode) {
+            const code = codeMatch[1].trim();
+            onApplyCode(code, currentFile || 'src/App.tsx');
+          }
         }
       }
 
     } catch (error) {
+      // Clear timeout on error
+      clearTimeout(timeoutId);
+
       // Don't show error if user aborted
       if (error instanceof Error && error.name === 'AbortError') {
-        updateMessage(assistantMessage.id, (prev) => prev + '\n\n*[Generazione interrotta]*');
+        // Check if it was a timeout (no content received)
+        if (fullContent.length === 0) {
+          updateMessage(assistantMessage.id, '⏱️ Timeout - la richiesta ha impiegato troppo tempo. Riprova.');
+        } else {
+          updateMessage(assistantMessage.id, fullContent + '\n\n*[Generazione interrotta]*');
+        }
       } else {
         console.error('AI Chat error:', error);
         const errorMessage = error instanceof Error
@@ -259,6 +568,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       }
     }
 
+    // Clear timeout on success
+    clearTimeout(timeoutId);
     abortControllerRef.current = null;
     setIsStreaming(false);
   };
@@ -292,14 +603,73 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       display: 'flex',
       flexDirection: 'column',
       height: '100%',
-      background: '#0a0a0a',
+      background: colors.sidebarBg,
     }}>
       {/* Header */}
       <div style={{
         padding: '10px 12px',
-        borderBottom: '1px solid rgba(255,255,255,0.06)',
+        borderBottom: `1px solid ${colors.borderColor}`,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'space-between',
       }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: '#e5e5e5' }}>Chat</span>
+        <span style={{ fontSize: 12, fontWeight: 600, color: colors.textPrimary }}>Chat</span>
+        {/* Cloud sync status */}
+        {isCloudEnabled && (
+          <div
+            onClick={() => syncNow()}
+            title={
+              syncStatus.isSyncing
+                ? 'Sincronizzazione in corso...'
+                : syncStatus.lastSyncAt
+                ? `Ultimo sync: ${new Date(syncStatus.lastSyncAt).toLocaleTimeString('it-IT')}`
+                : syncStatus.isOnline
+                ? 'Clicca per sincronizzare'
+                : 'Offline - sync disabilitato'
+            }
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '4px 8px',
+              borderRadius: 6,
+              background: syncStatus.isSyncing
+                ? 'rgba(59, 130, 246, 0.15)'
+                : syncStatus.error
+                ? 'rgba(239, 68, 68, 0.15)'
+                : colors.inputBg,
+              cursor: syncStatus.isSyncing ? 'wait' : 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            <svg
+              width="12"
+              height="12"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke={
+                syncStatus.isSyncing
+                  ? '#3b82f6'
+                  : syncStatus.error
+                  ? '#ef4444'
+                  : syncStatus.isOnline
+                  ? '#22c55e'
+                  : '#6b7280'
+              }
+              strokeWidth="2"
+              style={{
+                animation: syncStatus.isSyncing ? 'spin 1s linear infinite' : 'none',
+              }}
+            >
+              <path d="M17.5 19H9a7 7 0 1 1 6.71-9h1.79a4.5 4.5 0 1 1 0 9Z" />
+            </svg>
+            {syncStatus.pendingChanges > 0 && !syncStatus.isSyncing && (
+              <span style={{ fontSize: 10, color: '#f59e0b' }}>
+                {syncStatus.pendingChanges}
+              </span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Messages Area */}
@@ -362,23 +732,23 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                 padding: '10px 12px',
                 borderRadius: 10,
                 background: message.role === 'user'
-                  ? 'rgba(168, 50, 72, 0.15)'
-                  : 'rgba(255,255,255,0.03)',
+                  ? colors.accentLight
+                  : colors.inputBg,
                 border: message.role === 'user'
-                  ? '1px solid rgba(168, 50, 72, 0.2)'
-                  : '1px solid rgba(255,255,255,0.05)',
+                  ? `1px solid ${colors.accentMedium}`
+                  : `1px solid ${colors.borderColor}`,
                 marginLeft: message.role === 'user' ? 'auto' : 0,
                 maxWidth: message.role === 'user' ? '90%' : '100%',
               }}
             >
               <div style={{
-                color: '#e4e4e7',
+                color: colors.textPrimary,
                 fontSize: 12,
                 lineHeight: 1.5,
                 whiteSpace: 'pre-wrap',
               }}>
                 {message.content || (
-                  <span style={{ color: '#5a5a5a' }}>...</span>
+                  <span style={{ color: colors.textDimmed }}>...</span>
                 )}
               </div>
               {/* Message actions */}
@@ -443,77 +813,142 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
       {/* Input Area */}
       <div style={{ padding: '8px 12px 12px', position: 'relative' }}>
-        {/* Model Selector Dropdown */}
+        {/* Model Selector Dropdown - Bolt-inspired Clean Design */}
         {showModelSelector && (
-          <div style={{
-            position: 'absolute',
-            bottom: '100%',
-            left: 12,
-            right: 12,
-            marginBottom: 8,
-            background: '#1a1a1a',
-            border: '1px solid rgba(255,255,255,0.1)',
-            borderRadius: 12,
-            padding: 8,
-            zIndex: 100,
-            boxShadow: '0 -8px 32px rgba(0,0,0,0.4)',
-          }}>
-            <div style={{ fontSize: 10, color: '#5a5a5a', padding: '4px 8px', marginBottom: 4 }}>
-              SELEZIONA MODELLO
-            </div>
-            {AI_MODELS.map(model => (
-              <div
-                key={model.id}
-                onClick={() => {
-                  setSelectedModel(model.id);
-                  setShowModelSelector(false);
-                }}
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '10px 12px',
-                  borderRadius: 8,
-                  cursor: 'pointer',
-                  background: selectedModel === model.id ? `${model.color}20` : 'transparent',
-                  border: selectedModel === model.id ? `1px solid ${model.color}40` : '1px solid transparent',
-                  transition: 'all 0.15s',
-                }}
-                onMouseEnter={e => {
-                  if (selectedModel !== model.id) {
-                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                  }
-                }}
-                onMouseLeave={e => {
-                  if (selectedModel !== model.id) {
-                    e.currentTarget.style.background = 'transparent';
-                  }
-                }}
-              >
-                <span style={{ fontSize: 18 }}>{model.icon}</span>
-                <div style={{ flex: 1 }}>
-                  <div style={{
-                    fontSize: 13,
-                    fontWeight: 500,
-                    color: selectedModel === model.id ? model.color : '#e5e5e5'
-                  }}>
-                    {model.name}
+          <>
+            {/* Backdrop */}
+            <div
+              onClick={() => setShowModelSelector(false)}
+              style={{
+                position: 'fixed',
+                inset: 0,
+                zIndex: 99,
+              }}
+            />
+            <div style={{
+              position: 'absolute',
+              bottom: '100%',
+              left: 0,
+              right: 0,
+              marginBottom: 6,
+              background: '#1a1a1a',
+              border: '1px solid rgba(255,255,255,0.1)',
+              borderRadius: 12,
+              overflow: 'hidden',
+              zIndex: 100,
+              boxShadow: '0 -8px 32px rgba(0,0,0,0.4)',
+            }}>
+              {/* Models List - Compact like Bolt */}
+              {CLAUDE_MODELS.map((model, index) => {
+                const isSelected = selectedModel === model.id;
+                const speedColor = model.speed === 'Fastest' ? '#22c55e' : model.speed === 'Fast' ? '#3b82f6' : '#f59e0b';
+                const isLast = index === CLAUDE_MODELS.length - 1;
+
+                return (
+                  <div
+                    key={model.id}
+                    onClick={() => {
+                      setSelectedModel(model.id);
+                      setShowModelSelector(false);
+                    }}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                      padding: '10px 12px',
+                      cursor: 'pointer',
+                      background: isSelected
+                        ? 'rgba(139, 30, 43, 0.15)'
+                        : 'transparent',
+                      borderBottom: !isLast ? '1px solid rgba(255,255,255,0.06)' : 'none',
+                      transition: 'background 0.15s ease',
+                    }}
+                    onMouseEnter={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                      }
+                    }}
+                    onMouseLeave={e => {
+                      if (!isSelected) {
+                        e.currentTarget.style.background = 'transparent';
+                      }
+                    }}
+                  >
+                    {/* Selection Indicator */}
+                    <div style={{
+                      width: 16,
+                      height: 16,
+                      borderRadius: 4,
+                      border: isSelected ? 'none' : '1.5px solid #4b5563',
+                      background: isSelected ? '#8B1E2B' : 'transparent',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                      transition: 'all 0.15s ease',
+                    }}>
+                      {isSelected && (
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="white" strokeWidth="3">
+                          <polyline points="20 6 9 17 4 12" />
+                        </svg>
+                      )}
+                    </div>
+
+                    {/* Model Info */}
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                      }}>
+                        <span style={{
+                          fontSize: 12,
+                          fontWeight: 500,
+                          color: isSelected ? '#fff' : '#e5e5e5',
+                        }}>
+                          {model.name}
+                        </span>
+                        {/* Speed Badge */}
+                        <span style={{
+                          fontSize: 9,
+                          fontWeight: 500,
+                          padding: '1px 5px',
+                          borderRadius: 3,
+                          background: `${speedColor}15`,
+                          color: speedColor,
+                        }}>
+                          {model.speed}
+                        </span>
+                      </div>
+                      <p style={{
+                        fontSize: 10,
+                        color: '#6b7280',
+                        margin: 0,
+                        marginTop: 1,
+                      }}>
+                        {model.description}
+                      </p>
+                    </div>
+
+                    {/* Price */}
+                    <span style={{
+                      fontSize: 10,
+                      color: '#52525b',
+                      fontFamily: 'monospace',
+                      flexShrink: 0,
+                    }}>
+                      {model.price}
+                    </span>
                   </div>
-                  <div style={{ fontSize: 10, color: '#5a5a5a' }}>{model.description}</div>
-                </div>
-                {selectedModel === model.id && (
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke={model.color} strokeWidth="2">
-                    <polyline points="20 6 9 17 4 12" />
-                  </svg>
-                )}
-              </div>
-            ))}
-          </div>
+                );
+              })}
+            </div>
+          </>
         )}
 
         <div style={{
-          background: '#18181b',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: colors.panelBg,
+          border: `1px solid ${colors.borderColor}`,
           borderRadius: 12,
           overflow: 'hidden',
         }}>
@@ -534,7 +969,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               border: 'none',
               padding: '12px 14px',
               paddingBottom: 6,
-              color: '#e4e4e7',
+              color: colors.textPrimary,
               fontSize: 13,
               resize: 'none',
               outline: 'none',
@@ -548,46 +983,132 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             alignItems: 'center',
             justifyContent: 'space-between',
             padding: '6px 10px 10px',
+            gap: 8,
           }}>
-            {/* Model Selector Button */}
-            <button
-              onClick={() => AI_MODELS.length > 1 && setShowModelSelector(!showModelSelector)}
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 6,
-                padding: '6px 10px',
-                background: showModelSelector ? `${AI_MODELS.find(m => m.id === selectedModel)?.color}20` : 'rgba(255,255,255,0.05)',
-                border: '1px solid rgba(255,255,255,0.1)',
-                borderRadius: 8,
-                cursor: AI_MODELS.length > 1 ? 'pointer' : 'default',
-                transition: 'all 0.15s',
-              }}
-            >
-              <span style={{ fontSize: 14 }}>
-                {AI_MODELS.find(m => m.id === selectedModel)?.icon}
-              </span>
-              <span style={{
-                fontSize: 11,
-                color: AI_MODELS.find(m => m.id === selectedModel)?.color,
-                fontWeight: 500,
-              }}>
-                {AI_MODELS.find(m => m.id === selectedModel)?.name}
-              </span>
-              {AI_MODELS.length > 1 && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap', flex: 1, minWidth: 0 }}>
+              {/* Model Selector Button - Clean Bolt Style */}
+              <button
+                onClick={() => setShowModelSelector(!showModelSelector)}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 6,
+                  padding: '5px 10px',
+                  background: showModelSelector
+                    ? 'rgba(139, 30, 43, 0.2)'
+                    : 'rgba(255,255,255,0.05)',
+                  border: showModelSelector
+                    ? '1px solid rgba(139, 30, 43, 0.4)'
+                    : '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 6,
+                  cursor: 'pointer',
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseEnter={e => {
+                  if (!showModelSelector) {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.08)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.12)';
+                  }
+                }}
+                onMouseLeave={e => {
+                  if (!showModelSelector) {
+                    e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+                    e.currentTarget.style.borderColor = 'rgba(255,255,255,0.08)';
+                  }
+                }}
+              >
+                {/* Anthropic/Claude Logo */}
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
+                  <path d="M17.3 3H14.1L21 21H24L17.3 3ZM6.8 3H10L13.7 13L11.4 18.6L6.8 3ZM0 21H3.2L7.7 8.4L10 14.1L6.5 21H3.3L6.8 14.1L4.5 8.4L0 21Z" fill={showModelSelector ? '#A83248' : '#9ca3af'}/>
+                </svg>
+                <span style={{
+                  fontSize: 11,
+                  color: showModelSelector ? '#e5e5e5' : '#a1a1aa',
+                  fontWeight: 500,
+                }}>
+                  {CLAUDE_MODELS.find(m => m.id === selectedModel)?.name || 'Sonnet 4.5'}
+                </span>
                 <svg
                   width="10"
                   height="10"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke="#5a5a5a"
+                  stroke={showModelSelector ? '#A83248' : '#6b7280'}
                   strokeWidth="2"
                   style={{ transform: showModelSelector ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
                 >
                   <polyline points="6 9 12 15 18 9" />
                 </svg>
+              </button>
+
+              {/* Design/Code Mode Toggle */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  background: 'rgba(255,255,255,0.03)',
+                  border: '1px solid rgba(255,255,255,0.08)',
+                  borderRadius: 8,
+                  padding: 2,
+                }}
+              >
+                {OUTPUT_MODES.map((mode) => (
+                  <button
+                    key={mode.id}
+                    onClick={() => setOutputMode(mode.id)}
+                    title={mode.name + ' - ' + mode.description}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      padding: 6,
+                      background: outputMode === mode.id
+                        ? mode.id === 'design'
+                          ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                          : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
+                        : 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s ease',
+                      color: outputMode === mode.id ? '#fff' : '#6b7280',
+                    }}
+                  >
+                    {mode.icon}
+                  </button>
+                ))}
+              </div>
+
+              {/* New Page Toggle - only in design mode */}
+              {outputMode === 'design' && (
+                <button
+                  onClick={() => setCreateAsNewPage(!createAsNewPage)}
+                  title={createAsNewPage ? 'Crea come nuova pagina' : 'Aggiungi alla pagina corrente'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '5px 8px',
+                    background: createAsNewPage ? 'rgba(34, 197, 94, 0.2)' : 'rgba(255,255,255,0.03)',
+                    border: createAsNewPage ? '1px solid rgba(34, 197, 94, 0.4)' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    color: createAsNewPage ? '#22c55e' : '#6b7280',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="12" y1="18" x2="12" y2="12" />
+                    <line x1="9" y1="15" x2="15" y2="15" />
+                  </svg>
+                  <span style={{ fontSize: 10, fontWeight: 500 }}>
+                    {createAsNewPage ? 'New' : '+Page'}
+                  </span>
+                </button>
               )}
-            </button>
+            </div>
 
             {/* Send / Stop Button */}
             {isStreaming ? (
@@ -622,7 +1143,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                   borderRadius: 8,
                   border: 'none',
                   background: input.trim()
-                    ? AI_MODELS.find(m => m.id === selectedModel)?.color || '#A83248'
+                    ? '#8B1E2B'
                     : 'rgba(255, 255, 255, 0.08)',
                   color: input.trim() ? '#fff' : '#52525b',
                   cursor: input.trim() ? 'pointer' : 'not-allowed',

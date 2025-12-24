@@ -9,11 +9,23 @@
  * - Standard markdown code blocks with path hints
  */
 
+export interface CanvasElementData {
+  type: 'frame' | 'text' | 'button' | 'image' | 'input' | 'link' | 'icon' | 'stack' | 'grid' | 'section' | 'container';
+  name?: string;
+  content?: string;
+  src?: string;
+  href?: string;
+  iconName?: string;
+  styles?: Record<string, unknown>;
+  children?: CanvasElementData[];
+}
+
 export interface ParsedArtifact {
-  type: 'file' | 'shell';
+  type: 'file' | 'shell' | 'canvas';
   path?: string;
   content: string;
   language?: string;
+  canvasElements?: CanvasElementData[];
 }
 
 export interface ParseResult {
@@ -27,6 +39,9 @@ const PATTERNS = {
   // bolt.diy format: <boltArtifact>...<boltAction type="file" filePath="...">content</boltAction>...</boltArtifact>
   boltArtifact: /<boltArtifact[^>]*>([\s\S]*?)<\/boltArtifact>/gi,
   boltAction: /<boltAction\s+type="(\w+)"(?:\s+filePath="([^"]+)")?[^>]*>([\s\S]*?)<\/boltAction>/gi,
+
+  // Canvas elements format: <boltAction type="canvas">JSON</boltAction>
+  canvasAction: /<boltAction\s+type="canvas"[^>]*>([\s\S]*?)<\/boltAction>/gi,
 
   // lovable format: <file path="...">content</file>
   lovableFile: /<file\s+path="([^"]+)"[^>]*>([\s\S]*?)<\/file>/gi,
@@ -130,11 +145,27 @@ export function parseArtifacts(response: string): ParseResult {
 
       for (const actionMatch of actionMatches) {
         const [, type, filePath, content] = actionMatch;
-        artifacts.push({
-          type: type as 'file' | 'shell',
-          path: filePath,
-          content: content.trim(),
-        });
+
+        // Handle canvas type specially
+        if (type === 'canvas') {
+          try {
+            const trimmedContent = content.trim();
+            const canvasData = JSON.parse(trimmedContent);
+            artifacts.push({
+              type: 'canvas',
+              content: trimmedContent,
+              canvasElements: canvasData.elements || (Array.isArray(canvasData) ? canvasData : [canvasData]),
+            });
+          } catch (e) {
+            console.warn('[ArtifactParser] Failed to parse canvas JSON:', e);
+          }
+        } else {
+          artifacts.push({
+            type: type as 'file' | 'shell',
+            path: filePath,
+            content: content.trim(),
+          });
+        }
       }
 
       // Remove from explanation

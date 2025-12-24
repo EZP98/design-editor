@@ -125,6 +125,7 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
     setCurrentPage,
     saveToHistory,
     toggleEditorTheme,
+    setShowPageSettings,
   } = useCanvasStore();
 
   // Get theme colors
@@ -141,11 +142,16 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent) => {
       if (marquee) return; // Don't deselect if we just finished marquee
-      if (e.target === canvasRef.current || (e.target as HTMLElement).dataset.canvasBackground) {
+      const target = e.target as HTMLElement;
+      // Deselect when clicking on canvas background (outside pages)
+      if (target === canvasRef.current ||
+          target.dataset.canvasBackground === 'true' ||
+          target.classList.contains('canvas-container')) {
         deselectAll();
+        setShowPageSettings(false); // Also hide page settings
       }
     },
-    [deselectAll, marquee]
+    [deselectAll, marquee, setShowPageSettings]
   );
 
 
@@ -798,6 +804,12 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
     // Page header (drag handle)
     const pageHeader = (
       <div
+        onClick={(e) => {
+          e.stopPropagation();
+          setCurrentPage(page.id);
+          deselectAll();
+          setShowPageSettings(true); // Explicitly show page settings
+        }}
         style={{
           position: 'absolute',
           top: -40,
@@ -817,6 +829,7 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
           zIndex: 1000,
           touchAction: 'none',
           boxShadow: '0 -4px 20px rgba(0,0,0,0.4)',
+          cursor: 'pointer',
         }}
       >
         <svg width="10" height="14" viewBox="0 0 10 14" fill="currentColor" opacity={0.6}>
@@ -838,15 +851,18 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
       <>
         {/* Artboard content */}
           <div
-            className="relative shadow-2xl"
+            className="relative"
+            data-canvas-export={isCurrentPage ? 'true' : undefined}
             style={{
               width: pageWidth,
               height: pageHeight,
               backgroundColor: rootElement.styles.backgroundColor || '#ffffff',
               borderRadius: 8,
-              boxShadow: isCurrentPage
-                ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A83248'
-                : '0 25px 100px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)',
+              boxShadow: editorTheme === 'light'
+                ? (isCurrentPage ? '0 0 0 2px #A83248' : '0 1px 3px rgba(0,0,0,0.08)')
+                : (isCurrentPage
+                  ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A83248'
+                  : '0 25px 100px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)'),
               cursor: activeTool === 'select' ? 'default' : undefined,
               // Auto Layout styles from page
               display: rootElement.styles.display || 'block',
@@ -1009,7 +1025,8 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
   return (
     <div
       ref={canvasRef}
-      className="relative"
+      className="relative canvas-container"
+      data-canvas-background="true"
       style={{
         flex: 1,
         width: '100%',

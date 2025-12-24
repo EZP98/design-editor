@@ -41,6 +41,7 @@ interface LeftSidebarProps {
   onSelectLayer: (id: string) => void;
   onToggleLayerVisibility?: (id: string) => void;
   onToggleLayerLock?: (id: string) => void;
+  onReorderLayer?: (dragId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
 
   // Collapse
   isCollapsed?: boolean;
@@ -64,6 +65,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
   onSelectLayer,
   onToggleLayerVisibility,
   onToggleLayerLock,
+  onReorderLayer,
   isCollapsed = false,
   onToggleCollapse,
   isGitHubProject = false,
@@ -256,6 +258,7 @@ export const LeftSidebar: React.FC<LeftSidebarProps> = ({
             onSelectLayer={onSelectLayer}
             onToggleVisibility={onToggleLayerVisibility}
             onToggleLock={onToggleLayerLock}
+            onReorder={onReorderLayer}
           />
         )}
       </div>

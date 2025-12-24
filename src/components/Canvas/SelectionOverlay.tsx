@@ -8,6 +8,11 @@ import React, { useState, useCallback, useEffect } from 'react';
 import { CanvasElement, Position, Size } from '../../lib/canvas/types';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
 
+// AI Edit API endpoint
+const AI_EDIT_API = import.meta.env.VITE_SUPABASE_URL
+  ? `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/ai-image`
+  : 'https://tyskftlhwdstsjvddfld.supabase.co/functions/v1/ai-image';
+
 interface SelectionOverlayProps {
   element: CanvasElement;
   zoom: number;
@@ -30,6 +35,7 @@ const HANDLE_SIZE = 8;
 export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 } }: SelectionOverlayProps) {
   // Don't show floating toolbar for page elements (they have their own header)
   const isPage = element.type === 'page';
+  const isImage = element.type === 'image';
   const [activeHandle, setActiveHandle] = useState<ResizeHandle | null>(null);
   const [resizeStart, setResizeStart] = useState<{
     mouseX: number;
@@ -38,9 +44,91 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
     size: Size;
   } | null>(null);
 
+  // AI Edit state
+  const [aiProcessing, setAiProcessing] = useState<string | null>(null); // 'remove-bg' | 'upscale' | null
+
   const resizeElement = useCanvasStore((state) => state.resizeElement);
   const moveElement = useCanvasStore((state) => state.moveElement);
   const saveToHistory = useCanvasStore((state) => state.saveToHistory);
+
+  // AI: Remove Background
+  const handleRemoveBackground = useCallback(async () => {
+    if (!element.src || aiProcessing) return;
+    setAiProcessing('remove-bg');
+
+    try {
+      const res = await fetch(AI_EDIT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'remove-bg',
+          imageUrl: element.src,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Errore');
+
+      // Update element with new image
+      useCanvasStore.setState((state) => ({
+        elements: {
+          ...state.elements,
+          [element.id]: {
+            ...state.elements[element.id],
+            src: data.imageUrl,
+          },
+        },
+      }));
+      saveToHistory('Remove background');
+    } catch (err) {
+      console.error('Remove BG error:', err);
+      alert('Errore rimozione sfondo: ' + (err instanceof Error ? err.message : 'Errore'));
+    } finally {
+      setAiProcessing(null);
+    }
+  }, [element.id, element.src, aiProcessing, saveToHistory]);
+
+  // AI: Upscale
+  const handleUpscale = useCallback(async () => {
+    if (!element.src || aiProcessing) return;
+    setAiProcessing('upscale');
+
+    try {
+      const res = await fetch(AI_EDIT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'upscale',
+          imageUrl: element.src,
+          scale: 2,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Errore');
+
+      // Update element with upscaled image and double size
+      useCanvasStore.setState((state) => ({
+        elements: {
+          ...state.elements,
+          [element.id]: {
+            ...state.elements[element.id],
+            src: data.imageUrl,
+            size: {
+              width: element.size.width * 2,
+              height: element.size.height * 2,
+            },
+          },
+        },
+      }));
+      saveToHistory('Upscale image');
+    } catch (err) {
+      console.error('Upscale error:', err);
+      alert('Errore upscale: ' + (err instanceof Error ? err.message : 'Errore'));
+    } finally {
+      setAiProcessing(null);
+    }
+  }, [element.id, element.src, element.size, aiProcessing, saveToHistory]);
 
   // Handle resize start
   const handleResizeStart = useCallback(
@@ -746,8 +834,139 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
             <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
           </svg>
         </button>
+
+        {/* AI Edit Tools - Only for images */}
+        {isImage && element.src && (
+          <>
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: 'rgba(255, 255, 255, 0.08)', margin: '0 4px' }} />
+
+            {/* AI Label */}
+            <div
+              style={{
+                padding: '2px 6px',
+                fontSize: 9,
+                fontWeight: 700,
+                color: '#a855f7',
+                background: 'rgba(168, 85, 247, 0.15)',
+                borderRadius: 4,
+                marginRight: 4,
+              }}
+            >
+              AI
+            </div>
+
+            {/* Remove Background */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleRemoveBackground();
+              }}
+              disabled={aiProcessing !== null}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: aiProcessing === 'remove-bg' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: aiProcessing === 'remove-bg' ? '#a855f7' : '#71717a',
+                cursor: aiProcessing ? 'wait' : 'pointer',
+                transition: 'all 0.15s',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!aiProcessing) {
+                  e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)';
+                  e.currentTarget.style.color = '#a855f7';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (aiProcessing !== 'remove-bg') {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#71717a';
+                }
+              }}
+              title="Rimuovi sfondo"
+            >
+              {aiProcessing === 'remove-bg' ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="10" />
+                  <path d="M8 12h8" />
+                  <path d="M12 2a10 10 0 0 0 0 20" fill="currentColor" opacity="0.3" />
+                </svg>
+              )}
+              {aiProcessing === 'remove-bg' ? '...' : 'Sfondo'}
+            </button>
+
+            {/* Upscale */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleUpscale();
+              }}
+              disabled={aiProcessing !== null}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: aiProcessing === 'upscale' ? 'rgba(6, 182, 212, 0.2)' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: aiProcessing === 'upscale' ? '#06b6d4' : '#71717a',
+                cursor: aiProcessing ? 'wait' : 'pointer',
+                transition: 'all 0.15s',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!aiProcessing) {
+                  e.currentTarget.style.background = 'rgba(6, 182, 212, 0.15)';
+                  e.currentTarget.style.color = '#06b6d4';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (aiProcessing !== 'upscale') {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#71717a';
+                }
+              }}
+              title="Upscale 2x"
+            >
+              {aiProcessing === 'upscale' ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="11" cy="11" r="8" />
+                  <path d="M21 21l-4.35-4.35" />
+                  <path d="M11 8v6M8 11h6" />
+                </svg>
+              )}
+              {aiProcessing === 'upscale' ? '...' : '2x'}
+            </button>
+          </>
+        )}
       </div>
       )}
+
+      {/* CSS for spin animation */}
+      <style>{`
+        @keyframes spin {
+          from { transform: rotate(0deg); }
+          to { transform: rotate(360deg); }
+        }
+      `}</style>
 
       {/* Size indicator */}
       <div

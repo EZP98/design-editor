@@ -1,6 +1,7 @@
 /**
  * Hook for managing chat history with IndexedDB persistence
  * Handles messages, snapshots, and chat sessions
+ * Now includes cloud sync via Supabase
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
@@ -18,11 +19,14 @@ import {
   generateMessageId,
   forkChat,
 } from './db';
+import { useChatSync } from './useChatSync';
 
 interface UseChatHistoryOptions {
   projectName: string;
+  projectId?: string;
   currentFiles?: Record<string, string>;
   onRestoreSnapshot?: (files: FileSnapshot) => void;
+  enableCloudSync?: boolean;
 }
 
 interface UseChatHistoryReturn {
@@ -48,12 +52,25 @@ interface UseChatHistoryReturn {
 
   // Fork
   forkFromMessage: (messageId: string) => Promise<void>;
+
+  // Cloud sync
+  syncStatus: {
+    isOnline: boolean;
+    isSyncing: boolean;
+    lastSyncAt: string | null;
+    pendingChanges: number;
+    error: string | null;
+  };
+  syncNow: () => Promise<void>;
+  isCloudEnabled: boolean;
 }
 
 export function useChatHistory({
   projectName,
+  projectId,
   currentFiles,
   onRestoreSnapshot,
+  enableCloudSync = true,
 }: UseChatHistoryOptions): UseChatHistoryReturn {
   const [chatId, setChatId] = useState<string | null>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -62,6 +79,20 @@ export function useChatHistory({
 
   const currentFilesRef = useRef(currentFiles);
   currentFilesRef.current = currentFiles;
+
+  // Cloud sync hook
+  const {
+    syncStatus,
+    sync: syncNow,
+    uploadChatNow,
+    deleteFromCloud,
+    markPendingChange,
+    isConfigured: isCloudEnabled,
+  } = useChatSync({
+    projectName,
+    projectId,
+    autoSync: enableCloudSync,
+  });
 
   // Load chat history for project
   const loadChatHistory = useCallback(async () => {
@@ -121,6 +152,10 @@ export function useChatHistory({
           updatedAt: new Date().toISOString(),
         };
         await saveChat(chatData);
+        // Mark pending change for cloud sync
+        if (isCloudEnabled) {
+          markPendingChange();
+        }
         // Refresh history
         loadChatHistory();
       } catch (e) {
@@ -131,7 +166,7 @@ export function useChatHistory({
     if (messages.length > 0) {
       saveCurrentChat();
     }
-  }, [chatId, messages, projectName, isLoading, loadChatHistory]);
+  }, [chatId, messages, projectName, isLoading, loadChatHistory, isCloudEnabled, markPendingChange]);
 
   // Add a new message
   const addMessage = useCallback((
@@ -161,12 +196,16 @@ export function useChatHistory({
   const clearChat = useCallback(async () => {
     if (chatId) {
       await deleteChat(chatId);
+      // Also delete from cloud
+      if (isCloudEnabled) {
+        await deleteFromCloud(chatId);
+      }
     }
     const newId = generateChatId();
     setChatId(newId);
     setMessages([]);
     await loadChatHistory();
-  }, [chatId, loadChatHistory]);
+  }, [chatId, loadChatHistory, isCloudEnabled, deleteFromCloud]);
 
   // Load a specific chat
   const loadChat = useCallback(async (id: string) => {
@@ -192,6 +231,10 @@ export function useChatHistory({
   const deleteCurrentChat = useCallback(async () => {
     if (chatId) {
       await deleteChat(chatId);
+      // Also delete from cloud
+      if (isCloudEnabled) {
+        await deleteFromCloud(chatId);
+      }
       const chats = await loadChatHistory();
 
       if (chats.length > 0) {
@@ -203,7 +246,7 @@ export function useChatHistory({
         setMessages([]);
       }
     }
-  }, [chatId, loadChatHistory]);
+  }, [chatId, loadChatHistory, isCloudEnabled, deleteFromCloud]);
 
   // Take a snapshot of current files
   const takeSnapshot = useCallback(async (messageId: string) => {
@@ -265,5 +308,9 @@ export function useChatHistory({
     takeSnapshot,
     restoreSnapshot,
     forkFromMessage,
+    // Cloud sync
+    syncStatus,
+    syncNow,
+    isCloudEnabled,
   };
 }

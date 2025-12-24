@@ -43,7 +43,12 @@ function createInitialState(): CanvasState {
     position: { x: 0, y: 0 },
     size: { width: 1440, height: 900 },
     positionType: 'relative',
-    styles: { backgroundColor: '#ffffff' },
+    styles: {
+      backgroundColor: '#ffffff',
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'stretch',
+    },
     parentId: null,
     children: [],
     locked: false,
@@ -72,6 +77,8 @@ function createInitialState(): CanvasState {
     clipboard: null,
     history: [],
     historyIndex: -1,
+    activeRightPanel: 'properties' as 'properties' | 'ai-image' | null,
+    showPageSettings: false,
   };
 }
 
@@ -87,12 +94,15 @@ interface CanvasActions {
   updateElementContent: (elementId: string, content: string) => void;
   renameElement: (elementId: string, name: string) => void;
   reparentElement: (elementId: string, newParentId: string) => void;
+  reorderElement: (elementId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
 
   // Selection
   selectElement: (elementId: string, addToSelection?: boolean) => void;
   deselectAll: () => void;
   selectAll: () => void;
   setHoveredElement: (elementId: string | null) => void;
+  setActiveRightPanel: (panel: 'properties' | 'ai-image' | null) => void;
+  setShowPageSettings: (show: boolean) => void;
 
   // Visibility & Lock
   toggleVisibility: (elementId: string) => void;
@@ -109,6 +119,7 @@ interface CanvasActions {
   setCurrentPage: (pageId: string) => void;
   movePagePosition: (pageId: string, position: Position) => void;
   updatePageNotes: (pageId: string, notes: string) => void;
+  updatePage: (pageId: string, updates: Partial<{ name: string; width: number; height: number; background: string }>) => void;
 
   // Clipboard
   copy: () => void;
@@ -165,6 +176,9 @@ interface CanvasActions {
 
   // Reset
   reset: () => void;
+
+  // Load state from external source (e.g., Supabase)
+  loadState: (state: Partial<CanvasState>) => void;
 }
 
 // Current project ID for storage scoping
@@ -476,7 +490,21 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
     const currentPage = state.pages[state.currentPageId];
     if (!currentPage) return '';
 
-    const targetParentId = parentId || currentPage.rootElementId;
+    // Determine parent: explicit parentId > selected container element > page root
+    let targetParentId = parentId || currentPage.rootElementId;
+
+    // If no explicit parentId given and we have a selected element, check if it can be a parent
+    if (!parentId && state.selectedElementIds.length === 1) {
+      const selectedElement = state.elements[state.selectedElementIds[0]];
+      if (selectedElement) {
+        // Container types that can have children
+        const containerTypes = ['page', 'frame', 'section', 'container', 'stack', 'row', 'grid', 'box'];
+        if (containerTypes.includes(selectedElement.type)) {
+          targetParentId = selectedElement.id;
+        }
+      }
+    }
+
     const parent = state.elements[targetParentId];
     if (!parent) return '';
 
@@ -518,10 +546,26 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
     const name = type.charAt(0).toUpperCase() + type.slice(1);
 
     // For auto layout parents, set appropriate resize modes
-    const autoLayoutStyles = parentHasAutoLayout ? {
-      resizeX: 'fixed' as const,  // Start with fixed, user can change to fill/hug
-      resizeY: 'fixed' as const,
-    } : {};
+    const isContainerType = ['section', 'container', 'stack', 'frame', 'row', 'grid'].includes(type);
+    const parentIsColumn = parent.styles.flexDirection === 'column' || !parent.styles.flexDirection;
+    const parentIsRow = parent.styles.flexDirection === 'row';
+
+    // Set resize modes based on parent and element type
+    let autoLayoutStyles: Partial<ElementStyles> = {};
+
+    if (parentHasAutoLayout) {
+      // In auto layout parent, container elements fill the cross axis
+      autoLayoutStyles = {
+        resizeX: (isContainerType && parentIsColumn) ? 'fill' as const : 'fixed' as const,
+        resizeY: (isContainerType && parentIsRow) ? 'fill' as const : 'fixed' as const,
+      };
+    } else if (isContainerType) {
+      // Container types without auto layout parent should have fixed size (not hug)
+      autoLayoutStyles = {
+        resizeX: 'fixed' as const,
+        resizeY: 'fixed' as const,
+      };
+    }
 
     const newElement: CanvasElement = {
       id,
@@ -885,6 +929,72 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
     get().saveToHistory('Reparent element');
   },
 
+  // Reorder element (drag to reorder in layers panel)
+  reorderElement: (elementId: string, targetId: string, position: 'before' | 'after' | 'inside') => {
+    const state = get();
+    const element = state.elements[elementId];
+    const target = state.elements[targetId];
+
+    if (!element || !target || elementId === targetId) return;
+
+    // Can't drop inside itself or its descendants
+    const isDescendant = (parentId: string, childId: string): boolean => {
+      const parent = state.elements[parentId];
+      if (!parent) return false;
+      if (parent.children.includes(childId)) return true;
+      return parent.children.some(id => isDescendant(id, childId));
+    };
+    if (isDescendant(elementId, targetId)) return;
+
+    set((state) => {
+      const newElements = { ...state.elements };
+      const oldParent = element.parentId ? state.elements[element.parentId] : null;
+
+      // Remove from old parent
+      if (oldParent) {
+        newElements[oldParent.id] = {
+          ...newElements[oldParent.id],
+          children: newElements[oldParent.id].children.filter(id => id !== elementId),
+        };
+      }
+
+      if (position === 'inside') {
+        // Drop inside target (make it a child)
+        newElements[targetId] = {
+          ...newElements[targetId],
+          children: [...newElements[targetId].children, elementId],
+        };
+        newElements[elementId] = {
+          ...newElements[elementId],
+          parentId: targetId,
+        };
+      } else {
+        // Drop before/after target (same parent as target)
+        const targetParent = target.parentId ? state.elements[target.parentId] : null;
+        if (!targetParent) return state; // Can't reorder root elements
+
+        const targetParentChildren = [...newElements[targetParent.id].children];
+        const targetIndex = targetParentChildren.indexOf(targetId);
+        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
+
+        targetParentChildren.splice(insertIndex, 0, elementId);
+
+        newElements[targetParent.id] = {
+          ...newElements[targetParent.id],
+          children: targetParentChildren,
+        };
+        newElements[elementId] = {
+          ...newElements[elementId],
+          parentId: targetParent.id,
+        };
+      }
+
+      return { elements: newElements };
+    });
+
+    get().saveToHistory('Reorder element');
+  },
+
   // Selection
   selectElement: (elementId: string, addToSelection = false) => {
     const element = get().elements[elementId];
@@ -916,6 +1026,14 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
 
   setHoveredElement: (elementId: string | null) => {
     set({ hoveredElementId: elementId });
+  },
+
+  setActiveRightPanel: (panel: 'properties' | 'ai-image' | null) => {
+    set({ activeRightPanel: panel });
+  },
+
+  setShowPageSettings: (show: boolean) => {
+    set({ showPageSettings: show });
   },
 
   // Visibility & Lock
@@ -961,7 +1079,12 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       position: { x: 0, y: 0 },
       size: { width: 1440, height: 900 },
       positionType: 'relative',
-      styles: { backgroundColor: '#ffffff' },
+      styles: {
+        backgroundColor: '#ffffff',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'stretch',
+      },
       parentId: null,
       children: [],
       locked: false,
@@ -1075,6 +1198,48 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
         [pageId]: { ...state.pages[pageId], notes },
       },
     }));
+  },
+
+  updatePage: (pageId: string, updates: Partial<{ name: string; width: number; height: number; background: string }>) => {
+    const state = get();
+    const page = state.pages[pageId];
+    if (!page) return;
+
+    const rootElement = state.elements[page.rootElementId];
+    if (!rootElement) return;
+
+    // Update page metadata
+    const newPages = {
+      ...state.pages,
+      [pageId]: {
+        ...state.pages[pageId],
+        ...(updates.name !== undefined && { name: updates.name }),
+        ...(updates.width !== undefined && { width: updates.width }),
+        ...(updates.height !== undefined && { height: updates.height }),
+        ...(updates.background !== undefined && { backgroundColor: updates.background }),
+      },
+    };
+
+    // Update root element when size or background changes
+    const needsElementUpdate = updates.width !== undefined || updates.height !== undefined || updates.background !== undefined;
+    const newElements = needsElementUpdate ? {
+      ...state.elements,
+      [page.rootElementId]: {
+        ...rootElement,
+        size: {
+          width: updates.width !== undefined ? updates.width : rootElement.size.width,
+          height: updates.height !== undefined ? updates.height : rootElement.size.height,
+        },
+        styles: {
+          ...rootElement.styles,
+          ...(updates.background !== undefined && { backgroundColor: updates.background }),
+        },
+      },
+    } : state.elements;
+
+    set({ pages: newPages, elements: newElements });
+
+    get().saveToHistory('Update page');
   },
 
   duplicatePage: (pageId: string) => {
@@ -1930,6 +2095,25 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
   // Reset
   reset: () => {
     set(createInitialState());
+  },
+
+  // Load state from external source (e.g., Supabase project)
+  loadState: (state: Partial<CanvasState>) => {
+    const current = get();
+    set({
+      ...current,
+      elements: state.elements || current.elements,
+      pages: state.pages || current.pages,
+      currentPageId: state.currentPageId || current.currentPageId,
+      canvasSettings: state.canvasSettings || current.canvasSettings,
+      projectName: state.projectName || current.projectName,
+      // Reset transient state
+      selectedElementIds: [],
+      hoveredElementId: null,
+      clipboard: null,
+      history: [],
+      historyIndex: -1,
+    });
   },
     }),
     {

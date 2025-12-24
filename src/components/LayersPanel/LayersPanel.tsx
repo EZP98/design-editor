@@ -9,10 +9,10 @@
  * - Click to select element
  * - Visibility toggle
  * - Lock toggle
- * - Drag to reorder (future)
+ * - Drag to reorder
  */
 
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useRef } from 'react';
 
 // Element node in the tree
 export interface LayerNode {
@@ -179,7 +179,7 @@ const getElementIcon = (tagName: string, componentName?: string) => {
   }
 };
 
-// Single layer item
+// Single layer item with drag-and-drop
 const LayerItem: React.FC<{
   node: LayerNode;
   selectedId: string | null;
@@ -188,18 +188,88 @@ const LayerItem: React.FC<{
   onToggleExpand: (id: string) => void;
   onToggleVisibility?: (id: string) => void;
   onToggleLock?: (id: string) => void;
-}> = ({ node, selectedId, expandedIds, onSelect, onToggleExpand, onToggleVisibility, onToggleLock }) => {
+  onReorder?: (dragId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
+  draggedId: string | null;
+  setDraggedId: (id: string | null) => void;
+}> = ({ node, selectedId, expandedIds, onSelect, onToggleExpand, onToggleVisibility, onToggleLock, onReorder, draggedId, setDraggedId }) => {
   const isSelected = node.id === selectedId;
   const isExpanded = expandedIds.has(node.id);
   const hasChildren = node.children.length > 0;
+  const isDragging = draggedId === node.id;
+  const [dropPosition, setDropPosition] = useState<'before' | 'after' | 'inside' | null>(null);
+  const itemRef = useRef<HTMLDivElement>(null);
+
+  const handleDragStart = (e: React.DragEvent) => {
+    e.stopPropagation();
+    setDraggedId(node.id);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', node.id);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedId(null);
+    setDropPosition(null);
+  };
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedId || draggedId === node.id) return;
+
+    const rect = itemRef.current?.getBoundingClientRect();
+    if (!rect) return;
+
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    // Determine drop position based on mouse position
+    if (y < height * 0.25) {
+      setDropPosition('before');
+    } else if (y > height * 0.75) {
+      setDropPosition('after');
+    } else {
+      setDropPosition('inside');
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDropPosition(null);
+  };
+
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (!draggedId || !dropPosition || draggedId === node.id) return;
+
+    onReorder?.(draggedId, node.id, dropPosition);
+    setDropPosition(null);
+    setDraggedId(null);
+  };
 
   return (
     <div>
+      {/* Drop indicator line - before */}
+      {dropPosition === 'before' && (
+        <div
+          className="h-0.5 bg-violet-500 mx-2"
+          style={{ marginLeft: `${8 + node.depth * 16}px` }}
+        />
+      )}
+
       <div
+        ref={itemRef}
+        draggable
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onDrop={handleDrop}
         className={`
-          group flex items-center h-7 px-2 cursor-pointer
+          group flex items-center h-7 px-2 cursor-grab active:cursor-grabbing
           hover:bg-white/5 transition-colors
           ${isSelected ? 'bg-violet-500/20 hover:bg-violet-500/30' : ''}
+          ${isDragging ? 'opacity-50' : ''}
+          ${dropPosition === 'inside' ? 'bg-violet-500/30 ring-1 ring-violet-500' : ''}
         `}
         style={{ paddingLeft: `${8 + node.depth * 16}px` }}
         onClick={() => onSelect(node.id)}
@@ -252,6 +322,14 @@ const LayerItem: React.FC<{
         </div>
       </div>
 
+      {/* Drop indicator line - after */}
+      {dropPosition === 'after' && !hasChildren && (
+        <div
+          className="h-0.5 bg-violet-500 mx-2"
+          style={{ marginLeft: `${8 + node.depth * 16}px` }}
+        />
+      )}
+
       {/* Children */}
       {hasChildren && isExpanded && (
         <div>
@@ -265,9 +343,20 @@ const LayerItem: React.FC<{
               onToggleExpand={onToggleExpand}
               onToggleVisibility={onToggleVisibility}
               onToggleLock={onToggleLock}
+              onReorder={onReorder}
+              draggedId={draggedId}
+              setDraggedId={setDraggedId}
             />
           ))}
         </div>
+      )}
+
+      {/* Drop indicator line - after children */}
+      {dropPosition === 'after' && hasChildren && isExpanded && (
+        <div
+          className="h-0.5 bg-violet-500 mx-2"
+          style={{ marginLeft: `${8 + node.depth * 16}px` }}
+        />
       )}
     </div>
   );
@@ -279,9 +368,11 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
   onSelectLayer,
   onToggleVisibility,
   onToggleLock,
+  onReorder,
 }) => {
   const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
   const [searchQuery, setSearchQuery] = useState('');
+  const [draggedId, setDraggedId] = useState<string | null>(null);
 
   // Auto-expand parents when an element is selected
   React.useEffect(() => {
@@ -400,6 +491,9 @@ export const LayersPanel: React.FC<LayersPanelProps> = ({
               onToggleExpand={handleToggleExpand}
               onToggleVisibility={onToggleVisibility}
               onToggleLock={onToggleLock}
+              onReorder={onReorder}
+              draggedId={draggedId}
+              setDraggedId={setDraggedId}
             />
           ))
         ) : (

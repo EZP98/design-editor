@@ -70,8 +70,8 @@ export function CanvasElementRenderer({
     };
   }, []);
 
-  // Check if this is a text element
-  const isTextElement = element.type === 'text' || element.type === 'heading' || element.type === 'paragraph';
+  // Check if this is a text-editable element (supports double-click to edit)
+  const isTextElement = element.type === 'text' || element.type === 'heading' || element.type === 'paragraph' || element.type === 'button' || element.type === 'link';
 
   // Sync editing content with element content when not editing
   useEffect(() => {
@@ -303,8 +303,8 @@ export function CanvasElementRenderer({
       outlineStyle = '2px solid #8B1E2B';
       outlineOffset = 2; // Esterno all'elemento per non sovrapporsi al contenuto
     } else if (isHovered && !isSelected) {
-      outlineStyle = '1px solid rgba(139, 30, 43, 0.5)';
-      outlineOffset = 1;
+      outlineStyle = '2px solid rgba(139, 30, 43, 0.8)';
+      outlineOffset = 2;
     }
 
     // Handle Fill/Hug resizing modes
@@ -421,7 +421,8 @@ export function CanvasElementRenderer({
           paddingLeft: pl,
         };
       })(),
-      // Background
+      // Background - order matters: background shorthand first, then specific properties override
+      ...(styles.background ? { background: styles.background } : {}),
       backgroundColor: styles.backgroundColor,
       backgroundImage: styles.backgroundImage,
       // Border
@@ -454,6 +455,12 @@ export function CanvasElementRenderer({
       filter: styles.filter,
       backdropFilter: styles.backdropFilter,
       overflow: styles.overflow || (element.type === 'frame' || element.type === 'image' ? 'hidden' : undefined),
+      // Text Effects (Kittl-style: neon, shadow, outline, gradient)
+      textShadow: styles.textShadow,
+      WebkitTextStroke: styles.WebkitTextStroke,
+      WebkitTextFillColor: styles.WebkitTextFillColor,
+      WebkitBackgroundClip: styles.WebkitBackgroundClip as any,
+      backgroundClip: styles.backgroundClip as any,
     };
 
     return css;
@@ -539,6 +546,26 @@ export function CanvasElementRenderer({
         );
 
       case 'button':
+        // Button content - editable on double-click (like text elements)
+        if (isEditingText) {
+          return (
+            <div
+              ref={textEditRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleTextInput}
+              onKeyDown={handleTextKeyDown}
+              onBlur={handleTextBlur}
+              style={{
+                outline: 'none',
+                minWidth: '2em',
+                whiteSpace: 'nowrap',
+                cursor: 'text',
+                caretColor: '#8B1E2B',
+              }}
+            />
+          );
+        }
         return (
           <span style={{ pointerEvents: 'none' }}>
             {element.content || 'Button'}
@@ -578,6 +605,26 @@ export function CanvasElementRenderer({
         );
 
       case 'link':
+        // Link content - editable on double-click (like text elements)
+        if (isEditingText) {
+          return (
+            <div
+              ref={textEditRef}
+              contentEditable
+              suppressContentEditableWarning
+              onInput={handleTextInput}
+              onKeyDown={handleTextKeyDown}
+              onBlur={handleTextBlur}
+              style={{
+                outline: 'none',
+                minWidth: '2em',
+                textDecoration: 'underline',
+                cursor: 'text',
+                caretColor: '#8B1E2B',
+              }}
+            />
+          );
+        }
         return (
           <span
             style={{
@@ -679,7 +726,9 @@ export function CanvasElementRenderer({
       case 'row':
       case 'page':
         // Check if this element has auto layout enabled
-        const hasAutoLayout = element.styles.display === 'flex' || element.styles.display === 'grid';
+        // Pages always have auto-layout by default (column direction, stretch)
+        const isPage = element.type === 'page';
+        const hasAutoLayout = isPage || element.styles.display === 'flex' || element.styles.display === 'grid';
         const flexDirection = element.styles.flexDirection || 'column';
         // Render children
         return element.children.map((childId) => {

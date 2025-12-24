@@ -156,13 +156,13 @@ export function ColorPicker({
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
       {label && (
         <div style={{ fontSize: 11, color: '#71717a', marginBottom: 2 }}>{label}</div>
       )}
 
       {/* Main row: Color swatch + Hex input */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
         {/* Color swatch with expand toggle */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -240,26 +240,8 @@ export function ColorPicker({
           }}
         />
 
-        {/* Native color picker trigger */}
-        <input
-          type="color"
-          value={isGradient ? '#ffffff' : colorValue}
-          onChange={(e) => {
-            setFillType('solid');
-            onChange(e.target.value);
-          }}
-          style={{
-            width: 0,
-            height: 0,
-            padding: 0,
-            border: 'none',
-            opacity: 0,
-            position: 'absolute',
-          }}
-          id={`color-picker-${value}`}
-        />
+        {/* Native color picker button */}
         <label
-          htmlFor={`color-picker-${value}`}
           style={{
             width: 28,
             height: 28,
@@ -270,10 +252,28 @@ export function ColorPicker({
             border: '1px solid rgba(255, 255, 255, 0.08)',
             borderRadius: 6,
             cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden',
           }}
           title="Color picker"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="1.5">
+          <input
+            type="color"
+            value={isGradient ? '#ffffff' : colorValue}
+            onChange={(e) => {
+              setFillType('solid');
+              onChange(e.target.value);
+            }}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0,
+              cursor: 'pointer',
+            }}
+          />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="1.5" style={{ pointerEvents: 'none' }}>
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
           </svg>
         </label>

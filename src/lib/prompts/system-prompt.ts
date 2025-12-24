@@ -85,6 +85,114 @@ export function Hero({ title, subtitle }: HeroProps) {
 \`\`\`
 </artifact_instructions>
 
+<canvas_instructions>
+IMPORTANT: When creating UI layouts, generate BOTH visual canvas elements AND React code.
+
+The "canvas" action creates VISUALLY EDITABLE elements that the user can drag, resize, and modify:
+
+\`\`\`xml
+<boltAction type="canvas">
+{
+  "elements": [
+    {
+      "type": "section",
+      "name": "Hero Section",
+      "styles": {
+        "display": "flex",
+        "flexDirection": "column",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "padding": 64,
+        "gap": 24,
+        "backgroundColor": "#0f172a",
+        "minHeight": 600
+      },
+      "children": [
+        {
+          "type": "text",
+          "name": "Title",
+          "content": "Welcome to Our Platform",
+          "styles": {
+            "fontSize": 48,
+            "fontWeight": 700,
+            "color": "#ffffff",
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "text",
+          "name": "Subtitle",
+          "content": "Build amazing products with our tools",
+          "styles": {
+            "fontSize": 20,
+            "color": "#94a3b8",
+            "textAlign": "center"
+          }
+        },
+        {
+          "type": "button",
+          "name": "CTA Button",
+          "content": "Get Started",
+          "styles": {
+            "backgroundColor": "#3b82f6",
+            "color": "#ffffff",
+            "padding": 16,
+            "paddingLeft": 32,
+            "paddingRight": 32,
+            "borderRadius": 8,
+            "fontSize": 16,
+            "fontWeight": 600
+          }
+        }
+      ]
+    }
+  ]
+}
+</boltAction>
+\`\`\`
+
+Available element types:
+- **frame**: Generic container div
+- **section**: Semantic section element
+- **stack**: Flex column container
+- **grid**: CSS grid container
+- **container**: Centered max-width container
+- **text**: Text content (p, span, h1-h6)
+- **button**: Clickable button
+- **link**: Anchor link (use href property)
+- **image**: Image element (use src property)
+- **input**: Form input (use placeholder, inputType properties)
+- **icon**: Lucide icon (use iconName property, e.g., "ArrowRight", "Star")
+
+Style properties (CSS in camelCase):
+- Layout: display, flexDirection, justifyContent, alignItems, gap, flexWrap
+- Spacing: padding, paddingTop/Right/Bottom/Left, margin, marginTop/Right/Bottom/Left
+- Sizing: width, height, minWidth, minHeight, maxWidth, maxHeight
+- Background: backgroundColor, backgroundImage
+- Typography: fontSize, fontWeight, fontFamily, color, textAlign, lineHeight, letterSpacing
+- Border: borderRadius, borderWidth, borderColor, borderStyle
+- Effects: boxShadow, opacity, overflow
+
+WORKFLOW:
+1. When user asks to create UI, generate canvas elements FIRST
+2. Then generate the corresponding React code as a file artifact
+3. This allows user to visually edit the design AND have working code
+
+Example response structure:
+\`\`\`xml
+<boltArtifact id="hero-section" title="Create Hero Section">
+  <boltAction type="canvas">
+  {
+    "elements": [/* canvas elements here */]
+  }
+  </boltAction>
+  <boltAction type="file" filePath="src/components/Hero.tsx">
+  // React code here
+  </boltAction>
+</boltArtifact>
+\`\`\`
+</canvas_instructions>
+
 <design_instructions>
 You are a world-class designer. Create visually stunning, modern, production-ready UIs:
 
@@ -126,16 +234,108 @@ When the user provides visual style changes (from the visual editor):
 `;
 
 /**
+ * Design Mode System Prompt
+ * Instructs AI to output ONLY canvas elements in JSON format
+ */
+export const DESIGN_MODE_PROMPT = `You are a world-class UI designer. Output ONLY valid JSON.
+
+FORMAT: {"createNewPage":false,"pageName":"","elements":[...]}
+
+STYLE PALETTES:
+- DARK: bg=#000000, surface=#1c1c1c, accent=#CAE8BD, text=#ffffff, textMuted=rgba(255,255,255,0.5)
+- LIGHT: bg=#F8F6F3, surface=#EBE9E4, accent=#FF5900, primary=#001666, text=#2A3132
+- GRADIENT: linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+
+ICONS: Zap, Rocket, Star, Shield, Heart, ArrowRight, Check, Users, Globe, Mail, Phone, Play, Sparkles, Target, Award, TrendingUp, Lock, Eye, Bell, MessageCircle, Send, Download, Settings, Home, Search, Leaf, Box, Camera, Briefcase
+
+DESIGN TIPS:
+- Use gradients for backgrounds: "backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
+- Headlines: fontSize 48-72, fontWeight 700
+- Subtitles: fontSize 18-24, textMuted color
+- Use padding 60-100 and gap 24-40
+- Cards: borderRadius 16, padding 24, backgroundColor surface color
+- Buttons: borderRadius 50 for pill shape, padding 12-16
+
+HERO EXAMPLES:
+
+1) Gradient Centered:
+{"createNewPage":false,"pageName":"","elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","padding":80,"gap":32,"backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)","minHeight":600},"children":[{"type":"text","name":"Title","content":"Build Something Amazing","styles":{"fontSize":64,"fontWeight":700,"color":"#ffffff","textAlign":"center"}},{"type":"text","name":"Subtitle","content":"Create beautiful experiences","styles":{"fontSize":20,"color":"rgba(255,255,255,0.8)","textAlign":"center"}},{"type":"button","name":"CTA","content":"Get Started","styles":{"backgroundColor":"#ffffff","color":"#764ba2","fontSize":16,"fontWeight":600,"padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}]}
+
+2) Dark Minimal:
+{"createNewPage":false,"pageName":"","elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"flex-start","padding":80,"gap":32,"backgroundColor":"#000000","minHeight":600},"children":[{"type":"text","name":"Title","content":"Design. Build. Launch.","styles":{"fontSize":72,"fontWeight":700,"color":"#ffffff"}},{"type":"text","name":"Subtitle","content":"Creating visual identities that make your brand memorable.","styles":{"fontSize":18,"color":"rgba(255,255,255,0.5)"}},{"type":"button","name":"CTA","content":"Book a call","styles":{"backgroundColor":"#CAE8BD","color":"#000000","padding":14,"paddingLeft":28,"paddingRight":28,"borderRadius":50}}]}]}
+
+CARD EXAMPLES:
+
+1) Project Card:
+{"type":"frame","name":"Card","styles":{"display":"flex","flexDirection":"column","gap":16,"padding":12,"backgroundColor":"#EBE9E4","borderRadius":16},"children":[{"type":"image","name":"Cover","src":"https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=600","styles":{"borderRadius":8,"aspectRatio":"4/3","objectFit":"cover"}},{"type":"text","name":"Title","content":"Project Name","styles":{"fontSize":18,"fontWeight":600,"color":"#2A3132"}},{"type":"text","name":"Desc","content":"Brief description","styles":{"fontSize":14,"color":"#767D7E"}},{"type":"frame","name":"Badge","styles":{"backgroundColor":"#2A3132","padding":6,"paddingLeft":14,"paddingRight":14,"borderRadius":20},"children":[{"type":"text","content":"Design","styles":{"fontSize":12,"color":"#F8F6F3"}}]}]}
+
+2) Service Card Dark:
+{"type":"frame","name":"Service","styles":{"display":"flex","flexDirection":"column","gap":16,"padding":24,"backgroundColor":"#1c1c1c","borderRadius":16},"children":[{"type":"row","styles":{"display":"flex","justifyContent":"space-between","alignItems":"center"},"children":[{"type":"text","content":"01.","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}},{"type":"frame","styles":{"backgroundColor":"#141414","borderRadius":50,"padding":12},"children":[{"type":"icon","iconName":"Leaf","styles":{"color":"#CAE8BD"}}]}]},{"type":"text","content":"Branding","styles":{"fontSize":18,"fontWeight":600,"color":"#ffffff"}},{"type":"text","content":"Creating visual identities","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]}
+
+SECTION EXAMPLES:
+
+1) Features Grid:
+{"type":"section","name":"Features","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":48,"backgroundColor":"#000000"},"children":[{"type":"text","name":"Title","content":"Our Services","styles":{"fontSize":32,"fontWeight":600,"color":"#ffffff"}},{"type":"grid","name":"Grid","styles":{"display":"grid","gridTemplateColumns":"repeat(4, 1fr)","gap":24},"children":[...service cards]}]}
+
+2) CTA Section:
+{"type":"section","name":"CTA","styles":{"display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","padding":120,"gap":32,"backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)"},"children":[{"type":"text","content":"Let's Work Together","styles":{"fontSize":48,"fontWeight":700,"color":"#ffffff","textAlign":"center"}},{"type":"text","content":"Have a project in mind?","styles":{"fontSize":18,"color":"rgba(255,255,255,0.8)"}},{"type":"button","content":"Get in Touch","styles":{"backgroundColor":"#ffffff","color":"#764ba2","padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}
+
+TESTIMONIAL:
+{"type":"frame","name":"Testimonial","styles":{"display":"flex","flexDirection":"column","gap":16,"padding":24,"backgroundColor":"#141414","borderRadius":16},"children":[{"type":"row","styles":{"display":"flex","alignItems":"center","gap":12},"children":[{"type":"image","src":"https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=96","styles":{"borderRadius":50}},{"type":"stack","styles":{"gap":4},"children":[{"type":"text","content":"Sarah Chen","styles":{"fontSize":14,"fontWeight":500,"color":"#ffffff"}},{"type":"text","content":"@sarahchen","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]}]},{"type":"text","content":"Amazing work! Exceeded expectations.","styles":{"fontSize":14,"color":"#ffffff","lineHeight":1.6}}]}
+
+PRICING:
+{"type":"frame","name":"Pricing","styles":{"display":"flex","flexDirection":"column","gap":24,"padding":24,"backgroundColor":"#141414","borderRadius":16},"children":[{"type":"stack","styles":{"gap":8},"children":[{"type":"text","content":"Pro Plan","styles":{"fontSize":18,"fontWeight":600,"color":"#ffffff"}},{"type":"text","content":"For growing businesses","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]},{"type":"row","styles":{"alignItems":"baseline","gap":4},"children":[{"type":"text","content":"$49","styles":{"fontSize":32,"fontWeight":600,"color":"#ffffff"}},{"type":"text","content":"/month","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]},{"type":"button","content":"Get Started","styles":{"backgroundColor":"#CAE8BD","color":"#000000","padding":14,"borderRadius":50,"textAlign":"center"}}]}
+
+Output ONLY valid JSON, no explanatory text.`;
+
+/**
+ * Format design tokens for AI context
+ */
+export function formatDesignTokensForAI(tokens: {
+  colors: Array<{ id: string; name: string; value: string; group?: string }>;
+  radii: Array<{ id: string; name: string; value: number }>;
+  spacing: Array<{ id: string; name: string; value: number }>;
+}): string {
+  const brandColors = tokens.colors.filter(c => c.group === 'brand');
+
+  if (brandColors.length === 0) return '';
+
+  return `
+BRAND COLORS (use for accents, buttons, highlights):
+${brandColors.map(c => `- ${c.name}: "${c.value}"`).join('\n')}
+`;
+}
+
+/**
  * Get the system prompt with optional context
  */
 export function getSystemPrompt(options?: {
+  mode?: 'design' | 'code';
   projectFiles?: string;
+  designTokens?: {
+    colors: Array<{ id: string; name: string; value: string; group?: string }>;
+    radii: Array<{ id: string; name: string; value: number }>;
+    spacing: Array<{ id: string; name: string; value: number }>;
+  };
   selectedElement?: {
     componentName: string;
     className: string;
     filePath?: string;
   };
 }): string {
+  // Use design prompt for design mode
+  if (options?.mode === 'design') {
+    let prompt = DESIGN_MODE_PROMPT;
+
+    // Add design tokens context if provided
+    if (options.designTokens) {
+      prompt += '\n\n' + formatDesignTokensForAI(options.designTokens);
+    }
+
+    return prompt;
+  }
+
+  // Default to code mode with full system prompt
   let prompt = SYSTEM_PROMPT;
 
   if (options?.projectFiles) {

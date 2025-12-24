@@ -27,7 +27,7 @@ if (typeof window !== 'undefined') {
   });
 }
 
-// Section Component
+// Section Component (theme-aware)
 function Section({ title, children, defaultOpen = true, actions }: {
   title: string;
   children: React.ReactNode;
@@ -35,9 +35,12 @@ function Section({ title, children, defaultOpen = true, actions }: {
   actions?: React.ReactNode;
 }) {
   const [isOpen, setIsOpen] = useState(defaultOpen);
+  const canvasSettings = useCanvasStore(state => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
 
   return (
-    <div style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+    <div style={{ borderBottom: `1px solid ${colors.borderColor}` }}>
       <button
         onClick={() => setIsOpen(!isOpen)}
         style={{
@@ -48,7 +51,7 @@ function Section({ title, children, defaultOpen = true, actions }: {
           justifyContent: 'space-between',
           background: 'transparent',
           border: 'none',
-          color: '#a1a1aa',
+          color: colors.textSecondary,
           fontSize: 11,
           fontWeight: 600,
           textTransform: 'uppercase',
@@ -77,7 +80,7 @@ function Section({ title, children, defaultOpen = true, actions }: {
   );
 }
 
-// Input Field
+// Input Field (theme-aware)
 function InputField({
   label,
   value,
@@ -99,6 +102,10 @@ function InputField({
   step?: number;
   width?: number | string;
 }) {
+  const canvasSettings = useCanvasStore(state => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
+
   // Use local state for editing - allows free typing without immediate validation
   const [localValue, setLocalValue] = React.useState(String(value));
   const [isFocused, setIsFocused] = React.useState(false);
@@ -150,7 +157,7 @@ function InputField({
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width }}>
-      {label && <label style={{ width: 28, fontSize: 11, color: '#71717a', flexShrink: 0 }}>{label}</label>}
+      {label && <label style={{ width: 28, fontSize: 11, color: colors.textMuted, flexShrink: 0 }}>{label}</label>}
       <div style={{ flex: 1, position: 'relative', display: 'flex', alignItems: 'center' }}>
         <input
           type={inputType}
@@ -167,24 +174,24 @@ function InputField({
             width: '100%',
             padding: type === 'color' ? '2px' : '6px 8px',
             paddingRight: suffix ? 28 : 8,
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: colors.inputBg,
+            border: `1px solid ${colors.borderColor}`,
             borderRadius: 6,
             fontSize: 12,
-            color: '#e4e4e7',
+            color: colors.textPrimary,
             outline: 'none',
             height: type === 'color' ? 28 : 'auto',
           }}
         />
         {suffix && (
-          <span style={{ position: 'absolute', right: 8, fontSize: 10, color: '#52525b', pointerEvents: 'none' }}>{suffix}</span>
+          <span style={{ position: 'absolute', right: 8, fontSize: 10, color: colors.textDimmed, pointerEvents: 'none' }}>{suffix}</span>
         )}
       </div>
     </div>
   );
 }
 
-// Select Field
+// Select Field (theme-aware)
 function SelectField({
   label,
   value,
@@ -198,20 +205,24 @@ function SelectField({
   onChange: (value: string) => void;
   width?: number | string;
 }) {
+  const canvasSettings = useCanvasStore(state => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
+
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8, width }}>
-      {label && <label style={{ width: 28, fontSize: 11, color: '#71717a', flexShrink: 0 }}>{label}</label>}
+      {label && <label style={{ width: 28, fontSize: 11, color: colors.textMuted, flexShrink: 0 }}>{label}</label>}
       <select
         value={value}
         onChange={(e) => onChange(e.target.value)}
         style={{
           flex: 1,
           padding: '6px 8px',
-          background: 'rgba(255, 255, 255, 0.04)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: colors.inputBg,
+          border: `1px solid ${colors.borderColor}`,
           borderRadius: 6,
           fontSize: 12,
-          color: '#e4e4e7',
+          color: colors.textPrimary,
           outline: 'none',
           cursor: 'pointer',
         }}
@@ -226,7 +237,7 @@ function SelectField({
   );
 }
 
-// Toggle Button Group
+// Toggle Button Group (theme-aware)
 function ToggleGroup({
   options,
   value,
@@ -236,8 +247,12 @@ function ToggleGroup({
   value: string;
   onChange: (value: string) => void;
 }) {
+  const canvasSettings = useCanvasStore(state => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
+
   return (
-    <div style={{ display: 'flex', gap: 2, background: 'rgba(255, 255, 255, 0.04)', borderRadius: 6, padding: 2 }}>
+    <div style={{ display: 'flex', gap: 2, background: colors.inputBg, borderRadius: 6, padding: 2 }}>
       {options.map((opt) => (
         <button
           key={opt.value}
@@ -249,10 +264,10 @@ function ToggleGroup({
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: value === opt.value ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+            background: value === opt.value ? colors.activeBg : 'transparent',
             border: 'none',
             borderRadius: 4,
-            color: value === opt.value ? '#fff' : '#71717a',
+            color: value === opt.value ? colors.textPrimary : colors.textMuted,
             cursor: 'pointer',
             transition: 'all 0.15s',
           }}
@@ -306,7 +321,7 @@ const COLOR_PRESETS = [
   '#eab308', '#f97316', '#ef4444', '#78716c', '#64748b', '#6b7280',
 ];
 
-// Advanced Color Input with picker
+// Advanced Color Input with picker (theme-aware)
 function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpacityChange }: {
   value: string;
   onChange: (v: string) => void;
@@ -314,6 +329,10 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
   opacity?: number;
   onOpacityChange?: (v: number) => void;
 }) {
+  const canvasSettings = useCanvasStore(state => state.canvasSettings);
+  const theme = canvasSettings?.editorTheme || 'dark';
+  const colors = THEME_COLORS[theme];
+
   const [isExpanded, setIsExpanded] = useState(false);
   const [inputMode, setInputMode] = useState<'hex' | 'rgb' | 'hsl'>('hex');
 
@@ -322,9 +341,9 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
   const hsl = rgbToHsl(rgb.r, rgb.g, rgb.b);
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, position: 'relative' }}>
       {/* Main row: Color swatch + Hex input */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, position: 'relative' }}>
         {/* Color swatch with expand toggle */}
         <button
           onClick={() => setIsExpanded(!isExpanded)}
@@ -332,7 +351,7 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
             width: 32,
             height: 32,
             padding: 0,
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            border: `1px solid ${colors.borderColor}`,
             borderRadius: 6,
             cursor: 'pointer',
             background: colorValue,
@@ -344,7 +363,7 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
           <div style={{
             position: 'absolute',
             inset: 0,
-            background: 'linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.08) 75%), linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.08) 75%)',
+            background: `linear-gradient(45deg, ${colors.borderColor} 25%, transparent 25%, transparent 75%, ${colors.borderColor} 75%), linear-gradient(45deg, ${colors.borderColor} 25%, transparent 25%, transparent 75%, ${colors.borderColor} 75%)`,
             backgroundSize: '8px 8px',
             backgroundPosition: '0 0, 4px 4px',
             zIndex: 0,
@@ -361,7 +380,7 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
             height="8"
             viewBox="0 0 24 24"
             fill="none"
-            stroke="rgba(255,255,255,0.5)"
+            stroke={colors.textDimmed}
             strokeWidth="2"
             style={{ position: 'absolute', right: 2, bottom: 2, zIndex: 2 }}
           >
@@ -388,48 +407,48 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
           style={{
             flex: 1,
             padding: '6px 8px',
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: colors.inputBg,
+            border: `1px solid ${colors.borderColor}`,
             borderRadius: 6,
             fontSize: 12,
-            color: '#e4e4e7',
+            color: colors.textPrimary,
             outline: 'none',
             fontFamily: 'ui-monospace, monospace',
             textTransform: 'uppercase',
           }}
         />
 
-        {/* Native color picker (hidden, triggered by swatch) */}
-        <input
-          type="color"
-          value={colorValue}
-          onChange={(e) => onChange(e.target.value)}
-          style={{
-            width: 0,
-            height: 0,
-            padding: 0,
-            border: 'none',
-            opacity: 0,
-            position: 'absolute',
-          }}
-          id={`color-picker-${value}`}
-        />
+        {/* Native color picker button */}
         <label
-          htmlFor={`color-picker-${value}`}
           style={{
             width: 28,
             height: 28,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            background: 'rgba(255, 255, 255, 0.04)',
-            border: '1px solid rgba(255, 255, 255, 0.08)',
+            background: colors.inputBg,
+            border: `1px solid ${colors.borderColor}`,
             borderRadius: 6,
             cursor: 'pointer',
+            position: 'relative',
+            overflow: 'hidden',
           }}
           title="Color picker"
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="1.5">
+          <input
+            type="color"
+            value={colorValue}
+            onChange={(e) => onChange(e.target.value)}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              width: '100%',
+              height: '100%',
+              opacity: 0,
+              cursor: 'pointer',
+            }}
+          />
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke={colors.textMuted} strokeWidth="1.5" style={{ pointerEvents: 'none' }}>
             <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83" />
           </svg>
         </label>
@@ -438,8 +457,8 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
       {/* Expanded panel */}
       {isExpanded && (
         <div style={{
-          background: 'rgba(255, 255, 255, 0.04)',
-          border: '1px solid rgba(255, 255, 255, 0.08)',
+          background: colors.inputBg,
+          border: `1px solid ${colors.borderColor}`,
           borderRadius: 8,
           padding: 10,
           display: 'flex',
@@ -447,7 +466,7 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
           gap: 10,
         }}>
           {/* Mode tabs */}
-          <div style={{ display: 'flex', gap: 2, background: 'rgba(255, 255, 255, 0.02)', borderRadius: 6, padding: 2 }}>
+          <div style={{ display: 'flex', gap: 2, background: colors.hoverBg, borderRadius: 6, padding: 2 }}>
             {(['hex', 'rgb', 'hsl'] as const).map((mode) => (
               <button
                 key={mode}
@@ -458,10 +477,10 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
                   fontSize: 10,
                   fontWeight: 600,
                   textTransform: 'uppercase',
-                  background: inputMode === mode ? 'rgba(255, 255, 255, 0.08)' : 'transparent',
+                  background: inputMode === mode ? colors.activeBg : 'transparent',
                   border: 'none',
                   borderRadius: 4,
-                  color: inputMode === mode ? '#fff' : '#52525b',
+                  color: inputMode === mode ? colors.textPrimary : colors.textDimmed,
                   cursor: 'pointer',
                 }}
               >
@@ -479,7 +498,7 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
                 { label: 'B', value: rgb.b, color: '#8B1E2B' },
               ].map(({ label, value: v, color }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ width: 14, fontSize: 10, color: '#52525b', fontWeight: 600 }}>{label}</span>
+                  <span style={{ width: 14, fontSize: 10, color: colors.textDimmed, fontWeight: 600 }}>{label}</span>
                   <input
                     type="range"
                     min={0}
@@ -512,11 +531,11 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
                     style={{
                       width: 40,
                       padding: '2px 4px',
-                      background: 'rgba(255, 255, 255, 0.02)',
-                      border: '1px solid rgba(255, 255, 255, 0.08)',
+                      background: colors.hoverBg,
+                      border: `1px solid ${colors.borderColor}`,
                       borderRadius: 4,
                       fontSize: 11,
-                      color: '#a1a1aa',
+                      color: colors.textSecondary,
                       textAlign: 'center',
                       outline: 'none',
                     }}
@@ -530,16 +549,16 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
           {inputMode === 'hsl' && (
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#52525b', marginBottom: 2 }}>H</div>
-                <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: 'monospace' }}>{hsl.h}°</div>
+                <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 2 }}>H</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary, fontFamily: 'monospace' }}>{hsl.h}°</div>
               </div>
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#52525b', marginBottom: 2 }}>S</div>
-                <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: 'monospace' }}>{hsl.s}%</div>
+                <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 2 }}>S</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary, fontFamily: 'monospace' }}>{hsl.s}%</div>
               </div>
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#52525b', marginBottom: 2 }}>L</div>
-                <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: 'monospace' }}>{hsl.l}%</div>
+                <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 2 }}>L</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary, fontFamily: 'monospace' }}>{hsl.l}%</div>
               </div>
             </div>
           )}
@@ -548,16 +567,16 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
           {inputMode === 'hex' && (
             <div style={{ display: 'flex', gap: 8 }}>
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#52525b', marginBottom: 2 }}>R</div>
-                <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: 'monospace' }}>{rgb.r}</div>
+                <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 2 }}>R</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary, fontFamily: 'monospace' }}>{rgb.r}</div>
               </div>
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#52525b', marginBottom: 2 }}>G</div>
-                <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: 'monospace' }}>{rgb.g}</div>
+                <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 2 }}>G</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary, fontFamily: 'monospace' }}>{rgb.g}</div>
               </div>
               <div style={{ flex: 1, textAlign: 'center' }}>
-                <div style={{ fontSize: 10, color: '#52525b', marginBottom: 2 }}>B</div>
-                <div style={{ fontSize: 13, color: '#a1a1aa', fontFamily: 'monospace' }}>{rgb.b}</div>
+                <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 2 }}>B</div>
+                <div style={{ fontSize: 13, color: colors.textSecondary, fontFamily: 'monospace' }}>{rgb.b}</div>
               </div>
             </div>
           )}
@@ -565,13 +584,13 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
           {/* Opacity slider (if enabled) */}
           {showOpacity && onOpacityChange && (
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              <span style={{ width: 14, fontSize: 10, color: '#52525b', fontWeight: 600 }}>A</span>
+              <span style={{ width: 14, fontSize: 10, color: colors.textDimmed, fontWeight: 600 }}>A</span>
               <div style={{ flex: 1, position: 'relative', height: 12 }}>
                 {/* Checkerboard background */}
                 <div style={{
                   position: 'absolute',
                   inset: 0,
-                  background: 'linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.08) 75%), linear-gradient(45deg, rgba(255, 255, 255, 0.08) 25%, transparent 25%, transparent 75%, rgba(255, 255, 255, 0.08) 75%)',
+                  background: `linear-gradient(45deg, ${colors.borderColor} 25%, transparent 25%, transparent 75%, ${colors.borderColor} 75%), linear-gradient(45deg, ${colors.borderColor} 25%, transparent 25%, transparent 75%, ${colors.borderColor} 75%)`,
                   backgroundSize: '6px 6px',
                   backgroundPosition: '0 0, 3px 3px',
                   borderRadius: 2,
@@ -602,11 +621,11 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
                 style={{
                   width: 40,
                   padding: '2px 4px',
-                  background: 'rgba(255, 255, 255, 0.02)',
-                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  background: colors.hoverBg,
+                  border: `1px solid ${colors.borderColor}`,
                   borderRadius: 4,
                   fontSize: 11,
-                  color: '#a1a1aa',
+                  color: colors.textSecondary,
                   textAlign: 'center',
                   outline: 'none',
                 }}
@@ -616,7 +635,7 @@ function ColorInput({ value, onChange, showOpacity = false, opacity = 1, onOpaci
 
           {/* Preset colors */}
           <div>
-            <div style={{ fontSize: 10, color: '#52525b', marginBottom: 6, fontWeight: 500 }}>Presets</div>
+            <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 6, fontWeight: 500 }}>Presets</div>
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(9, 1fr)', gap: 4 }}>
               {COLOR_PRESETS.map((preset) => (
                 <button
@@ -686,7 +705,7 @@ const BLEND_MODES = [
 ];
 
 export function PropertiesPanel() {
-  const { selectedElementIds, elements, updateElementStyles, resizeElement, moveElement, renameElement, canvasSettings } = useCanvasStore();
+  const { selectedElementIds, elements, updateElementStyles, resizeElement, moveElement, renameElement, canvasSettings, pages, currentPageId, updatePage, showPageSettings } = useCanvasStore();
 
   // Theme
   const theme = canvasSettings?.editorTheme || 'dark';
@@ -694,6 +713,153 @@ export function PropertiesPanel() {
 
   // Get selected element
   const selectedElement = selectedElementIds.length === 1 ? elements[selectedElementIds[0]] : null;
+
+  // Get current page for page settings
+  const currentPage = pages[currentPageId];
+
+  // Show page settings when explicitly requested (clicked page header) and no element is selected
+  if (showPageSettings && !selectedElement && currentPage) {
+    return (
+      <div
+        style={{
+          width: '100%',
+          height: '100%',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          background: 'transparent',
+        }}
+      >
+        {/* Page Header */}
+        <div
+          style={{
+            padding: '12px',
+            borderBottom: `1px solid ${colors.borderColor}`,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+          }}
+        >
+          <div
+            style={{
+              width: 28,
+              height: 28,
+              borderRadius: 6,
+              background: colors.accent,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
+              <rect x="3" y="3" width="18" height="18" rx="2" />
+              <path d="M3 9h18" />
+            </svg>
+          </div>
+          <div style={{ flex: 1 }}>
+            <input
+              type="text"
+              value={currentPage.name}
+              onChange={(e) => updatePage(currentPageId, { name: e.target.value })}
+              style={{
+                width: '100%',
+                padding: '4px 8px',
+                background: 'transparent',
+                border: '1px solid transparent',
+                borderRadius: 4,
+                fontSize: 13,
+                fontWeight: 600,
+                color: colors.textPrimary,
+                outline: 'none',
+              }}
+              onFocus={(e) => { e.target.style.borderColor = colors.borderColor; }}
+              onBlur={(e) => { e.target.style.borderColor = 'transparent'; }}
+            />
+            <div style={{ fontSize: 11, color: colors.textDimmed, paddingLeft: 8 }}>Page</div>
+          </div>
+        </div>
+
+        {/* Page Size */}
+        <Section title="Page Size">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <InputField
+                label="W"
+                value={currentPage.width}
+                onChange={(v) => updatePage(currentPageId, { width: parseInt(v) || 1920 })}
+                type="number"
+                suffix="px"
+                min={100}
+              />
+              <InputField
+                label="H"
+                value={currentPage.height}
+                onChange={(v) => updatePage(currentPageId, { height: parseInt(v) || 1080 })}
+                type="number"
+                suffix="px"
+                min={100}
+              />
+            </div>
+
+            {/* Presets */}
+            <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>Presets</div>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {[
+                { name: 'Desktop', w: 1920, h: 1080 },
+                { name: 'Laptop', w: 1440, h: 900 },
+                { name: 'Tablet', w: 768, h: 1024 },
+                { name: 'Mobile', w: 375, h: 812 },
+                { name: 'A4', w: 595, h: 842 },
+                { name: 'Square', w: 1080, h: 1080 },
+              ].map((preset) => (
+                <button
+                  key={preset.name}
+                  onClick={() => updatePage(currentPageId, { width: preset.w, height: preset.h })}
+                  style={{
+                    padding: '4px 8px',
+                    fontSize: 10,
+                    fontWeight: 500,
+                    color: currentPage.width === preset.w && currentPage.height === preset.h ? colors.textPrimary : colors.textMuted,
+                    background: currentPage.width === preset.w && currentPage.height === preset.h ? colors.accentLight : colors.inputBg,
+                    border: `1px solid ${currentPage.width === preset.w && currentPage.height === preset.h ? colors.accent : colors.borderColor}`,
+                    borderRadius: 4,
+                    cursor: 'pointer',
+                  }}
+                >
+                  {preset.name}
+                </button>
+              ))}
+            </div>
+          </div>
+        </Section>
+
+        {/* Page Background */}
+        <Section title="Background">
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            <ColorInput
+              value={currentPage.backgroundColor || '#ffffff'}
+              onChange={(v) => updatePage(currentPageId, { background: v })}
+            />
+          </div>
+        </Section>
+
+        {/* Page Info */}
+        <Section title="Info" defaultOpen={false}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 11 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: colors.textMuted }}>ID</span>
+              <span style={{ color: colors.textDimmed, fontFamily: 'monospace' }}>{currentPageId.slice(0, 12)}...</span>
+            </div>
+            <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+              <span style={{ color: colors.textMuted }}>Elements</span>
+              <span style={{ color: colors.textPrimary }}>{Object.keys(elements).length}</span>
+            </div>
+          </div>
+        </Section>
+      </div>
+    );
+  }
 
   if (!selectedElement) {
     return (
@@ -773,7 +939,7 @@ export function PropertiesPanel() {
       }}
     >
       {/* Header */}
-      <div style={{ padding: '12px 12px 8px', borderBottom: '1px solid rgba(255,255,255,0.06)' }}>
+      <div style={{ padding: '12px 12px 8px', borderBottom: `1px solid ${colors.borderColor}` }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
           <div
             style={{
@@ -783,7 +949,7 @@ export function PropertiesPanel() {
               alignItems: 'center',
               justifyContent: 'center',
               borderRadius: 6,
-              background: '#A83248',
+              background: colors.accent,
             }}
           >
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2">
@@ -816,14 +982,14 @@ export function PropertiesPanel() {
               borderRadius: 4,
               fontSize: 13,
               fontWeight: 600,
-              color: '#fff',
+              color: colors.textPrimary,
               outline: 'none',
             }}
-            onFocus={(e) => (e.target.style.borderColor = '#A83248')}
+            onFocus={(e) => (e.target.style.borderColor = colors.accent)}
             onBlur={(e) => (e.target.style.borderColor = 'transparent')}
           />
         </div>
-        <div style={{ fontSize: 11, color: '#52525b', textTransform: 'capitalize' }}>{selectedElement.type}</div>
+        <div style={{ fontSize: 11, color: colors.textDimmed, textTransform: 'capitalize' }}>{selectedElement.type}</div>
       </div>
 
       {/* Position & Size */}
@@ -2149,12 +2315,92 @@ export function PropertiesPanel() {
               label="Font"
               value={styles.fontFamily || 'Inter'}
               options={[
+                // Popular Sans-Serif
                 { value: 'Inter', label: 'Inter' },
-                { value: 'system-ui', label: 'System' },
+                { value: 'Roboto, sans-serif', label: 'Roboto' },
+                { value: 'Open Sans, sans-serif', label: 'Open Sans' },
+                { value: 'Lato, sans-serif', label: 'Lato' },
+                { value: 'Montserrat, sans-serif', label: 'Montserrat' },
+                { value: 'Poppins, sans-serif', label: 'Poppins' },
+                { value: 'Raleway, sans-serif', label: 'Raleway' },
+                { value: 'Nunito, sans-serif', label: 'Nunito' },
+                { value: 'Work Sans, sans-serif', label: 'Work Sans' },
+                { value: 'DM Sans, sans-serif', label: 'DM Sans' },
+                { value: 'Source Sans 3, sans-serif', label: 'Source Sans' },
+                { value: 'Ubuntu, sans-serif', label: 'Ubuntu' },
+                { value: 'Quicksand, sans-serif', label: 'Quicksand' },
+                { value: 'Plus Jakarta Sans, sans-serif', label: 'Plus Jakarta Sans' },
+                { value: 'Figtree, sans-serif', label: 'Figtree' },
+                { value: 'Rubik, sans-serif', label: 'Rubik' },
+                { value: 'Karla, sans-serif', label: 'Karla' },
+                { value: 'Barlow, sans-serif', label: 'Barlow' },
+                { value: 'Cabin, sans-serif', label: 'Cabin' },
+                { value: 'Mulish, sans-serif', label: 'Mulish' },
+                { value: 'Josefin Sans, sans-serif', label: 'Josefin Sans' },
+                { value: 'Catamaran, sans-serif', label: 'Catamaran' },
+                { value: 'Exo 2, sans-serif', label: 'Exo 2' },
+                { value: 'Titillium Web, sans-serif', label: 'Titillium Web' },
+                { value: 'Kanit, sans-serif', label: 'Kanit' },
+                { value: 'Noto Sans, sans-serif', label: 'Noto Sans' },
+                { value: 'IBM Plex Sans, sans-serif', label: 'IBM Plex Sans' },
+                // Modern Sans-Serif
+                { value: 'Space Grotesk, sans-serif', label: 'Space Grotesk' },
+                { value: 'Outfit, sans-serif', label: 'Outfit' },
+                { value: 'Sora, sans-serif', label: 'Sora' },
+                { value: 'Manrope, sans-serif', label: 'Manrope' },
+                { value: 'Archivo, sans-serif', label: 'Archivo' },
+                { value: 'Lexend, sans-serif', label: 'Lexend' },
+                { value: 'Albert Sans, sans-serif', label: 'Albert Sans' },
+                { value: 'Red Hat Display, sans-serif', label: 'Red Hat Display' },
+                { value: 'Jost, sans-serif', label: 'Jost' },
+                // Display & Headlines
+                { value: 'Oswald, sans-serif', label: 'Oswald' },
+                { value: 'Bebas Neue, sans-serif', label: 'Bebas Neue' },
+                { value: 'Righteous, cursive', label: 'Righteous' },
+                { value: 'Abril Fatface, serif', label: 'Abril Fatface' },
+                { value: 'Cinzel, serif', label: 'Cinzel' },
+                { value: 'Impact, sans-serif', label: 'Impact' },
+                // Handwriting & Script
+                { value: 'Pacifico, cursive', label: 'Pacifico' },
+                { value: 'Lobster, cursive', label: 'Lobster' },
+                { value: 'Dancing Script, cursive', label: 'Dancing Script' },
+                { value: 'Caveat, cursive', label: 'Caveat' },
+                { value: 'Permanent Marker, cursive', label: 'Permanent Marker' },
+                { value: 'Shadows Into Light, cursive', label: 'Shadows Into Light' },
+                { value: 'Indie Flower, cursive', label: 'Indie Flower' },
+                { value: 'Amatic SC, cursive', label: 'Amatic SC' },
+                // Serif
+                { value: 'Playfair Display, serif', label: 'Playfair Display' },
+                { value: 'Merriweather, serif', label: 'Merriweather' },
+                { value: 'Bitter, serif', label: 'Bitter' },
+                { value: 'Crimson Text, serif', label: 'Crimson Text' },
+                { value: 'Libre Baskerville, serif', label: 'Libre Baskerville' },
+                { value: 'Cormorant Garamond, serif', label: 'Cormorant' },
+                { value: 'EB Garamond, serif', label: 'EB Garamond' },
+                { value: 'Spectral, serif', label: 'Spectral' },
+                { value: 'Lora, serif', label: 'Lora' },
+                { value: 'Vollkorn, serif', label: 'Vollkorn' },
+                { value: 'Noto Serif, serif', label: 'Noto Serif' },
+                { value: 'IBM Plex Serif, serif', label: 'IBM Plex Serif' },
                 { value: 'Georgia, serif', label: 'Georgia' },
-                { value: 'ui-monospace, monospace', label: 'Mono' },
-                { value: 'Helvetica, Arial, sans-serif', label: 'Helvetica' },
                 { value: 'Times New Roman, serif', label: 'Times' },
+                { value: 'Palatino Linotype, serif', label: 'Palatino' },
+                // Monospace
+                { value: 'Fira Code, monospace', label: 'Fira Code' },
+                { value: 'JetBrains Mono, monospace', label: 'JetBrains Mono' },
+                { value: 'Space Mono, monospace', label: 'Space Mono' },
+                { value: 'IBM Plex Mono, monospace', label: 'IBM Plex Mono' },
+                { value: 'Roboto Mono, monospace', label: 'Roboto Mono' },
+                { value: 'Source Code Pro, monospace', label: 'Source Code Pro' },
+                { value: 'Inconsolata, monospace', label: 'Inconsolata' },
+                { value: 'Courier New, monospace', label: 'Courier' },
+                { value: 'ui-monospace, monospace', label: 'Mono' },
+                // System
+                { value: 'system-ui', label: 'System' },
+                { value: 'Arial, sans-serif', label: 'Arial' },
+                { value: 'Helvetica, Arial, sans-serif', label: 'Helvetica' },
+                { value: 'Verdana, sans-serif', label: 'Verdana' },
+                { value: 'Tahoma, sans-serif', label: 'Tahoma' },
               ]}
               onChange={(v) => updateStyle('fontFamily', v)}
             />

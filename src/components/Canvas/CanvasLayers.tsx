@@ -391,7 +391,7 @@ function LayerItem({
 }
 
 export function CanvasLayers() {
-  const { pages, elements, currentPageId, addPage, setCurrentPage, reparentElement } = useCanvasStore();
+  const { pages, elements, currentPageId, addPage, setCurrentPage, reorderElement } = useCanvasStore();
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dropTarget, setDropTarget] = useState<{ id: string; position: 'inside' | 'before' | 'after' } | null>(null);
 
@@ -416,62 +416,8 @@ export function CanvasLayers() {
   const handleDrop = (targetId: string, position: 'inside' | 'before' | 'after') => {
     if (!draggedId || draggedId === targetId) return;
 
-    const draggedElement = elements[draggedId];
-    const targetElement = elements[targetId];
-
-    if (!draggedElement || !targetElement) return;
-
-    // Prevent dropping parent into child
-    const isDescendant = (parentId: string, childId: string): boolean => {
-      const parent = elements[parentId];
-      if (!parent) return false;
-      if (parent.children.includes(childId)) return true;
-      return parent.children.some(id => isDescendant(id, childId));
-    };
-
-    if (isDescendant(draggedId, targetId)) {
-      console.warn('Cannot drop parent into its own child');
-      handleDragEnd();
-      return;
-    }
-
-    if (position === 'inside') {
-      // Drop inside target (reparent)
-      reparentElement(draggedId, targetId);
-    } else {
-      // Drop before/after target (reorder within same parent)
-      const targetParentId = targetElement.parentId;
-      if (!targetParentId) {
-        handleDragEnd();
-        return;
-      }
-
-      // First reparent to target's parent if different
-      if (draggedElement.parentId !== targetParentId) {
-        reparentElement(draggedId, targetParentId);
-      }
-
-      // Then reorder within parent
-      const parent = elements[targetParentId];
-      if (parent) {
-        const newChildren = [...parent.children.filter(id => id !== draggedId)];
-        const targetIndex = newChildren.indexOf(targetId);
-        const insertIndex = position === 'before' ? targetIndex : targetIndex + 1;
-        newChildren.splice(insertIndex, 0, draggedId);
-
-        // Update parent's children order
-        useCanvasStore.setState((state) => ({
-          elements: {
-            ...state.elements,
-            [targetParentId]: {
-              ...state.elements[targetParentId],
-              children: newChildren,
-            },
-          },
-        }));
-      }
-    }
-
+    // Use the store's reorderElement function which handles all the logic
+    reorderElement(draggedId, targetId, position);
     handleDragEnd();
   };
 
