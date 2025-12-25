@@ -55,6 +55,33 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
   const resizeElement = useCanvasStore((state) => state.resizeElement);
   const moveElement = useCanvasStore((state) => state.moveElement);
   const saveToHistory = useCanvasStore((state) => state.saveToHistory);
+  const reorderElement = useCanvasStore((state) => state.reorderElement);
+  const elements = useCanvasStore((state) => state.elements);
+
+  // Check if parent has auto-layout
+  const parent = element.parentId ? elements[element.parentId] : null;
+  const parentHasAutoLayout = parent && (parent.styles.display === 'flex' || parent.styles.display === 'grid');
+  const parentFlexDirection = parent?.styles.flexDirection || 'column';
+  const isVertical = parentFlexDirection === 'column' || parentFlexDirection === 'column-reverse';
+
+  // Get siblings for reorder
+  const siblings = parent ? parent.children : [];
+  const currentIndex = siblings.indexOf(element.id);
+  const canMoveUp = currentIndex > 0;
+  const canMoveDown = currentIndex < siblings.length - 1;
+
+  // Reorder handlers
+  const handleMoveUp = useCallback(() => {
+    if (!canMoveUp) return;
+    const targetId = siblings[currentIndex - 1];
+    reorderElement(element.id, targetId, 'before');
+  }, [canMoveUp, siblings, currentIndex, element.id, reorderElement]);
+
+  const handleMoveDown = useCallback(() => {
+    if (!canMoveDown) return;
+    const targetId = siblings[currentIndex + 1];
+    reorderElement(element.id, targetId, 'after');
+  }, [canMoveDown, siblings, currentIndex, element.id, reorderElement]);
 
   // AI: Remove Background
   const handleRemoveBackground = useCallback(async () => {
@@ -770,6 +797,93 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
         >
           {element.name}
         </div>
+
+        {/* Reorder buttons - only shown in auto-layout */}
+        {parentHasAutoLayout && (
+          <>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMoveUp();
+              }}
+              disabled={!canMoveUp}
+              style={{
+                width: 28,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: canMoveUp ? '#71717a' : '#3f3f46',
+                cursor: canMoveUp ? 'pointer' : 'not-allowed',
+                transition: 'all 0.15s',
+                opacity: canMoveUp ? 1 : 0.5,
+              }}
+              onMouseEnter={(e) => {
+                if (canMoveUp) {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.color = '#fff';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = canMoveUp ? '#71717a' : '#3f3f46';
+              }}
+              title={isVertical ? "Move Up" : "Move Left"}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {isVertical ? (
+                  <path d="M12 19V5M5 12l7-7 7 7" />
+                ) : (
+                  <path d="M19 12H5M12 5l-7 7 7 7" />
+                )}
+              </svg>
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleMoveDown();
+              }}
+              disabled={!canMoveDown}
+              style={{
+                width: 28,
+                height: 28,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: canMoveDown ? '#71717a' : '#3f3f46',
+                cursor: canMoveDown ? 'pointer' : 'not-allowed',
+                transition: 'all 0.15s',
+                opacity: canMoveDown ? 1 : 0.5,
+              }}
+              onMouseEnter={(e) => {
+                if (canMoveDown) {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.color = '#fff';
+                }
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = canMoveDown ? '#71717a' : '#3f3f46';
+              }}
+              title={isVertical ? "Move Down" : "Move Right"}
+            >
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                {isVertical ? (
+                  <path d="M12 5v14M5 12l7 7 7-7" />
+                ) : (
+                  <path d="M5 12h14M12 5l7 7-7 7" />
+                )}
+              </svg>
+            </button>
+            <div style={{ width: 1, height: 20, background: 'rgba(255, 255, 255, 0.08)', margin: '0 2px' }} />
+          </>
+        )}
 
         {/* Duplicate */}
         <button
