@@ -35,11 +35,15 @@ export interface DesignProject {
 export interface DesignTemplate {
   id: string;
   name: string;
+  type: string;
+  style: string | null;
+  tags: string[] | null;
   description: string | null;
-  thumbnail_url: string | null;
-  canvas_data: Record<string, any>;
-  category: string;
+  json_structure: Record<string, any>;
+  preview_url: string | null;
+  is_public: boolean;
   created_at: string;
+  updated_at: string;
 }
 
 // Database types for Supabase
