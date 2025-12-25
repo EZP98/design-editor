@@ -22,7 +22,7 @@ import { useWebContainer } from './lib/hooks/useWebContainer';
 import { useGit } from './lib/hooks/useGit';
 import { getWebContainer, createEditableViteProject } from './lib/webcontainer';
 import { useAgenticErrors, buildErrorContext } from './lib/hooks/useAgenticErrors';
-import { Canvas, CanvasSidebar, ComponentLibrary, PropertiesPanel } from './components/Canvas';
+import { Canvas, CanvasSidebar, ComponentLibrary, PropertiesPanel, CanvasPreview } from './components/Canvas';
 import { AIImagePlugin } from './components/Canvas/plugins';
 import { useCanvasStore, setCurrentProjectId, saveProjectToRecents, loadProjectCanvasState, saveProjectCanvasState, generateCanvasThumbnail } from './lib/canvas/canvasStore';
 import { generateProjectFiles } from './lib/canvas/codeGenerator';
@@ -969,6 +969,10 @@ const DesignEditor: React.FC = () => {
   const canvasSettings = useCanvasStore((state) => state.canvasSettings);
   const activeRightPanel = useCanvasStore((state) => state.activeRightPanel);
   const setActiveRightPanel = useCanvasStore((state) => state.setActiveRightPanel);
+  const showPageSettings = useCanvasStore((state) => state.showPageSettings);
+
+  // Determine if we should show the right panel in canvas mode
+  const shouldShowCanvasRightPanel = activeRightPanel === 'ai-image' || showPageSettings || canvasSelectedIds.length > 0;
 
   // Get theme colors
   const editorTheme = canvasSettings?.editorTheme || 'dark';
@@ -1905,6 +1909,7 @@ const DesignEditor: React.FC = () => {
         if (e.key === 'o') setTool('ellipse');
         if (e.key === 't') setTool('text');
         if (e.key === 'f') setTool('frame');
+        if (e.key === 'k') setShowComponentLibrary(prev => !prev);
       }
       // Toggle edit mode with 'e' key
       if (e.key === 'e' && !e.metaKey && !e.ctrlKey && webcontainerReady) {
@@ -3910,6 +3915,26 @@ const DesignEditor: React.FC = () => {
 
             <div className="de-toolbar-divider" />
 
+            {/* Component Library / Templates Button */}
+            <button
+              className={`de-tool-btn ${showComponentLibrary ? 'active' : ''}`}
+              onClick={() => setShowComponentLibrary(!showComponentLibrary)}
+              title="Templates & Components (K)"
+              style={{
+                background: showComponentLibrary ? 'rgba(139, 30, 43, 0.3)' : 'linear-gradient(135deg, rgba(139, 30, 43, 0.15) 0%, rgba(139, 30, 43, 0.05) 100%)',
+                border: '1px solid rgba(139, 30, 43, 0.3)',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <rect x="3" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="3" width="7" height="7" rx="1"/>
+                <rect x="14" y="14" width="7" height="7" rx="1"/>
+                <rect x="3" y="14" width="7" height="7" rx="1"/>
+              </svg>
+            </button>
+
+            <div className="de-toolbar-divider" />
+
             <div className="de-zoom-controls">
               <button className="de-zoom-btn" onClick={() => setZoom(z => Math.max(0.25, z - 0.25))} title="Zoom out (⌘-)">
                 −
@@ -4162,7 +4187,7 @@ Auth: Bearer
               )}
 
               {/* Right Panel - Properties or AI Image */}
-              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement) || isCanvasMode) && (
+              {(showPropertiesPanel || visualEditMode || selectedElement || (liveMode && selectedLiveElement) || (isCanvasMode && shouldShowCanvasRightPanel)) && (
               isCanvasMode ? (
                 /* Canvas Mode - Show PropertiesPanel or AIImagePlugin based on activeRightPanel */
                 <div
@@ -4733,35 +4758,42 @@ Find the component in the codebase and update the styles. If using Tailwind, con
               }}
             >
               {/* Render elements in preview mode (no selection, no handles) */}
-              {rootElements.map(el => {
-                const style: React.CSSProperties = {
-                  position: 'absolute',
-                  left: el.x,
-                  top: el.y,
-                  width: typeof el.width === 'number' ? el.width : 'auto',
-                  height: typeof el.height === 'number' ? el.height : 'auto',
-                  backgroundColor: el.fill,
-                  borderRadius: el.borderRadius,
-                  opacity: el.opacity,
-                  display: el.autoLayout ? 'flex' : undefined,
-                  flexDirection: el.autoLayout?.direction === 'horizontal' ? 'row' : 'column',
-                  gap: el.autoLayout?.gap,
-                  padding: el.autoLayout?.padding,
-                  alignItems: el.autoLayout?.alignItems,
-                  justifyContent: el.autoLayout?.justifyContent,
-                  flexWrap: el.autoLayout?.wrap ? 'wrap' : undefined,
-                };
+              {isCanvasMode ? (
+                <CanvasPreview
+                  breakpointId={currentBreakpoint}
+                  width={activeBreakpoint.width}
+                />
+              ) : (
+                rootElements.map(el => {
+                  const style: React.CSSProperties = {
+                    position: 'absolute',
+                    left: el.x,
+                    top: el.y,
+                    width: typeof el.width === 'number' ? el.width : 'auto',
+                    height: typeof el.height === 'number' ? el.height : 'auto',
+                    backgroundColor: el.fill,
+                    borderRadius: el.borderRadius,
+                    opacity: el.opacity,
+                    display: el.autoLayout ? 'flex' : undefined,
+                    flexDirection: el.autoLayout?.direction === 'horizontal' ? 'row' : 'column',
+                    gap: el.autoLayout?.gap,
+                    padding: el.autoLayout?.padding,
+                    alignItems: el.autoLayout?.alignItems,
+                    justifyContent: el.autoLayout?.justifyContent,
+                    flexWrap: el.autoLayout?.wrap ? 'wrap' : undefined,
+                  };
 
-                if (el.type === 'text') {
-                  return (
-                    <div key={el.id} style={{ ...style, color: el.textColor || '#000', fontSize: el.fontSize, fontWeight: el.fontWeight }}>
-                      {el.text || 'Text'}
-                    </div>
-                  );
-                }
+                  if (el.type === 'text') {
+                    return (
+                      <div key={el.id} style={{ ...style, color: el.textColor || '#000', fontSize: el.fontSize, fontWeight: el.fontWeight }}>
+                        {el.text || 'Text'}
+                      </div>
+                    );
+                  }
 
-                return <div key={el.id} style={style} />;
-              })}
+                  return <div key={el.id} style={style} />;
+                })
+              )}
             </div>
           </div>
         </div>

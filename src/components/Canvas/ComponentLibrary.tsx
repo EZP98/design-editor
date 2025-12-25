@@ -4,10 +4,11 @@
  * Beautiful Framer-style component picker that adds elements to the canvas.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
 import { ElementType } from '../../lib/canvas/types';
 import { IconPicker } from './IconPicker';
+import { fetchDesignTemplates, DesignTemplate } from '../../lib/canvas/templates/designTemplates';
 
 // ============================================================================
 // Component Definitions
@@ -23,6 +24,12 @@ interface ComponentDef {
 }
 
 const COMPONENT_CATEGORIES = [
+  {
+    id: 'templates',
+    name: 'Templates',
+    icon: <TemplatesIcon />,
+    components: [], // Loaded from Supabase
+  },
   {
     id: 'layout',
     name: 'Layout',
@@ -170,10 +177,28 @@ interface ComponentLibraryProps {
 }
 
 export function ComponentLibrary({ onClose }: ComponentLibraryProps) {
-  const [activeCategory, setActiveCategory] = useState('elements');
+  const [activeCategory, setActiveCategory] = useState('templates');
   const [search, setSearch] = useState('');
   const [showIconPicker, setShowIconPicker] = useState(false);
+  const [designTemplates, setDesignTemplates] = useState<DesignTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
   const addElement = useCanvasStore((state) => state.addElement);
+  const addElementsFromJSON = useCanvasStore((state) => state.addElementsFromJSON);
+
+  // Fetch templates from Supabase
+  useEffect(() => {
+    const loadTemplates = async () => {
+      setLoadingTemplates(true);
+      try {
+        const templates = await fetchDesignTemplates();
+        setDesignTemplates(templates);
+      } catch (err) {
+        console.error('Failed to load templates:', err);
+      }
+      setLoadingTemplates(false);
+    };
+    loadTemplates();
+  }, []);
 
   const handleAddComponent = (comp: ComponentDef) => {
     // Special handling for icons - open picker
@@ -201,6 +226,13 @@ export function ComponentLibrary({ onClose }: ComponentLibraryProps) {
       }));
     }
     setShowIconPicker(false);
+  };
+
+  const handleInsertTemplate = (template: DesignTemplate) => {
+    if (template.json_structure && addElementsFromJSON) {
+      addElementsFromJSON(template.json_structure);
+    }
+    onClose?.();
   };
 
   const activeComponents = COMPONENT_CATEGORIES.find((c) => c.id === activeCategory)?.components || [];
@@ -259,7 +291,54 @@ export function ComponentLibrary({ onClose }: ComponentLibraryProps) {
 
       {/* Components Grid */}
       <div style={styles.grid}>
-        {filteredComponents.map((comp) => (
+        {/* Templates from Supabase */}
+        {activeCategory === 'templates' && (
+          <>
+            {loadingTemplates ? (
+              <div style={{ gridColumn: '1 / -1', textAlign: 'center', padding: 20, color: '#666' }}>
+                Loading templates...
+              </div>
+            ) : (
+              designTemplates
+                .filter(t => !search || t.name.toLowerCase().includes(search.toLowerCase()))
+                .map((template) => (
+                <button
+                  key={template.id}
+                  onClick={() => handleInsertTemplate(template)}
+                  style={{
+                    ...styles.componentCard,
+                    background: 'linear-gradient(135deg, rgba(139, 30, 43, 0.1) 0%, rgba(139, 30, 43, 0.05) 100%)',
+                    borderColor: 'rgba(139, 30, 43, 0.2)',
+                  }}
+                  onMouseEnter={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(139, 30, 43, 0.5)';
+                    e.currentTarget.style.transform = 'translateY(-2px)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderColor = 'rgba(139, 30, 43, 0.2)';
+                    e.currentTarget.style.transform = 'translateY(0)';
+                  }}
+                >
+                  <div style={styles.previewWrapper}>
+                    <TemplatePreview type={template.type} />
+                  </div>
+                  <div style={styles.componentInfo}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 2 }}>
+                      <span style={{ fontSize: 9, padding: '2px 6px', background: 'rgba(139, 30, 43, 0.2)', color: '#a5b4fc', borderRadius: 4 }}>
+                        {template.type}
+                      </span>
+                    </div>
+                    <span style={styles.componentName}>{template.name}</span>
+                    <span style={styles.componentDesc}>{template.description}</span>
+                  </div>
+                </button>
+              ))
+            )}
+          </>
+        )}
+
+        {/* Regular Components */}
+        {activeCategory !== 'templates' && filteredComponents.map((comp) => (
           <button
             key={comp.id}
             onClick={() => handleAddComponent(comp)}
@@ -511,6 +590,47 @@ function CTAPreview() {
 // ============================================================================
 // Icons
 // ============================================================================
+
+function TemplatesIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 17l10 5 10-5" />
+      <path d="M2 12l10 5 10-5" />
+    </svg>
+  );
+}
+
+function TemplatePreview({ type }: { type: string }) {
+  const colors: Record<string, string> = {
+    hero: '#8B1E2B',
+    services: '#3B82F6',
+    pricing: '#10B981',
+    footer: '#6366F1',
+    cta: '#F59E0B',
+    features: '#EC4899',
+  };
+  const color = colors[type] || '#8B1E2B';
+
+  return (
+    <div style={{
+      width: 52,
+      height: 40,
+      background: `linear-gradient(135deg, ${color}33 0%, ${color}11 100%)`,
+      border: `1px solid ${color}44`,
+      borderRadius: 6,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 3,
+    }}>
+      <div style={{ width: 24, height: 4, background: color, borderRadius: 1, opacity: 0.8 }} />
+      <div style={{ width: 16, height: 2, background: color, borderRadius: 1, opacity: 0.5 }} />
+      <div style={{ width: 14, height: 6, background: color, borderRadius: 2, marginTop: 2, opacity: 0.9 }} />
+    </div>
+  );
+}
 
 function LayoutIcon() {
   return (

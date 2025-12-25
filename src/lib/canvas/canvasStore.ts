@@ -86,6 +86,7 @@ interface CanvasActions {
   // Element operations
   addElement: (type: ElementType, parentId?: string, position?: Position) => string;
   addBlock: (blockId: string, parentId?: string) => string;
+  addElementsFromJSON: (json: Record<string, unknown>, parentId?: string) => string;
   deleteElement: (elementId: string) => void;
   duplicateElement: (elementId: string) => void;
   moveElement: (elementId: string, position: Position) => void;
@@ -697,6 +698,86 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
     }));
 
     get().saveToHistory(`Add ${template.name} block`);
+    return rootId;
+  },
+
+  // Add elements from JSON structure (for design templates)
+  addElementsFromJSON: (json: Record<string, unknown>, parentId?: string) => {
+    const state = get();
+    const currentPage = state.pages[state.currentPageId];
+    if (!currentPage) return '';
+
+    const targetParentId = parentId || currentPage.rootElementId;
+    const parent = state.elements[targetParentId];
+    if (!parent) return '';
+
+    // Track all new elements
+    const newElements: Record<string, CanvasElement> = {};
+
+    // Helper to recursively create elements from JSON
+    const createElementFromJSON = (
+      node: Record<string, unknown>,
+      parentId: string,
+      isRoot: boolean = false
+    ): string => {
+      const id = generateId(String(node.type || 'frame'));
+      const type = String(node.type || 'frame') as ElementType;
+      const name = String(node.name || type);
+      const styles = (node.styles || {}) as Record<string, unknown>;
+      const content = node.content ? String(node.content) : undefined;
+      const src = node.src ? String(node.src) : undefined;
+
+      // Extract size from styles if present
+      const width = styles.width ? Number(styles.width) : (styles.minWidth ? Number(styles.minWidth) : 400);
+      const height = styles.height ? Number(styles.height) : (styles.minHeight ? Number(styles.minHeight) : 200);
+
+      const element: CanvasElement = {
+        id,
+        type,
+        name,
+        position: isRoot ? { x: 50, y: 50 } : { x: 0, y: 0 },
+        size: { width, height },
+        positionType: isRoot ? 'absolute' : 'relative',
+        styles: styles as ElementStyles,
+        content,
+        src,
+        parentId,
+        children: [],
+        locked: false,
+        visible: true,
+      };
+
+      newElements[id] = element;
+
+      // Recursively create children
+      const children = node.children as Record<string, unknown>[] | undefined;
+      if (children && Array.isArray(children)) {
+        for (const child of children) {
+          const childId = createElementFromJSON(child, id, false);
+          element.children.push(childId);
+        }
+      }
+
+      return id;
+    };
+
+    // Create the root element from JSON
+    const rootId = createElementFromJSON(json, targetParentId, true);
+
+    // Update state
+    set((state) => ({
+      elements: {
+        ...state.elements,
+        ...newElements,
+        [targetParentId]: {
+          ...state.elements[targetParentId],
+          children: [...state.elements[targetParentId].children, rootId],
+        },
+      },
+      selectedElementIds: [rootId],
+    }));
+
+    get().saveToHistory(`Add template`);
     return rootId;
   },
 
