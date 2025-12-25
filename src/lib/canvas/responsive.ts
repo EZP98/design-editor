@@ -103,6 +103,7 @@ interface ResponsiveStore {
   breakpoints: Breakpoint[];
   activeBreakpointId: string;
   previewMode: boolean; // When true, show responsive preview
+  multiBreakpointView: boolean; // When true, show all breakpoints side by side (like Figma Sites)
 
   // Breakpoint actions
   setActiveBreakpoint: (id: string) => void;
@@ -114,6 +115,10 @@ interface ResponsiveStore {
   // Preview mode
   setPreviewMode: (enabled: boolean) => void;
   togglePreviewMode: () => void;
+
+  // Multi-breakpoint view (Figma Sites style)
+  setMultiBreakpointView: (enabled: boolean) => void;
+  toggleMultiBreakpointView: () => void;
 
   // Helpers
   getActiveBreakpoint: () => Breakpoint;
@@ -132,6 +137,7 @@ export const useResponsiveStore = create<ResponsiveStore>()(
       breakpoints: DEFAULT_BREAKPOINTS,
       activeBreakpointId: 'desktop',
       previewMode: false,
+      multiBreakpointView: false,
 
       setActiveBreakpoint: (id) => {
         set({ activeBreakpointId: id });
@@ -185,6 +191,14 @@ export const useResponsiveStore = create<ResponsiveStore>()(
         set((state) => ({ previewMode: !state.previewMode }));
       },
 
+      setMultiBreakpointView: (enabled) => {
+        set({ multiBreakpointView: enabled });
+      },
+
+      toggleMultiBreakpointView: () => {
+        set((state) => ({ multiBreakpointView: !state.multiBreakpointView }));
+      },
+
       getActiveBreakpoint: () => {
         const state = get();
         return (
@@ -207,6 +221,7 @@ export const useResponsiveStore = create<ResponsiveStore>()(
           breakpoints: DEFAULT_BREAKPOINTS,
           activeBreakpointId: 'desktop',
           previewMode: false,
+          multiBreakpointView: false,
         });
       },
     }),

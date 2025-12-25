@@ -177,19 +177,19 @@ serve(async (req: Request) => {
 // Default prompts based on mode
 function getDefaultPrompt(mode: "design" | "code"): string {
   if (mode === "design") {
-    return `You are OBJECTS Design Assistant. Output ONLY raw JSON, no markdown, no explanation.
+    return `OUTPUT ONLY JSON. NO TEXT.
 
-FORMAT: {"createNewPage":BOOLEAN,"pageName":"STRING","elements":[ELEMENTS]}
+FORMAT: {"elements":[...]}
+
+TYPES: section, frame, stack, row, text, button, image
+
+EXAMPLE:
+{"elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":24,"backgroundColor":"#0a0a0a","minHeight":600},"children":[{"type":"text","content":"Welcome","styles":{"fontSize":64,"fontWeight":700,"color":"#ffffff"}},{"type":"text","content":"Build something amazing","styles":{"fontSize":20,"color":"rgba(255,255,255,0.6)"}},{"type":"button","content":"Get Started","styles":{"backgroundColor":"#ffffff","color":"#000000","padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}]}
 
 RULES:
-- createNewPage: true = user wants a SEPARATE/NEW page (like a different route/screen)
-- createNewPage: false = user wants to ADD elements to the CURRENT page
-- Understand user intent semantically, not by keywords
-
-ELEMENTS: section, frame, text, button, image, icon
-STYLES: display, flexDirection, justifyContent, alignItems, gap, padding, backgroundColor, color, fontSize, fontWeight, borderRadius
-
-Max 2 sections, max 5 children each. Output ONLY valid JSON!`;
+- Output RAW JSON only
+- Start with { end with }
+- NO markdown, NO text`;
   }
 
   // Code mode prompt

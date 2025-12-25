@@ -37,23 +37,28 @@ ALTER TABLE chat_sessions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE chat_messages ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies for chat_sessions
+DROP POLICY IF EXISTS "Users can view own chat sessions" ON chat_sessions;
 CREATE POLICY "Users can view own chat sessions"
   ON chat_sessions FOR SELECT
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can insert own chat sessions" ON chat_sessions;
 CREATE POLICY "Users can insert own chat sessions"
   ON chat_sessions FOR INSERT
   WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own chat sessions" ON chat_sessions;
 CREATE POLICY "Users can update own chat sessions"
   ON chat_sessions FOR UPDATE
   USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own chat sessions" ON chat_sessions;
 CREATE POLICY "Users can delete own chat sessions"
   ON chat_sessions FOR DELETE
   USING (auth.uid() = user_id);
 
 -- RLS Policies for chat_messages (via session ownership)
+DROP POLICY IF EXISTS "Users can view messages in own sessions" ON chat_messages;
 CREATE POLICY "Users can view messages in own sessions"
   ON chat_messages FOR SELECT
   USING (
@@ -64,6 +69,7 @@ CREATE POLICY "Users can view messages in own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can insert messages in own sessions" ON chat_messages;
 CREATE POLICY "Users can insert messages in own sessions"
   ON chat_messages FOR INSERT
   WITH CHECK (
@@ -74,6 +80,7 @@ CREATE POLICY "Users can insert messages in own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can update messages in own sessions" ON chat_messages;
 CREATE POLICY "Users can update messages in own sessions"
   ON chat_messages FOR UPDATE
   USING (
@@ -84,6 +91,7 @@ CREATE POLICY "Users can update messages in own sessions"
     )
   );
 
+DROP POLICY IF EXISTS "Users can delete messages in own sessions" ON chat_messages;
 CREATE POLICY "Users can delete messages in own sessions"
   ON chat_messages FOR DELETE
   USING (

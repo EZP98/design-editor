@@ -147,6 +147,16 @@ export interface ElementStyles {
   // Object fit (for images/videos)
   objectFit?: 'contain' | 'cover' | 'fill' | 'none' | 'scale-down';
   objectPosition?: string;
+
+  // Image filters (CSS filter components)
+  brightness?: number;  // 0-200, default 100
+  contrast?: number;    // 0-200, default 100
+  saturation?: number;  // 0-200, default 100
+  blur?: number;        // 0-20px, default 0
+  grayscale?: number;   // 0-100, default 0
+  hueRotate?: number;   // 0-360 degrees
+  invert?: number;      // 0-100, default 0
+  sepia?: number;       // 0-100, default 0
 }
 
 export interface CanvasElement {
@@ -185,6 +195,18 @@ export interface CanvasElement {
   // For images
   src?: string;
   alt?: string;
+
+  // Image crop data (percentages 0-100)
+  crop?: {
+    x: number;      // Left offset as percentage of original
+    y: number;      // Top offset as percentage of original
+    width: number;  // Width as percentage of original
+    height: number; // Height as percentage of original
+  };
+
+  // Original image dimensions (for crop calculations)
+  originalWidth?: number;
+  originalHeight?: number;
 
   // For videos
   videoSrc?: string;
@@ -341,6 +363,9 @@ export interface CanvasState {
 
   // Right panel state
   activeRightPanel: 'properties' | 'ai-image' | null;
+
+  // Page settings panel visibility
+  showPageSettings: boolean;
 }
 
 export interface CanvasHistoryEntry {
@@ -359,6 +384,7 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
       display: 'flex',
       flexDirection: 'column',
       alignItems: 'stretch',
+      resizeY: 'hug', // Default to hug so page height auto-expands with content
     },
   },
   frame: {

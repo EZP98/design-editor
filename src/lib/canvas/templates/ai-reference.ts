@@ -139,9 +139,19 @@ GRADIENT: purple=linear-gradient(135deg, #667eea 0%, #764ba2 100%), sunset=linea
 export const AI_DESIGN_REFERENCE = `
 ${AI_HERO_EXAMPLES}
 ${AI_CARD_EXAMPLES}
-${AI_SECTION_EXAMPLES}
-${AI_TESTIMONIAL_EXAMPLES}
-${AI_PRICING_EXAMPLES}
-${AI_FAQ_EXAMPLES}
 ${AI_COLOR_PALETTES}
+`;
+
+// Minimal reference for faster generation
+export const AI_MINIMAL_REFERENCE = `
+HERO EXAMPLE:
+{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":32,"backgroundColor":"#0a0a0a"},"children":[{"type":"text","name":"Headline","content":"Build Amazing Things","styles":{"fontSize":56,"fontWeight":700,"color":"#ffffff"}},{"type":"text","name":"Subtitle","content":"Create beautiful experiences","styles":{"fontSize":18,"color":"rgba(255,255,255,0.6)"}},{"type":"button","name":"CTA","content":"Get Started","styles":{"backgroundColor":"#ffffff","color":"#000000","padding":14,"paddingLeft":28,"paddingRight":28,"borderRadius":50}}]}
+
+FEATURES GRID EXAMPLE:
+{"type":"section","name":"Features","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":48,"backgroundColor":"#111111"},"children":[{"type":"text","name":"Title","content":"What We Offer","styles":{"fontSize":36,"fontWeight":600,"color":"#ffffff"}},{"type":"row","name":"Cards","styles":{"display":"flex","gap":24},"children":[{"type":"frame","name":"Card","styles":{"display":"flex","flexDirection":"column","padding":24,"gap":16,"backgroundColor":"#1a1a1a","borderRadius":16},"children":[{"type":"text","name":"Title","content":"Feature One","styles":{"fontSize":20,"fontWeight":600,"color":"#ffffff"}},{"type":"text","name":"Desc","content":"Description here","styles":{"fontSize":14,"color":"rgba(255,255,255,0.6)"}}]}]}]}
+
+CTA EXAMPLE:
+{"type":"section","name":"CTA","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":100,"gap":24,"backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)"},"children":[{"type":"text","name":"Title","content":"Ready to Start?","styles":{"fontSize":42,"fontWeight":700,"color":"#ffffff"}},{"type":"button","name":"CTA","content":"Contact Us","styles":{"backgroundColor":"#ffffff","color":"#764ba2","padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}
+
+COLORS: dark=#0a0a0a, surface=#1a1a1a, accent=#CAE8BD or #667eea, text=#ffffff, muted=rgba(255,255,255,0.6)
 `;

@@ -64,21 +64,25 @@ function addSingleElement(
   data: CanvasElementData,
   parentId?: string
 ): string | null {
+  // IMPORTANT: Always get fresh state for each element to see latest updates
   const store = useCanvasStore.getState();
 
   // Map AI type to canvas element type
   const elementType = mapElementType(data.type);
 
   // Check parent's layout mode to determine smart defaults
+  // Re-fetch parent to get latest state (important for recursive calls)
   let parentHasAutoLayout = false;
   let parentFlexDirection: 'row' | 'column' = 'column';
 
   if (parentId) {
-    const parent = store.getElement(parentId);
+    // Get fresh parent state
+    const parent = useCanvasStore.getState().getElement(parentId);
     if (parent) {
       const parentStyles = parent.styles;
       parentHasAutoLayout = parentStyles.display === 'flex' || parentStyles.display === 'grid';
       parentFlexDirection = (parentStyles.flexDirection as 'row' | 'column') || 'column';
+      console.log(`[AddElementsFromAI] Parent ${parent.name} has auto-layout: ${parentHasAutoLayout}, direction: ${parentFlexDirection}`);
     }
   } else {
     // If no parentId, we're adding to page root which has auto-layout
@@ -111,13 +115,23 @@ function addSingleElement(
 
     // Smart resize defaults based on parent layout
     if (parentHasAutoLayout && !styles.resizeX) {
-      // In column layout: sections/containers fill width
-      // In row layout: they keep fixed width unless specified
       if (parentFlexDirection === 'column') {
-        if (['section', 'frame', 'stack', 'container'].includes(elementType)) {
+        // In column layout: containers fill width
+        if (['section', 'frame', 'stack', 'container', 'row'].includes(elementType)) {
+          styles.resizeX = 'fill';
+        }
+      } else if (parentFlexDirection === 'row') {
+        // In row layout: cards/frames should fill equally
+        if (['frame', 'stack', 'container'].includes(elementType)) {
           styles.resizeX = 'fill';
         }
       }
+    }
+
+    // Row elements should always have flex display
+    if (elementType === 'row' || data.type === 'row') {
+      if (!styles.display) styles.display = 'flex';
+      if (!styles.flexDirection) styles.flexDirection = 'row';
     }
 
     store.updateElementStyles(elementId, styles);
@@ -151,22 +165,40 @@ function addSingleElement(
     if (data.href) updates.href = data.href;
     if (data.iconName) updates.iconName = data.iconName;
 
-    if (Object.keys(updates).length > 0) {
-      // Direct element update via store
-      useCanvasStore.setState((state) => ({
-        elements: {
-          ...state.elements,
-          [elementId]: { ...state.elements[elementId], ...updates },
-        },
-      }));
+    // CRITICAL: If parent has auto-layout, set positionType to 'relative' so element participates in flex flow
+    if (parentHasAutoLayout) {
+      updates.positionType = 'relative';
     }
+
+    // Direct element update via store
+    useCanvasStore.setState((state) => ({
+      elements: {
+        ...state.elements,
+        [elementId]: { ...state.elements[elementId], ...updates },
+      },
+    }));
   }
 
   // Recursively add children
+  // IMPORTANT: Re-fetch state to ensure parent's display:flex is visible
   if (data.children && data.children.length > 0) {
+    console.log(`[AddElementsFromAI] Processing ${data.children.length} children for ${data.name || data.type}`);
+
+    // Ensure this element has flex display if it has children (for proper auto-layout)
+    const currentElement = useCanvasStore.getState().getElement(elementId);
+    if (currentElement && !currentElement.styles.display) {
+      // Default to flex column for containers with children
+      useCanvasStore.getState().updateElementStyles(elementId, {
+        display: 'flex',
+        flexDirection: 'column',
+      });
+    }
+
     for (const child of data.children) {
       addSingleElement(child, elementId);
     }
+  } else {
+    console.log(`[AddElementsFromAI] No children for ${data.name || data.type} (type: ${data.type})`);
   }
 
   return elementId;

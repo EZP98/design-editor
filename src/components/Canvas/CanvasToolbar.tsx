@@ -8,6 +8,8 @@ import React, { useState, useRef, useEffect } from 'react';
 import { IconPicker } from './IconPicker';
 import { PluginPanel, availablePlugins, Plugin } from './plugins';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
+import { BreakpointSelector } from './ResponsiveToolbar';
+import { useResponsiveStore } from '../../lib/canvas/responsive';
 
 interface CanvasToolbarProps {
   activeTool: 'select' | 'hand' | 'frame' | 'text';
@@ -247,6 +249,21 @@ const Icons: Record<string, React.ReactNode> = {
       <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
     </svg>
   ),
+  multiDevice: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      {/* Desktop */}
+      <rect x="1" y="2" width="10" height="7" rx="1" />
+      <line x1="4" y1="11" x2="8" y2="11" />
+      <line x1="6" y1="9" x2="6" y2="11" />
+      {/* Tablet */}
+      <rect x="13" y="2" width="5" height="7" rx="1" />
+      <line x1="14.5" y1="7.5" x2="16.5" y2="7.5" />
+      {/* Mobile */}
+      <rect x="20" y="2" width="3" height="6" rx="0.5" />
+      {/* Bottom connector line */}
+      <path d="M6 14h12" strokeWidth="1" opacity="0.5" />
+    </svg>
+  ),
   wand: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M15 4V2"/>
@@ -286,6 +303,10 @@ export function CanvasToolbar({
   // Use store for AI panel state
   const activeRightPanel = useCanvasStore((state) => state.activeRightPanel);
   const setActiveRightPanel = useCanvasStore((state) => state.setActiveRightPanel);
+
+  // Responsive store for multi-breakpoint view
+  const { multiBreakpointView, toggleMultiBreakpointView } = useResponsiveStore();
+
   const [activeTab, setActiveTab] = useState<'primitives' | 'layout' | 'blocks'>('primitives');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const iconPickerRef = useRef<HTMLDivElement>(null);
@@ -371,6 +392,22 @@ export function CanvasToolbar({
             {Icons.wand}
           </ToolButton>
         </div>
+
+        <Divider />
+
+        {/* === Breakpoint Selector === */}
+        <BreakpointSelector />
+
+        {/* Multi-breakpoint view toggle */}
+        <ToolButton
+          active={multiBreakpointView}
+          onClick={toggleMultiBreakpointView}
+          tooltip="Multi-device view"
+          accent={multiBreakpointView}
+          theme={theme}
+        >
+          {Icons.multiDevice}
+        </ToolButton>
 
         <Divider />
 

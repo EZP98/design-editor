@@ -1,13 +1,236 @@
-import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { useChatHistory } from '../lib/persistence/useChatHistory';
 import { ChatMessage, FileSnapshot } from '../lib/persistence/db';
 import { parseArtifacts, formatFilesForContext, ParsedArtifact } from '../lib/artifactParser';
 import { getSystemPrompt } from '../lib/prompts/system-prompt';
 import { addElementsFromAI, processAIDesignResponse } from '../lib/canvas/addElementsFromAI';
+import { getTemplatesForAIPrompt } from '../lib/canvas/templates/designTemplates';
 import { useTokensStore } from '../lib/canvas/tokens';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useCanvasStore } from '../lib/canvas/canvasStore';
 import { THEME_COLORS } from '../lib/canvas/types';
+
+/**
+ * Simple markdown-like formatter for chat messages
+ */
+function formatMessageContent(content: string): React.ReactNode {
+  if (!content) return null;
+
+  // Split by code blocks first
+  const parts = content.split(/(```[\s\S]*?```|`[^`]+`)/g);
+
+  return parts.map((part, index) => {
+    // Multi-line code block
+    if (part.startsWith('```') && part.endsWith('```')) {
+      const codeContent = part.slice(3, -3);
+      const firstNewline = codeContent.indexOf('\n');
+      const lang = firstNewline > 0 ? codeContent.slice(0, firstNewline).trim() : '';
+      const code = firstNewline > 0 ? codeContent.slice(firstNewline + 1) : codeContent;
+
+      return (
+        <pre key={index} style={{
+          background: 'rgba(0,0,0,0.3)',
+          borderRadius: 6,
+          padding: '8px 10px',
+          margin: '8px 0',
+          overflow: 'auto',
+          fontSize: 11,
+          fontFamily: 'monospace',
+          whiteSpace: 'pre-wrap',
+          wordBreak: 'break-word',
+        }}>
+          {lang && <div style={{ color: '#6b7280', fontSize: 10, marginBottom: 4 }}>{lang}</div>}
+          <code>{code}</code>
+        </pre>
+      );
+    }
+
+    // Inline code
+    if (part.startsWith('`') && part.endsWith('`')) {
+      return (
+        <code key={index} style={{
+          background: 'rgba(0,0,0,0.2)',
+          padding: '1px 4px',
+          borderRadius: 3,
+          fontSize: 11,
+          fontFamily: 'monospace',
+        }}>
+          {part.slice(1, -1)}
+        </code>
+      );
+    }
+
+    // Process regular text for bold, italic, etc.
+    return formatTextPart(part, index);
+  });
+}
+
+function formatTextPart(text: string, key: number): React.ReactNode {
+  // Split by formatting markers
+  const formatted = text
+    .split(/(\*\*[^*]+\*\*|\*[^*]+\*|__[^_]+__|_[^_]+_)/g)
+    .map((segment, i) => {
+      // Bold
+      if ((segment.startsWith('**') && segment.endsWith('**')) ||
+          (segment.startsWith('__') && segment.endsWith('__'))) {
+        return <strong key={i}>{segment.slice(2, -2)}</strong>;
+      }
+      // Italic
+      if ((segment.startsWith('*') && segment.endsWith('*')) ||
+          (segment.startsWith('_') && segment.endsWith('_'))) {
+        return <em key={i}>{segment.slice(1, -1)}</em>;
+      }
+      return segment;
+    });
+
+  return <span key={key}>{formatted}</span>;
+}
+
+/**
+ * Individual chat message component with copy functionality
+ */
+function ChatMessageItem({
+  message,
+  colors,
+  isStreaming,
+  onRestore,
+}: {
+  message: { id: string; role: 'user' | 'assistant'; content: string };
+  colors: typeof THEME_COLORS.dark;
+  isStreaming: boolean;
+  onRestore: (id: string) => void;
+}) {
+  const [copied, setCopied] = useState(false);
+  const isJson = message.content?.trim().startsWith('{');
+
+  const handleCopy = async (e?: React.MouseEvent) => {
+    // Prevent copy if clicking on buttons
+    if (e && (e.target as HTMLElement).closest('button')) return;
+
+    // Don't copy if user is selecting text
+    const selection = window.getSelection();
+    if (selection && selection.toString().length > 0) return;
+
+    try {
+      await navigator.clipboard.writeText(message.content);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('Failed to copy:', err);
+    }
+  };
+
+  return (
+    <div
+      onClick={handleCopy}
+      style={{
+        padding: '10px 12px',
+        borderRadius: 10,
+        background: message.role === 'user'
+          ? colors.accentLight
+          : colors.inputBg,
+        border: message.role === 'user'
+          ? `1px solid ${colors.accentMedium}`
+          : `1px solid ${colors.borderColor}`,
+        marginLeft: message.role === 'user' ? 'auto' : 0,
+        maxWidth: message.role === 'user' ? '90%' : '100%',
+        cursor: 'pointer',
+        position: 'relative',
+        transition: 'all 0.15s ease',
+        userSelect: 'text',
+      }}
+    >
+      {/* Copied feedback */}
+      {copied && (
+        <div style={{
+          position: 'absolute',
+          top: 4,
+          right: 4,
+          background: 'rgba(34, 197, 94, 0.9)',
+          color: '#fff',
+          fontSize: 9,
+          padding: '2px 6px',
+          borderRadius: 4,
+          pointerEvents: 'none',
+        }}>
+          ✓ Copiato!
+        </div>
+      )}
+      <div style={{
+        color: colors.textPrimary,
+        fontSize: 12,
+        lineHeight: 1.5,
+      }}>
+        {message.content ? (
+          isJson && message.role === 'assistant' ? (
+            <pre style={{
+              background: 'rgba(0,0,0,0.2)',
+              borderRadius: 6,
+              padding: '8px 10px',
+              margin: 0,
+              overflow: 'auto',
+              maxHeight: 200,
+              maxWidth: '100%',
+              fontSize: 10,
+              fontFamily: 'monospace',
+              whiteSpace: 'pre-wrap',
+              wordBreak: 'break-all',
+              overflowWrap: 'anywhere',
+            }}>
+              <code style={{ display: 'block', maxWidth: '100%' }}>{message.content.substring(0, 1000)}{message.content.length > 1000 ? '...' : ''}</code>
+            </pre>
+          ) : (
+            formatMessageContent(message.content)
+          )
+        ) : (
+          <span style={{ color: colors.textDimmed }}>...</span>
+        )}
+      </div>
+      {/* Restore button - only for assistant messages */}
+      {message.role === 'assistant' && message.content && !isStreaming && (
+        <div style={{
+          marginTop: 8,
+          display: 'flex',
+          gap: 6,
+        }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation(); // Don't trigger copy
+              onRestore(message.id);
+            }}
+            title="Ripristina snapshot"
+            style={{
+              background: 'rgba(255,255,255,0.05)',
+              border: 'none',
+              borderRadius: 4,
+              padding: '4px 8px',
+              fontSize: 10,
+              color: '#71717a',
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 4,
+            }}
+            onMouseEnter={e => {
+              e.currentTarget.style.background = 'rgba(168, 50, 72, 0.2)';
+              e.currentTarget.style.color = '#a78bfa';
+            }}
+            onMouseLeave={e => {
+              e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
+              e.currentTarget.style.color = '#71717a';
+            }}
+          >
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+              <path d="M3 3v5h5" />
+            </svg>
+            Ripristina
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // Get Supabase URL for Edge Functions
 const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || '';
@@ -23,8 +246,17 @@ const AI_ENDPOINT = SUPABASE_URL
  * and removing incomplete elements
  */
 function repairTruncatedJSON(json: string): string {
+  let repaired = json;
+
+  // Clean up common issues
   // Remove trailing incomplete strings (unclosed quotes)
-  let repaired = json.replace(/"[^"]*$/, '""');
+  repaired = repaired.replace(/"[^"\\]*$/, '""');
+
+  // Fix missing colons after property names (common AI error)
+  repaired = repaired.replace(/"(\w+)"\s*(?=["{[\d])/g, '"$1":');
+
+  // Fix trailing commas before closing brackets
+  repaired = repaired.replace(/,\s*([}\]])/g, '$1');
 
   // Count brackets
   let openBraces = 0;
@@ -96,6 +328,127 @@ function repairTruncatedJSON(json: string): string {
   }
 
   return repaired;
+}
+
+/**
+ * Extract valid section objects from potentially broken JSON
+ * Fallback when normal parsing fails
+ */
+function extractSectionsFromBrokenJSON(content: string): Array<Record<string, unknown>> {
+  const sections: Array<Record<string, unknown>> = [];
+
+  // Try to find section objects by looking for "type":"section" pattern
+  const sectionPattern = /\{[^{}]*"type"\s*:\s*"section"[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}/g;
+
+  // Simpler approach: find complete objects that look like sections
+  let depth = 0;
+  let start = -1;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < content.length; i++) {
+    const char = content[i];
+
+    if (escaped) {
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === '{') {
+        if (depth === 0) start = i;
+        depth++;
+      } else if (char === '}') {
+        depth--;
+        if (depth === 0 && start !== -1) {
+          const objStr = content.slice(start, i + 1);
+          // Check if it looks like a section
+          if (objStr.includes('"type"') && (objStr.includes('"section"') || objStr.includes('"frame"') || objStr.includes('"stack"'))) {
+            try {
+              const obj = JSON.parse(objStr);
+              if (obj.type && (obj.name || obj.children || obj.styles)) {
+                sections.push(obj);
+              }
+            } catch {
+              // Try to repair this individual object
+              try {
+                const repaired = repairTruncatedJSON(objStr);
+                const obj = JSON.parse(repaired);
+                if (obj.type && (obj.name || obj.children || obj.styles)) {
+                  sections.push(obj);
+                }
+              } catch {
+                // Skip this object
+              }
+            }
+          }
+          start = -1;
+        }
+      }
+    }
+  }
+
+  return sections;
+}
+
+/**
+ * Robust JSON parser with multiple fallback strategies
+ */
+function parseDesignJSON(content: string): { elements: Array<Record<string, unknown>>; error?: string } {
+  // Strategy 1: Direct parse
+  try {
+    const parsed = JSON.parse(content);
+    const elements = parsed.elements || (Array.isArray(parsed) ? parsed : [parsed]);
+    return { elements: elements.filter((e: unknown) => e && typeof e === 'object') };
+  } catch {
+    // Continue to next strategy
+  }
+
+  // Strategy 2: Parse with repair
+  try {
+    const repaired = repairTruncatedJSON(content);
+    const parsed = JSON.parse(repaired);
+    const elements = parsed.elements || (Array.isArray(parsed) ? parsed : [parsed]);
+    console.log('[parseDesignJSON] Repaired JSON successfully');
+    return { elements: elements.filter((e: unknown) => e && typeof e === 'object') };
+  } catch {
+    // Continue to next strategy
+  }
+
+  // Strategy 3: Extract individual sections
+  const extracted = extractSectionsFromBrokenJSON(content);
+  if (extracted.length > 0) {
+    console.log('[parseDesignJSON] Extracted', extracted.length, 'sections from broken JSON');
+    return { elements: extracted };
+  }
+
+  // Strategy 4: Try to find just the elements array
+  const elementsMatch = content.match(/"elements"\s*:\s*\[([\s\S]*)\]/);
+  if (elementsMatch) {
+    try {
+      const elementsStr = '[' + elementsMatch[1] + ']';
+      const repaired = repairTruncatedJSON(elementsStr);
+      const elements = JSON.parse(repaired);
+      if (Array.isArray(elements) && elements.length > 0) {
+        console.log('[parseDesignJSON] Extracted elements array');
+        return { elements: elements.filter((e: unknown) => e && typeof e === 'object') };
+      }
+    } catch {
+      // Continue
+    }
+  }
+
+  return { elements: [], error: 'Could not parse JSON with any strategy' };
 }
 
 type ClaudeModel = 'claude-sonnet-4-5' | 'claude-haiku-4-5' | 'claude-opus-4-5';
@@ -230,6 +583,9 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
   const theme = canvasSettings?.editorTheme || 'dark';
   const colors = THEME_COLORS[theme];
 
+  // Get current canvas elements for AI context (design mode only)
+  const canvasElements = useCanvasStore((state) => state.elements);
+
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [selectedModel, setSelectedModel] = useState<ClaudeModel>('claude-sonnet-4-5');
@@ -325,6 +681,23 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
         : '';
 
       // Build system prompt based on mode
+      // For design mode, pass current canvas elements so AI understands context
+      const currentCanvasForAI = outputMode === 'design'
+        ? Object.values(canvasElements).map(el => ({
+            id: el.id,
+            type: el.type as string,
+            name: el.name,
+            styles: el.styles as Record<string, unknown>,
+            content: el.content,
+            children: el.children,
+          }))
+        : undefined;
+
+      // Fetch templates from Supabase for design mode
+      const templates = outputMode === 'design'
+        ? await getTemplatesForAIPrompt()
+        : undefined;
+
       const systemPrompt = getSystemPrompt({
         mode: outputMode,
         projectFiles: outputMode === 'code' ? projectContext : undefined,
@@ -333,6 +706,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           radii: designTokens.radii,
           spacing: designTokens.spacing,
         } : undefined,
+        currentCanvas: currentCanvasForAI,
+        templates: templates,
       });
 
       // Build headers - include auth for Supabase Edge Functions
@@ -410,7 +785,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           // Extract JSON from response (might be in ```json block or raw)
           let jsonStr = fullContent.trim();
 
-          // Try to extract from ```json block first
+          // Try to extract JSON from response
           const jsonMatch = fullContent.match(/```json\s*([\s\S]*?)```/);
           if (jsonMatch) {
             jsonStr = jsonMatch[1].trim();
@@ -427,41 +802,30 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               console.warn('[AIChatPanel] No JSON found in response, AI returned plain text');
               updateMessage(
                 assistantMessage.id,
-                `ℹ️ ${fullContent.substring(0, 500)}${fullContent.length > 500 ? '...' : ''}\n\n⚠️ L'AI non ha generato elementi. Prova a essere più specifico (es: "crea un hero con titolo e bottone")`
+                `💬 ${fullContent.substring(0, 500)}${fullContent.length > 500 ? '...' : ''}`
               );
               return;
             }
           }
 
-          // Try to parse, with repair for truncated JSON
-          let parsed;
-          try {
-            parsed = JSON.parse(jsonStr);
-          } catch {
-            // JSON is truncated, try to repair it
-            console.log('[AIChatPanel] JSON truncated, attempting repair...');
-            const repaired = repairTruncatedJSON(jsonStr);
-            parsed = JSON.parse(repaired);
-            console.log('[AIChatPanel] JSON repaired successfully');
-          }
+          // Use robust parser with multiple fallback strategies
+          const parseResult = parseDesignJSON(jsonStr);
 
-          // Process the AI response
-          const elements = parsed.elements || (Array.isArray(parsed) ? parsed : [parsed]);
-
-          // Validate elements have required properties
-          const validElements = elements.filter((e: any) => e && (e.type || e.name));
-          if (validElements.length === 0) {
-            console.warn('[AIChatPanel] No valid elements in parsed JSON');
+          if (parseResult.elements.length === 0) {
+            console.warn('[AIChatPanel] No valid elements extracted');
             updateMessage(
               assistantMessage.id,
-              `⚠️ Nessun elemento valido trovato nella risposta. Riprova.`
+              `⚠️ Nessun elemento valido trovato. Riprova con una richiesta più semplice.`
             );
             return;
           }
 
-          // Use createAsNewPage toggle from UI (or AI response as fallback)
-          const wantsNewPage = createAsNewPage || parsed.createNewPage === true;
-          const pageName = parsed.pageName || (validElements[0]?.name || 'New Page');
+          const validElements = parseResult.elements.filter((e: Record<string, unknown>) => e && (e.type || e.name));
+          console.log('[AIChatPanel] Parsed', validElements.length, 'valid elements');
+
+          // Use createAsNewPage toggle from UI
+          const wantsNewPage = createAsNewPage;
+          const pageName = (validElements[0] as Record<string, unknown>)?.name as string || 'New Page';
 
           const result = processAIDesignResponse({
             createNewPage: wantsNewPage,
@@ -485,10 +849,13 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           );
         } catch (parseErr) {
           console.error('[AIChatPanel] Failed to parse design JSON:', parseErr);
-          // Show error to user
+          console.error('[AIChatPanel] Raw response (first 1000 chars):', fullContent.substring(0, 1000));
+
+          // Show error with preview of what AI returned
+          const preview = fullContent.substring(0, 300).replace(/\n/g, ' ');
           updateMessage(
             assistantMessage.id,
-            `⚠️ Errore parsing JSON: ${parseErr instanceof Error ? parseErr.message : 'Unknown error'}\n\nRisposta troppo lunga o incompleta. Prova a chiedere qualcosa di più semplice.`
+            `⚠️ Errore parsing JSON: ${parseErr instanceof Error ? parseErr.message : 'Unknown error'}\n\n📝 Risposta AI:\n\`\`\`\n${preview}...\n\`\`\`\n\nRiprova con una richiesta più semplice.`
           );
         }
       } else {
@@ -725,72 +1092,14 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             </div>
           </div>
         ) : (
-          messages.map((message, index) => (
-            <div
+          messages.map((message) => (
+            <ChatMessageItem
               key={message.id}
-              style={{
-                padding: '10px 12px',
-                borderRadius: 10,
-                background: message.role === 'user'
-                  ? colors.accentLight
-                  : colors.inputBg,
-                border: message.role === 'user'
-                  ? `1px solid ${colors.accentMedium}`
-                  : `1px solid ${colors.borderColor}`,
-                marginLeft: message.role === 'user' ? 'auto' : 0,
-                maxWidth: message.role === 'user' ? '90%' : '100%',
-              }}
-            >
-              <div style={{
-                color: colors.textPrimary,
-                fontSize: 12,
-                lineHeight: 1.5,
-                whiteSpace: 'pre-wrap',
-              }}>
-                {message.content || (
-                  <span style={{ color: colors.textDimmed }}>...</span>
-                )}
-              </div>
-              {/* Message actions */}
-              {message.role === 'assistant' && message.content && !isStreaming && (
-                <div style={{
-                  marginTop: 8,
-                  display: 'flex',
-                  gap: 6,
-                }}>
-                  <button
-                    onClick={() => handleRestore(message.id)}
-                    title="Ripristina snapshot"
-                    style={{
-                      background: 'rgba(255,255,255,0.05)',
-                      border: 'none',
-                      borderRadius: 4,
-                      padding: '4px 8px',
-                      fontSize: 10,
-                      color: '#71717a',
-                      cursor: 'pointer',
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                    onMouseEnter={e => {
-                      e.currentTarget.style.background = 'rgba(168, 50, 72, 0.2)';
-                      e.currentTarget.style.color = '#a78bfa';
-                    }}
-                    onMouseLeave={e => {
-                      e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-                      e.currentTarget.style.color = '#71717a';
-                    }}
-                  >
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
-                      <path d="M3 3v5h5" />
-                    </svg>
-                    Ripristina
-                  </button>
-                </div>
-              )}
-            </div>
+              message={message}
+              colors={colors}
+              isStreaming={isStreaming}
+              onRestore={handleRestore}
+            />
           ))
         )}
 

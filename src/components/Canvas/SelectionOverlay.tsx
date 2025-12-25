@@ -45,7 +45,12 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
   } | null>(null);
 
   // AI Edit state
-  const [aiProcessing, setAiProcessing] = useState<string | null>(null); // 'remove-bg' | 'upscale' | null
+  const [aiProcessing, setAiProcessing] = useState<string | null>(null); // 'remove-bg' | 'upscale' | 'inpaint' | null
+
+  // Crop mode state
+  const [cropMode, setCropMode] = useState(false);
+  const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
+  const [cropBox, setCropBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
   const resizeElement = useCanvasStore((state) => state.resizeElement);
   const moveElement = useCanvasStore((state) => state.moveElement);
@@ -83,6 +88,96 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
     } catch (err) {
       console.error('Remove BG error:', err);
       alert('Errore rimozione sfondo: ' + (err instanceof Error ? err.message : 'Errore'));
+    } finally {
+      setAiProcessing(null);
+    }
+  }, [element.id, element.src, aiProcessing, saveToHistory]);
+
+  // Handle apply crop
+  const handleApplyCrop = useCallback(() => {
+    if (!cropBox) return;
+
+    // Convert pixel values to percentages
+    const cropX = (cropBox.x / element.size.width) * 100;
+    const cropY = (cropBox.y / element.size.height) * 100;
+    const cropWidth = (cropBox.width / element.size.width) * 100;
+    const cropHeight = (cropBox.height / element.size.height) * 100;
+
+    // Update element with crop data
+    useCanvasStore.setState((state) => ({
+      elements: {
+        ...state.elements,
+        [element.id]: {
+          ...state.elements[element.id],
+          crop: {
+            x: cropX,
+            y: cropY,
+            width: cropWidth,
+            height: cropHeight,
+          },
+          originalWidth: element.originalWidth || element.size.width,
+          originalHeight: element.originalHeight || element.size.height,
+        },
+      },
+    }));
+    saveToHistory('Crop image');
+    setCropMode(false);
+    setCropBox(null);
+  }, [cropBox, element.id, element.size, element.originalWidth, element.originalHeight, saveToHistory]);
+
+  // Handle reset crop
+  const handleResetCrop = useCallback(() => {
+    useCanvasStore.setState((state) => ({
+      elements: {
+        ...state.elements,
+        [element.id]: {
+          ...state.elements[element.id],
+          crop: undefined,
+        },
+      },
+    }));
+    saveToHistory('Reset crop');
+    setCropMode(false);
+    setCropBox(null);
+  }, [element.id, saveToHistory]);
+
+  // AI: Inpaint (Photoshop-style edit)
+  const handleInpaint = useCallback(async () => {
+    if (!element.src || aiProcessing) return;
+
+    const prompt = window.prompt('Descrivi cosa vuoi modificare nell\'immagine (es: "rimuovi la persona", "cambia lo sfondo in un tramonto")');
+    if (!prompt) return;
+
+    setAiProcessing('inpaint');
+
+    try {
+      const res = await fetch(AI_EDIT_API, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'inpaint',
+          imageUrl: element.src,
+          prompt: prompt,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok || !data.success) throw new Error(data.error || 'Errore');
+
+      // Update element with edited image
+      useCanvasStore.setState((state) => ({
+        elements: {
+          ...state.elements,
+          [element.id]: {
+            ...state.elements[element.id],
+            src: data.imageUrl,
+          },
+        },
+      }));
+      saveToHistory('AI edit image');
+    } catch (err) {
+      console.error('Inpaint error:', err);
+      alert('Errore AI edit: ' + (err instanceof Error ? err.message : 'Errore'));
     } finally {
       setAiProcessing(null);
     }
@@ -306,6 +401,10 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
         width: element.size.width,
         height: element.size.height,
         pointerEvents: 'none',
+        overflow: 'visible',
+        // Selection outline - using outline instead of border so it's never clipped
+        outline: '2px solid #8B1E2B',
+        outlineOffset: -1,
       }}
     >
       {/* Margin guides - outside the element (pink/magenta) */}
@@ -582,15 +681,7 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
         </div>
       )}
 
-      {/* Selection border */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: -1,
-          border: '2px solid #8B1E2B',
-          pointerEvents: 'none',
-        }}
-      />
+      {/* Selection border is now handled by outline on the container */}
 
       {/* Resize handles */}
       {!element.locked && (
@@ -955,6 +1046,110 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
               )}
               {aiProcessing === 'upscale' ? '...' : '2x'}
             </button>
+
+            {/* Crop */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCropMode(!cropMode);
+                if (!cropMode) {
+                  // Initialize crop box to full image
+                  setCropBox({ x: 0, y: 0, width: element.size.width, height: element.size.height });
+                } else {
+                  setCropBox(null);
+                }
+              }}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: cropMode ? 'rgba(34, 197, 94, 0.2)' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: cropMode ? '#22c55e' : '#71717a',
+                cursor: 'pointer',
+                transition: 'all 0.15s',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!cropMode) {
+                  e.currentTarget.style.background = 'rgba(34, 197, 94, 0.15)';
+                  e.currentTarget.style.color = '#22c55e';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!cropMode) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#71717a';
+                }
+              }}
+              title="Crop immagine"
+            >
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M6 2v4h12v12h4" />
+                <path d="M6 18H2" />
+                <path d="M18 6V2" />
+                <rect x="6" y="6" width="12" height="12" />
+              </svg>
+              Crop
+            </button>
+
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: 'rgba(255, 255, 255, 0.08)', margin: '0 4px' }} />
+
+            {/* AI Edit / Photoshop */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleInpaint();
+              }}
+              disabled={aiProcessing !== null}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: aiProcessing === 'inpaint' ? 'rgba(249, 115, 22, 0.2)' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: aiProcessing === 'inpaint' ? '#f97316' : '#71717a',
+                cursor: aiProcessing ? 'wait' : 'pointer',
+                transition: 'all 0.15s',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!aiProcessing) {
+                  e.currentTarget.style.background = 'rgba(249, 115, 22, 0.15)';
+                  e.currentTarget.style.color = '#f97316';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (aiProcessing !== 'inpaint') {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#71717a';
+                }
+              }}
+              title="AI Edit (Photoshop)"
+            >
+              {aiProcessing === 'inpaint' ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 19l7-7 3 3-7 7-3-3z" />
+                  <path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z" />
+                  <path d="M2 2l7.586 7.586" />
+                  <circle cx="11" cy="11" r="2" />
+                </svg>
+              )}
+              {aiProcessing === 'inpaint' ? '...' : 'Edit'}
+            </button>
           </>
         )}
       </div>
@@ -967,6 +1162,232 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
           to { transform: rotate(360deg); }
         }
       `}</style>
+
+      {/* Crop overlay */}
+      {cropMode && cropBox && isImage && (
+        <>
+          {/* Darkened area outside crop */}
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              pointerEvents: 'none',
+            }}
+          >
+            {/* Top dark area */}
+            <div style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              height: cropBox.y,
+              background: 'rgba(0, 0, 0, 0.6)',
+            }} />
+            {/* Bottom dark area */}
+            <div style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: element.size.height - cropBox.y - cropBox.height,
+              background: 'rgba(0, 0, 0, 0.6)',
+            }} />
+            {/* Left dark area */}
+            <div style={{
+              position: 'absolute',
+              top: cropBox.y,
+              left: 0,
+              width: cropBox.x,
+              height: cropBox.height,
+              background: 'rgba(0, 0, 0, 0.6)',
+            }} />
+            {/* Right dark area */}
+            <div style={{
+              position: 'absolute',
+              top: cropBox.y,
+              right: 0,
+              width: element.size.width - cropBox.x - cropBox.width,
+              height: cropBox.height,
+              background: 'rgba(0, 0, 0, 0.6)',
+            }} />
+          </div>
+
+          {/* Crop box border and handles */}
+          <div
+            style={{
+              position: 'absolute',
+              left: cropBox.x,
+              top: cropBox.y,
+              width: cropBox.width,
+              height: cropBox.height,
+              border: '2px solid #22c55e',
+              boxSizing: 'border-box',
+              pointerEvents: 'auto',
+              cursor: 'move',
+            }}
+            onMouseDown={(e) => {
+              e.stopPropagation();
+              const startX = e.clientX;
+              const startY = e.clientY;
+              const startCropX = cropBox.x;
+              const startCropY = cropBox.y;
+
+              const handleMove = (moveE: MouseEvent) => {
+                const dx = (moveE.clientX - startX) / zoom;
+                const dy = (moveE.clientY - startY) / zoom;
+                let newX = startCropX + dx;
+                let newY = startCropY + dy;
+                // Constrain to element bounds
+                newX = Math.max(0, Math.min(newX, element.size.width - cropBox.width));
+                newY = Math.max(0, Math.min(newY, element.size.height - cropBox.height));
+                setCropBox({ ...cropBox, x: newX, y: newY });
+              };
+
+              const handleUp = () => {
+                window.removeEventListener('mousemove', handleMove);
+                window.removeEventListener('mouseup', handleUp);
+              };
+
+              window.addEventListener('mousemove', handleMove);
+              window.addEventListener('mouseup', handleUp);
+            }}
+          >
+            {/* Corner handles for resizing crop */}
+            {['nw', 'ne', 'sw', 'se'].map((corner) => (
+              <div
+                key={corner}
+                style={{
+                  position: 'absolute',
+                  width: 10,
+                  height: 10,
+                  background: '#22c55e',
+                  border: '2px solid white',
+                  borderRadius: 2,
+                  cursor: `${corner}-resize`,
+                  ...(corner.includes('n') ? { top: -5 } : { bottom: -5 }),
+                  ...(corner.includes('w') ? { left: -5 } : { right: -5 }),
+                }}
+                onMouseDown={(e) => {
+                  e.stopPropagation();
+                  const startX = e.clientX;
+                  const startY = e.clientY;
+                  const startBox = { ...cropBox };
+
+                  const handleMove = (moveE: MouseEvent) => {
+                    const dx = (moveE.clientX - startX) / zoom;
+                    const dy = (moveE.clientY - startY) / zoom;
+                    let newBox = { ...startBox };
+
+                    if (corner.includes('w')) {
+                      newBox.x = Math.max(0, Math.min(startBox.x + dx, startBox.x + startBox.width - 20));
+                      newBox.width = startBox.width - (newBox.x - startBox.x);
+                    }
+                    if (corner.includes('e')) {
+                      newBox.width = Math.max(20, Math.min(startBox.width + dx, element.size.width - startBox.x));
+                    }
+                    if (corner.includes('n')) {
+                      newBox.y = Math.max(0, Math.min(startBox.y + dy, startBox.y + startBox.height - 20));
+                      newBox.height = startBox.height - (newBox.y - startBox.y);
+                    }
+                    if (corner.includes('s')) {
+                      newBox.height = Math.max(20, Math.min(startBox.height + dy, element.size.height - startBox.y));
+                    }
+
+                    setCropBox(newBox);
+                  };
+
+                  const handleUp = () => {
+                    window.removeEventListener('mousemove', handleMove);
+                    window.removeEventListener('mouseup', handleUp);
+                  };
+
+                  window.addEventListener('mousemove', handleMove);
+                  window.addEventListener('mouseup', handleUp);
+                }}
+              />
+            ))}
+
+            {/* Grid lines (rule of thirds) */}
+            <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}>
+              <div style={{ position: 'absolute', left: '33.33%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.3)' }} />
+              <div style={{ position: 'absolute', left: '66.66%', top: 0, bottom: 0, width: 1, background: 'rgba(255,255,255,0.3)' }} />
+              <div style={{ position: 'absolute', top: '33.33%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.3)' }} />
+              <div style={{ position: 'absolute', top: '66.66%', left: 0, right: 0, height: 1, background: 'rgba(255,255,255,0.3)' }} />
+            </div>
+          </div>
+
+          {/* Crop action buttons */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: -40,
+              left: '50%',
+              transform: 'translateX(-50%)',
+              display: 'flex',
+              gap: 8,
+              pointerEvents: 'auto',
+            }}
+          >
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleApplyCrop();
+              }}
+              style={{
+                padding: '6px 12px',
+                background: '#22c55e',
+                border: 'none',
+                borderRadius: 6,
+                color: 'white',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Applica Crop
+            </button>
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                setCropMode(false);
+                setCropBox(null);
+              }}
+              style={{
+                padding: '6px 12px',
+                background: 'rgba(255,255,255,0.1)',
+                border: 'none',
+                borderRadius: 6,
+                color: '#fff',
+                fontSize: 11,
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              Annulla
+            </button>
+            {element.crop && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  handleResetCrop();
+                }}
+                style={{
+                  padding: '6px 12px',
+                  background: 'rgba(239, 68, 68, 0.2)',
+                  border: 'none',
+                  borderRadius: 6,
+                  color: '#ef4444',
+                  fontSize: 11,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                }}
+              >
+                Reset
+              </button>
+            )}
+          </div>
+        </>
+      )}
 
       {/* Size indicator */}
       <div

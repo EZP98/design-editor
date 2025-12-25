@@ -5,7 +5,8 @@
  * Pre-built UI components organized by category.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { fetchDesignTemplates, DesignTemplate } from '../../lib/canvas/templates/designTemplates';
 
 export interface ComponentTemplate {
   id: string;
@@ -20,6 +21,7 @@ export interface ComponentTemplate {
 
 // Component categories
 export const COMPONENT_CATEGORIES = [
+  { id: 'templates', name: 'Templates', icon: '✨' },
   { id: 'layout', name: 'Layout', icon: '⬜' },
   { id: 'typography', name: 'Typography', icon: '✏️' },
   { id: 'buttons', name: 'Buttons', icon: '🔘' },
@@ -775,15 +777,34 @@ function ListIcon() {
 
 interface ComponentLibraryProps {
   onInsertComponent: (code: string, name: string) => void;
+  onInsertTemplate?: (template: DesignTemplate) => void;
   searchQuery?: string;
 }
 
 export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({
   onInsertComponent,
+  onInsertTemplate,
   searchQuery = '',
 }) => {
-  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>('templates');
   const [search, setSearch] = useState(searchQuery);
+  const [designTemplates, setDesignTemplates] = useState<DesignTemplate[]>([]);
+  const [loadingTemplates, setLoadingTemplates] = useState(false);
+
+  // Fetch templates from Supabase
+  useEffect(() => {
+    const loadTemplates = async () => {
+      setLoadingTemplates(true);
+      try {
+        const templates = await fetchDesignTemplates();
+        setDesignTemplates(templates);
+      } catch (err) {
+        console.error('Failed to load templates:', err);
+      }
+      setLoadingTemplates(false);
+    };
+    loadTemplates();
+  }, []);
 
   // Filter components
   const filteredComponents = COMPONENT_TEMPLATES.filter(comp => {
@@ -843,7 +864,39 @@ export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({
 
       {/* Components List */}
       <div className="flex-1 overflow-y-auto p-3">
-        {Object.entries(groupedComponents).map(([category, components]) => {
+        {/* Templates from Supabase */}
+        {(selectedCategory === 'templates' || !selectedCategory) && (
+          <div className="mb-4">
+            <h3 className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">
+              ✨ Design Templates
+            </h3>
+            {loadingTemplates ? (
+              <div className="text-center py-4 text-gray-500 text-sm">Loading templates...</div>
+            ) : (
+              <div className="grid grid-cols-1 gap-2">
+                {designTemplates
+                  .filter(t => search === '' || t.name.toLowerCase().includes(search.toLowerCase()))
+                  .map(template => (
+                  <button
+                    key={template.id}
+                    onClick={() => onInsertTemplate?.(template)}
+                    className="p-3 bg-gradient-to-r from-violet-500/10 to-purple-500/10 hover:from-violet-500/20 hover:to-purple-500/20 border border-violet-500/20 hover:border-violet-500/50 rounded-lg text-left transition-all group"
+                  >
+                    <div className="flex items-center gap-2 mb-1">
+                      <span className="text-xs px-2 py-0.5 bg-violet-500/20 text-violet-400 rounded">{template.type}</span>
+                      <span className="text-xs text-gray-500">{template.style}</span>
+                    </div>
+                    <div className="text-sm font-medium text-white">{template.name}</div>
+                    <div className="text-xs text-gray-500 mt-1">{template.description}</div>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Regular Components */}
+        {selectedCategory !== 'templates' && Object.entries(groupedComponents).map(([category, components]) => {
           const categoryInfo = COMPONENT_CATEGORIES.find(c => c.id === category);
           return (
             <div key={category} className="mb-4">
@@ -869,7 +922,7 @@ export const ComponentLibrary: React.FC<ComponentLibraryProps> = ({
           );
         })}
 
-        {filteredComponents.length === 0 && (
+        {selectedCategory !== 'templates' && filteredComponents.length === 0 && (
           <div className="text-center py-8 text-gray-500">
             No components found
           </div>

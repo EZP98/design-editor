@@ -1,0 +1,237 @@
+{
+  "name": "Hanzo Footer",
+  "type": "footer",
+  "style": "agency-dark",
+  "tags": ["footer", "cta", "contact", "dark"],
+  "description": "Dark footer with CTA, contact info, and social links",
+  "json_structure": {
+    "type": "section",
+    "name": "Footer",
+    "styles": {
+      "display": "flex",
+      "flexDirection": "column",
+      "alignItems": "center",
+      "padding": 80,
+      "paddingTop": 120,
+      "gap": 48,
+      "backgroundColor": "#000000",
+      "borderRadius": 24,
+      "margin": 24
+    },
+    "children": [
+      {
+        "type": "row",
+        "name": "Header Line",
+        "styles": {
+          "display": "flex",
+          "alignItems": "center",
+          "gap": 16
+        },
+        "children": [
+          {
+            "type": "frame",
+            "name": "Line Left",
+            "styles": {
+              "width": 100,
+              "height": 1,
+              "backgroundImage": "linear-gradient(90deg, rgba(84, 84, 84, 0) 0%, rgb(255, 255, 255) 100%)",
+              "opacity": 0.5
+            }
+          },
+          {
+            "type": "text",
+            "name": "Spots",
+            "content": "2 spots available",
+            "styles": {
+              "fontSize": 18,
+              "fontStyle": "italic",
+              "color": "rgba(255,255,255,0.5)"
+            }
+          },
+          {
+            "type": "frame",
+            "name": "Line Right",
+            "styles": {
+              "width": 100,
+              "height": 1,
+              "backgroundImage": "linear-gradient(270deg, rgba(84, 84, 84, 0) 0%, rgb(255, 255, 255) 100%)",
+              "opacity": 0.5
+            }
+          }
+        ]
+      },
+      {
+        "type": "stack",
+        "name": "Content",
+        "styles": {
+          "display": "flex",
+          "flexDirection": "column",
+          "alignItems": "center",
+          "gap": 24,
+          "maxWidth": 600
+        },
+        "children": [
+          {
+            "type": "row",
+            "name": "Headline",
+            "styles": {
+              "display": "flex",
+              "gap": 12
+            },
+            "children": [
+              {
+                "type": "text",
+                "name": "Lets",
+                "content": "Let's",
+                "styles": {
+                  "fontSize": 64,
+                  "fontWeight": 400,
+                  "color": "#ffffff",
+                  "letterSpacing": "-0.06em"
+                }
+              },
+              {
+                "type": "text",
+                "name": "Connect",
+                "content": "Connect",
+                "styles": {
+                  "fontSize": 64,
+                  "fontWeight": 400,
+                  "color": "rgba(255,255,255,0.5)",
+                  "letterSpacing": "-0.06em"
+                }
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "name": "Description",
+            "content": "Feel free to contact me if having any questions. I'm available for new projects or just for chatting.",
+            "styles": {
+              "fontSize": 18,
+              "color": "#ffffff",
+              "textAlign": "center",
+              "lineHeight": 1.6
+            }
+          },
+          {
+            "type": "frame",
+            "name": "CTA Container",
+            "styles": {
+              "padding": 6,
+              "backgroundColor": "rgba(255,255,255,0.3)",
+              "borderRadius": 50
+            },
+            "children": [
+              {
+                "type": "button",
+                "name": "CTA",
+                "content": "Book a free intro call →",
+                "styles": {
+                  "backgroundColor": "#000000",
+                  "color": "#ffffff",
+                  "padding": 14,
+                  "paddingLeft": 24,
+                  "paddingRight": 24,
+                  "borderRadius": 50,
+                  "fontSize": 16,
+                  "fontWeight": 600,
+                  "boxShadow": "0px -16px 48px 0px rgb(0, 0, 0) inset"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "row",
+        "name": "Bottom",
+        "styles": {
+          "display": "flex",
+          "justifyContent": "space-between",
+          "alignItems": "center",
+          "width": "100%",
+          "paddingTop": 48,
+          "borderTopWidth": 1,
+          "borderTopColor": "rgba(255,255,255,0.5)",
+          "borderTopStyle": "solid"
+        },
+        "children": [
+          {
+            "type": "text",
+            "name": "Copyright",
+            "content": "© Hanzo Studio, 2025",
+            "styles": {
+              "fontSize": 14,
+              "color": "#ffffff"
+            }
+          },
+          {
+            "type": "row",
+            "name": "Social Links",
+            "styles": {
+              "display": "flex",
+              "gap": 12
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Social 1",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "borderRadius": 50,
+                  "borderWidth": 1,
+                  "borderColor": "rgba(255,255,255,0.5)",
+                  "borderStyle": "solid",
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  { "type": "icon", "iconName": "Twitter", "styles": { "width": 20, "height": 20, "color": "rgba(255,255,255,0.5)" } }
+                ]
+              },
+              {
+                "type": "frame",
+                "name": "Social 2",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "borderRadius": 50,
+                  "borderWidth": 1,
+                  "borderColor": "rgba(255,255,255,0.5)",
+                  "borderStyle": "solid",
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  { "type": "icon", "iconName": "Linkedin", "styles": { "width": 20, "height": 20, "color": "rgba(255,255,255,0.5)" } }
+                ]
+              },
+              {
+                "type": "frame",
+                "name": "Social 3",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "borderRadius": 50,
+                  "borderWidth": 1,
+                  "borderColor": "rgba(255,255,255,0.5)",
+                  "borderStyle": "solid",
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  { "type": "icon", "iconName": "Instagram", "styles": { "width": 20, "height": 20, "color": "rgba(255,255,255,0.5)" } }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

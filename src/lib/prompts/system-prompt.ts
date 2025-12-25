@@ -234,59 +234,245 @@ When the user provides visual style changes (from the visual editor):
 `;
 
 /**
+ * Format templates from Supabase as few-shot examples for AI
+ *
+ * Few-shot prompting is the key technique for consistent AI output.
+ * By showing 3-5 high-quality examples, the AI learns the exact format.
+ */
+export function formatTemplatesForPrompt(templates: Array<{
+  name?: string;
+  type: string;
+  style: string;
+  description: string;
+  json_structure: Record<string, unknown>;
+}>): string {
+  if (!templates || templates.length === 0) return '';
+
+  // Format each template as a clear example
+  const examples = templates.map((t, index) => {
+    // Ensure the JSON structure follows our layout rules
+    const structure = ensureLayoutRules(t.json_structure);
+    const json = JSON.stringify(structure, null, 0); // Compact JSON
+
+    return `EXAMPLE ${index + 1} - ${t.type.toUpperCase()} (${t.style}):
+${json}`;
+  });
+
+  return examples.join('\n\n');
+}
+
+/**
+ * Ensure template follows our layout rules (resizeX: 'fill' for row children)
+ */
+function ensureLayoutRules(structure: Record<string, unknown>): Record<string, unknown> {
+  const result = { ...structure };
+
+  // If this is a row, ensure children have resizeX: 'fill'
+  if (result.type === 'row' && Array.isArray(result.children)) {
+    result.children = (result.children as Record<string, unknown>[]).map(child => {
+      const childCopy = { ...child };
+      if (!childCopy.styles) childCopy.styles = {};
+      if (typeof childCopy.styles === 'object') {
+        (childCopy.styles as Record<string, unknown>).resizeX = 'fill';
+      }
+      // Recursively apply to nested children
+      if (childCopy.children) {
+        childCopy.children = (childCopy.children as Record<string, unknown>[]).map(
+          c => ensureLayoutRules(c as Record<string, unknown>)
+        );
+      }
+      return childCopy;
+    });
+  }
+
+  // Recursively process children
+  if (Array.isArray(result.children)) {
+    result.children = (result.children as Record<string, unknown>[]).map(
+      child => ensureLayoutRules(child as Record<string, unknown>)
+    );
+  }
+
+  return result;
+}
+
+/**
  * Design Mode System Prompt
  * Instructs AI to output ONLY canvas elements in JSON format
+ * RULES only - examples come from Supabase templates dynamically
  */
-export const DESIGN_MODE_PROMPT = `You are a world-class UI designer. Output ONLY valid JSON.
+export const DESIGN_MODE_PROMPT = `You are a world-class designer creating website designs.
 
-FORMAT: {"createNewPage":false,"pageName":"","elements":[...]}
+OUTPUT FORMAT: {"elements":[<section1>, <section2>, ...]}
 
-STYLE PALETTES:
-- DARK: bg=#000000, surface=#1c1c1c, accent=#CAE8BD, text=#ffffff, textMuted=rgba(255,255,255,0.5)
-- LIGHT: bg=#F8F6F3, surface=#EBE9E4, accent=#FF5900, primary=#001666, text=#2A3132
-- GRADIENT: linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+ELEMENT TYPES:
+• section: Full-width container (display:flex, flexDirection:column, resizeX:fill)
+• row: Horizontal container (display:flex, flexDirection:row) - children MUST have "resizeX":"fill"
+• frame: Card/container
+• stack: Vertical stack
+• text: Text with "content" property
+• button: Button with "content" property
+• image: Image with "src" (use Unsplash URLs)
+• icon: Lucide icon with "iconName" property
 
-ICONS: Zap, Rocket, Star, Shield, Heart, ArrowRight, Check, Users, Globe, Mail, Phone, Play, Sparkles, Target, Award, TrendingUp, Lock, Eye, Bell, MessageCircle, Send, Download, Settings, Home, Search, Leaf, Box, Camera, Briefcase
+CRITICAL LAYOUT RULES:
+1. All children inside a "row" MUST have "resizeX":"fill" to distribute width equally
+2. All sections should have display:"flex" and flexDirection:"column"
+3. Use gap for spacing between children, padding for internal space
+4. Never hardcode pixel widths on row children - use resizeX:"fill"
 
-DESIGN TIPS:
-- Use gradients for backgrounds: "backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)"
-- Headlines: fontSize 48-72, fontWeight 700
-- Subtitles: fontSize 18-24, textMuted color
-- Use padding 60-100 and gap 24-40
-- Cards: borderRadius 16, padding 24, backgroundColor surface color
-- Buttons: borderRadius 50 for pill shape, padding 12-16
+STYLE PROPERTIES:
+• Layout: display, flexDirection, alignItems, justifyContent, gap, flexWrap
+• Spacing: padding, paddingTop/Right/Bottom/Left
+• Background: backgroundColor, backgroundImage
+• Typography: fontSize (48-72 for titles, 16-20 for body), fontWeight (400-700), color
+• Border: borderRadius (8-24), borderWidth, borderColor, borderStyle
+• Sizing: resizeX ("fill" or "hug"), width/height (only for images)
 
-HERO EXAMPLES:
+OUTPUT RAW JSON ONLY. No markdown, no explanation, no code fences.`;
 
-1) Gradient Centered:
-{"createNewPage":false,"pageName":"","elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","padding":80,"gap":32,"backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)","minHeight":600},"children":[{"type":"text","name":"Title","content":"Build Something Amazing","styles":{"fontSize":64,"fontWeight":700,"color":"#ffffff","textAlign":"center"}},{"type":"text","name":"Subtitle","content":"Create beautiful experiences","styles":{"fontSize":20,"color":"rgba(255,255,255,0.8)","textAlign":"center"}},{"type":"button","name":"CTA","content":"Get Started","styles":{"backgroundColor":"#ffffff","color":"#764ba2","fontSize":16,"fontWeight":600,"padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}]}
+/**
+ * Get design prompt with dynamic templates from Supabase
+ * Templates are passed in, not hardcoded
+ */
+export function getDesignPromptWithTemplates(options?: {
+  style?: string;
+  pageType?: string;
+  templates?: Array<{
+    type: string;
+    style: string;
+    description: string;
+    json_structure: Record<string, unknown>;
+  }>;
+}): string {
+  let prompt = DESIGN_MODE_PROMPT;
 
-2) Dark Minimal:
-{"createNewPage":false,"pageName":"","elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"flex-start","padding":80,"gap":32,"backgroundColor":"#000000","minHeight":600},"children":[{"type":"text","name":"Title","content":"Design. Build. Launch.","styles":{"fontSize":72,"fontWeight":700,"color":"#ffffff"}},{"type":"text","name":"Subtitle","content":"Creating visual identities that make your brand memorable.","styles":{"fontSize":18,"color":"rgba(255,255,255,0.5)"}},{"type":"button","name":"CTA","content":"Book a call","styles":{"backgroundColor":"#CAE8BD","color":"#000000","padding":14,"paddingLeft":28,"paddingRight":28,"borderRadius":50}}]}]}
+  // Add color palettes
+  prompt += `
 
-CARD EXAMPLES:
+COLOR PALETTES:
+• Dark Modern: bg=#09090b, surface=#18181b, accent=#a855f7, text=#ffffff, muted=rgba(255,255,255,0.5)
+• Light Elegant: bg=#FAFAF9, surface=#ffffff, accent=#18181b, text=#0a0a0a, muted=#71717a
+• Playful: pink=#FFC9F0, yellow=#FFE68C, blue=#9DDCFF, cream=#FFFBF5, borders=#000000
+• Gradient Purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+• Gradient Sunset: linear-gradient(135deg, #f093fb 0%, #f5576c 100%)
+• Glass Dark: bg=rgba(255,255,255,0.05), border=rgba(255,255,255,0.1)`;
 
-1) Project Card:
-{"type":"frame","name":"Card","styles":{"display":"flex","flexDirection":"column","gap":16,"padding":12,"backgroundColor":"#EBE9E4","borderRadius":16},"children":[{"type":"image","name":"Cover","src":"https://images.unsplash.com/photo-1558591710-4b4a1ae0f04d?w=600","styles":{"borderRadius":8,"aspectRatio":"4/3","objectFit":"cover"}},{"type":"text","name":"Title","content":"Project Name","styles":{"fontSize":18,"fontWeight":600,"color":"#2A3132"}},{"type":"text","name":"Desc","content":"Brief description","styles":{"fontSize":14,"color":"#767D7E"}},{"type":"frame","name":"Badge","styles":{"backgroundColor":"#2A3132","padding":6,"paddingLeft":14,"paddingRight":14,"borderRadius":20},"children":[{"type":"text","content":"Design","styles":{"fontSize":12,"color":"#F8F6F3"}}]}]}
+  // Add templates from Supabase as few-shot examples
+  // This is the key technique for consistent, high-quality AI output
+  if (options?.templates && options.templates.length > 0) {
+    const examples = formatTemplatesForPrompt(options.templates);
+    prompt += `
 
-2) Service Card Dark:
-{"type":"frame","name":"Service","styles":{"display":"flex","flexDirection":"column","gap":16,"padding":24,"backgroundColor":"#1c1c1c","borderRadius":16},"children":[{"type":"row","styles":{"display":"flex","justifyContent":"space-between","alignItems":"center"},"children":[{"type":"text","content":"01.","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}},{"type":"frame","styles":{"backgroundColor":"#141414","borderRadius":50,"padding":12},"children":[{"type":"icon","iconName":"Leaf","styles":{"color":"#CAE8BD"}}]}]},{"type":"text","content":"Branding","styles":{"fontSize":18,"fontWeight":600,"color":"#ffffff"}},{"type":"text","content":"Creating visual identities","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]}
+═══════════════════════════════════════════════════════════════
+FEW-SHOT EXAMPLES - FOLLOW THESE PATTERNS EXACTLY
+═══════════════════════════════════════════════════════════════
+Study these examples carefully. They show the EXACT structure and styling you must use.
+Note how row children always have "resizeX":"fill" for equal distribution.
 
-SECTION EXAMPLES:
+${examples}
 
-1) Features Grid:
-{"type":"section","name":"Features","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":48,"backgroundColor":"#000000"},"children":[{"type":"text","name":"Title","content":"Our Services","styles":{"fontSize":32,"fontWeight":600,"color":"#ffffff"}},{"type":"grid","name":"Grid","styles":{"display":"grid","gridTemplateColumns":"repeat(4, 1fr)","gap":24},"children":[...service cards]}]}
+═══════════════════════════════════════════════════════════════
+Generate designs that match these patterns in structure and quality.`;
+  }
 
-2) CTA Section:
-{"type":"section","name":"CTA","styles":{"display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","padding":120,"gap":32,"backgroundImage":"linear-gradient(135deg, #667eea 0%, #764ba2 100%)"},"children":[{"type":"text","content":"Let's Work Together","styles":{"fontSize":48,"fontWeight":700,"color":"#ffffff","textAlign":"center"}},{"type":"text","content":"Have a project in mind?","styles":{"fontSize":18,"color":"rgba(255,255,255,0.8)"}},{"type":"button","content":"Get in Touch","styles":{"backgroundColor":"#ffffff","color":"#764ba2","padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}
+  return prompt;
+}
 
-TESTIMONIAL:
-{"type":"frame","name":"Testimonial","styles":{"display":"flex","flexDirection":"column","gap":16,"padding":24,"backgroundColor":"#141414","borderRadius":16},"children":[{"type":"row","styles":{"display":"flex","alignItems":"center","gap":12},"children":[{"type":"image","src":"https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=96","styles":{"borderRadius":50}},{"type":"stack","styles":{"gap":4},"children":[{"type":"text","content":"Sarah Chen","styles":{"fontSize":14,"fontWeight":500,"color":"#ffffff"}},{"type":"text","content":"@sarahchen","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]}]},{"type":"text","content":"Amazing work! Exceeded expectations.","styles":{"fontSize":14,"color":"#ffffff","lineHeight":1.6}}]}
+/**
+ * Design Style Presets
+ * Users can select a style and the AI will generate designs in that style
+ */
+export type DesignStyle = 'modern-dark' | 'minimal-light' | 'bold-gradient' | 'elegant-luxury' | 'playful-colorful' | 'corporate-clean';
 
-PRICING:
-{"type":"frame","name":"Pricing","styles":{"display":"flex","flexDirection":"column","gap":24,"padding":24,"backgroundColor":"#141414","borderRadius":16},"children":[{"type":"stack","styles":{"gap":8},"children":[{"type":"text","content":"Pro Plan","styles":{"fontSize":18,"fontWeight":600,"color":"#ffffff"}},{"type":"text","content":"For growing businesses","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]},{"type":"row","styles":{"alignItems":"baseline","gap":4},"children":[{"type":"text","content":"$49","styles":{"fontSize":32,"fontWeight":600,"color":"#ffffff"}},{"type":"text","content":"/month","styles":{"fontSize":14,"color":"rgba(255,255,255,0.5)"}}]},{"type":"button","content":"Get Started","styles":{"backgroundColor":"#CAE8BD","color":"#000000","padding":14,"borderRadius":50,"textAlign":"center"}}]}
+export const DESIGN_STYLE_PRESETS: Record<DesignStyle, { name: string; description: string; prompt: string }> = {
+  'modern-dark': {
+    name: 'Modern Dark',
+    description: 'Sleek dark theme with subtle accents',
+    prompt: `STYLE: Modern Dark
+- Background: #0a0a0a, #111111, #1a1a1a
+- Text: #ffffff (primary), rgba(255,255,255,0.6) (secondary)
+- Accents: #c9a962 (gold) or #3b82f6 (blue)
+- Typography: Clean, bold headlines with tight letter-spacing
+- Borders: Subtle rgba(255,255,255,0.1) borders
+- Buttons: Solid white or accent color, pill-shaped (borderRadius 50)`
+  },
+  'minimal-light': {
+    name: 'Minimal Light',
+    description: 'Clean white space with black typography',
+    prompt: `STYLE: Minimal Light
+- Background: #ffffff, #fafafa, #f5f5f5
+- Text: #1a1a1a (primary), #666666 (secondary)
+- Accents: #000000 or single brand color
+- Typography: Elegant, lots of white space, generous line-height
+- Borders: Light #e5e5e5 or none
+- Buttons: Black with white text, subtle rounded corners (borderRadius 8-12)`
+  },
+  'bold-gradient': {
+    name: 'Bold Gradient',
+    description: 'Vibrant gradients with high contrast',
+    prompt: `STYLE: Bold Gradient
+- Background: Vibrant gradients like linear-gradient(135deg, #667eea 0%, #764ba2 100%) or linear-gradient(135deg, #f093fb 0%, #f5576c 100%)
+- Text: #ffffff with subtle text shadows for depth
+- Accents: White or contrasting bright colors
+- Typography: Extra bold headlines (fontWeight 800-900), large sizes
+- Buttons: White with gradient text, or solid white
+- Effects: Consider backdrop blur for glass effects`
+  },
+  'elegant-luxury': {
+    name: 'Elegant Luxury',
+    description: 'Sophisticated with gold accents',
+    prompt: `STYLE: Elegant Luxury
+- Background: #0a0a0a (deep black), #1c1917 (warm dark)
+- Text: #ffffff, #f5f5f4 (warm white)
+- Accents: #c9a962 (gold), #d4af37 (metallic gold)
+- Typography: Elegant serif-like feel, generous letter-spacing on labels
+- Borders: Gold accents rgba(201,169,98,0.3)
+- Buttons: Gold accents, refined rounded corners
+- Labels: Uppercase, spaced-out letters`
+  },
+  'playful-colorful': {
+    name: 'Playful Colorful',
+    description: 'Fun, bright colors with rounded shapes',
+    prompt: `STYLE: Playful Colorful
+- Background: Bright colors like #fef3c7, #dbeafe, #fce7f3, or multi-color gradients
+- Text: Dark contrasting colors #1f2937, #7c3aed
+- Accents: Multiple bright colors - purple, pink, yellow, teal
+- Typography: Rounded, friendly fonts, bouncy feel
+- Borders: Thick colorful borders, large border-radius (16-24)
+- Buttons: Colorful with shadows, very rounded (borderRadius 20+)
+- Effects: Playful shadows, slight rotations`
+  },
+  'corporate-clean': {
+    name: 'Corporate Clean',
+    description: 'Professional, trustworthy business look',
+    prompt: `STYLE: Corporate Clean
+- Background: #ffffff, #f8fafc, #f1f5f9
+- Text: #0f172a (primary), #475569 (secondary)
+- Accents: Professional blue #2563eb, or teal #0d9488
+- Typography: Clear, readable, professional hierarchy
+- Borders: Clean #e2e8f0 borders
+- Buttons: Solid accent color, moderate rounding (borderRadius 6-8)
+- Cards: White with subtle shadows`
+  }
+};
 
-Output ONLY valid JSON, no explanatory text.`;
+/**
+ * Get style-enhanced design prompt
+ */
+export function getStyledDesignPrompt(style?: DesignStyle): string {
+  let prompt = DESIGN_MODE_PROMPT;
+
+  if (style && DESIGN_STYLE_PRESETS[style]) {
+    prompt += `\n\n═══════════════════════════════════════════════════════════════
+SELECTED DESIGN STYLE
+═══════════════════════════════════════════════════════════════
+${DESIGN_STYLE_PRESETS[style].prompt}
+
+Apply this style consistently to all generated elements.`;
+  }
+
+  return prompt;
+}
 
 /**
  * Format design tokens for AI context
@@ -307,11 +493,41 @@ ${brandColors.map(c => `- ${c.name}: "${c.value}"`).join('\n')}
 }
 
 /**
+ * Format current canvas elements as context for AI
+ * Kept minimal to avoid confusing the AI
+ */
+export function formatCanvasContextForAI(elements: Array<{
+  id: string;
+  type: string;
+  name: string;
+  styles?: Record<string, unknown>;
+  content?: string;
+  children?: string[];
+}>): string {
+  // Filter out page elements - only show actual content
+  const contentElements = elements.filter(el => el.type !== 'page');
+
+  // Only provide context if there are meaningful elements (more than 2)
+  if (contentElements.length < 3) return '';
+
+  // Just list section names to give theme context without overwhelming
+  const sectionNames = contentElements
+    .filter(el => el.type === 'section')
+    .map(el => el.name)
+    .slice(0, 5);
+
+  if (sectionNames.length === 0) return '';
+
+  return `\nExisting sections: ${sectionNames.join(', ')}. Generate complementary sections.`;
+}
+
+/**
  * Get the system prompt with optional context
  */
 export function getSystemPrompt(options?: {
   mode?: 'design' | 'code';
   projectFiles?: string;
+  designStyle?: DesignStyle;
   designTokens?: {
     colors: Array<{ id: string; name: string; value: string; group?: string }>;
     radii: Array<{ id: string; name: string; value: number }>;
@@ -322,14 +538,38 @@ export function getSystemPrompt(options?: {
     className: string;
     filePath?: string;
   };
+  currentCanvas?: Array<{
+    id: string;
+    type: string;
+    name: string;
+    styles?: Record<string, unknown>;
+    content?: string;
+    children?: string[];
+  }>;
+  // Templates fetched from Supabase
+  templates?: Array<{
+    type: string;
+    style: string;
+    description: string;
+    json_structure: Record<string, unknown>;
+  }>;
 }): string {
   // Use design prompt for design mode
   if (options?.mode === 'design') {
-    let prompt = DESIGN_MODE_PROMPT;
+    // Start with dynamic template-based prompt
+    let prompt = getDesignPromptWithTemplates({
+      style: options.designStyle,
+      templates: options.templates,
+    });
 
     // Add design tokens context if provided
     if (options.designTokens) {
       prompt += '\n\n' + formatDesignTokensForAI(options.designTokens);
+    }
+
+    // Add current canvas context if provided
+    if (options.currentCanvas && options.currentCanvas.length > 0) {
+      prompt += '\n\n' + formatCanvasContextForAI(options.currentCanvas);
     }
 
     return prompt;

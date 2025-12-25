@@ -4,9 +4,10 @@
  * Bolt-style sidebar with Pages and Layers tabs.
  */
 
-import React, { useState } from 'react';
+import React, { useState, useMemo, memo } from 'react';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
-import { CanvasElement, ElementType, THEME_COLORS } from '../../lib/canvas/types';
+import { CanvasElement, CanvasPage, ElementType, THEME_COLORS } from '../../lib/canvas/types';
+import { getStylesForBreakpoint } from '../../lib/canvas/responsive';
 import AIChatPanel from '../AIChatPanel';
 
 // Element type icons
@@ -96,7 +97,253 @@ const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
   ),
 };
 
-// Layer Item Component - Compact Figma-style
+// Mini Page Preview - renders the first section/viewport of the page
+// NOTE: Removed memo to ensure preview always reflects current state
+function MiniPagePreview({
+  page,
+  width = 56,
+  height = 40,
+}: {
+  page: CanvasPage;
+  width?: number;
+  height?: number;
+}) {
+  const elements = useCanvasStore((state) => state.elements);
+  const rootElement = elements[page.rootElementId];
+
+  // Scale to fit width, showing the top portion (first section)
+  const scale = width / page.width;
+  // Calculate a reasonable minimum height for the scaled content
+  // This should be tall enough to show the first section without weird clipping
+  const minContentHeight = Math.max(page.height, 800);
+
+  // Render element recursively
+  const renderElement = (element: CanvasElement, parentHasAutoLayout = false, parentFlexDirection?: string): React.ReactNode => {
+    if (!element || !element.visible) return null;
+
+    const styles = getStylesForBreakpoint(element.styles, element.responsiveStyles, 'desktop');
+
+    // Handle resize modes
+    const resizeX = (styles as any).resizeX || 'fixed';
+    const resizeY = (styles as any).resizeY || 'fixed';
+
+    let elWidth: number | string = element.size.width;
+    let elHeight: number | string = element.size.height;
+
+    // In auto-layout, handle fill/hug based on parent's flex direction
+    if (parentHasAutoLayout) {
+      const isHorizontal = parentFlexDirection === 'row' || parentFlexDirection === 'row-reverse';
+
+      if (resizeX === 'fill') {
+        elWidth = isHorizontal ? undefined : '100%'; // Let flex handle it
+      } else if (resizeX === 'hug') {
+        elWidth = 'auto';
+      }
+
+      if (resizeY === 'fill') {
+        elHeight = isHorizontal ? '100%' : undefined; // Let flex handle it
+      } else if (resizeY === 'hug') {
+        elHeight = 'auto';
+      }
+    }
+
+    const cssStyles: React.CSSProperties = {
+      position: element.positionType === 'absolute' && !parentHasAutoLayout ? 'absolute' : 'relative',
+      width: elWidth,
+      height: elHeight,
+      minWidth: resizeX === 'hug' ? undefined : element.size.width,
+      minHeight: resizeY === 'hug' ? 20 : undefined,
+      flexShrink: 0,
+      flexGrow: (resizeX === 'fill' || resizeY === 'fill') ? 1 : 0,
+      flexBasis: parentHasAutoLayout ? (resizeX === 'fill' || resizeY === 'fill' ? 0 : 'auto') : undefined,
+      alignSelf: resizeY === 'fill' && parentHasAutoLayout ? 'stretch' : undefined,
+    };
+
+    if (element.positionType === 'absolute' && !parentHasAutoLayout) {
+      cssStyles.left = element.position.x;
+      cssStyles.top = element.position.y;
+    }
+
+    // Layout
+    if (styles.display) cssStyles.display = styles.display;
+    if (styles.flexDirection) cssStyles.flexDirection = styles.flexDirection;
+    if (styles.justifyContent) cssStyles.justifyContent = styles.justifyContent;
+    if (styles.alignItems) cssStyles.alignItems = styles.alignItems;
+    if (styles.gap !== undefined) cssStyles.gap = styles.gap;
+    if (styles.gridTemplateColumns) cssStyles.gridTemplateColumns = styles.gridTemplateColumns;
+
+    // Spacing
+    if (styles.padding !== undefined) cssStyles.padding = styles.padding;
+    if (styles.paddingTop !== undefined) cssStyles.paddingTop = styles.paddingTop;
+    if (styles.paddingRight !== undefined) cssStyles.paddingRight = styles.paddingRight;
+    if (styles.paddingBottom !== undefined) cssStyles.paddingBottom = styles.paddingBottom;
+    if (styles.paddingLeft !== undefined) cssStyles.paddingLeft = styles.paddingLeft;
+
+    // Background
+    if (styles.backgroundColor) cssStyles.backgroundColor = styles.backgroundColor;
+    if (styles.backgroundImage) cssStyles.backgroundImage = styles.backgroundImage;
+    if (styles.background) cssStyles.background = styles.background;
+
+    // Border
+    if (styles.borderRadius !== undefined) cssStyles.borderRadius = styles.borderRadius;
+    if (styles.borderWidth !== undefined) cssStyles.borderWidth = styles.borderWidth;
+    if (styles.borderColor) cssStyles.borderColor = styles.borderColor;
+    if (styles.borderStyle) cssStyles.borderStyle = styles.borderStyle;
+
+    // Effects
+    if (styles.opacity !== undefined) cssStyles.opacity = styles.opacity;
+    if (styles.boxShadow) cssStyles.boxShadow = styles.boxShadow;
+    if (styles.overflow) cssStyles.overflow = styles.overflow;
+
+    // Render content based on type
+    let content: React.ReactNode = null;
+
+    switch (element.type) {
+      case 'text':
+        content = (
+          <div
+            style={{
+              fontSize: styles.fontSize ? styles.fontSize * 0.5 : 6,
+              fontWeight: styles.fontWeight,
+              color: styles.color || '#333',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {element.content || ''}
+          </div>
+        );
+        break;
+
+      case 'button':
+        content = (
+          <div
+            style={{
+              ...cssStyles,
+              fontSize: 4,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {element.content || ''}
+          </div>
+        );
+        break;
+
+      case 'image':
+        content = element.src ? (
+          <img
+            src={element.src}
+            alt=""
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: (styles.objectFit as any) || 'cover',
+            }}
+          />
+        ) : (
+          <div style={{ width: '100%', height: '100%', background: '#e5e5e5' }} />
+        );
+        break;
+
+      default:
+        // Container types - render children with auto-layout context
+        const hasAutoLayout = styles.display === 'flex' || styles.display === 'grid';
+        const flexDir = styles.flexDirection || 'column';
+        content = element.children.map((childId) => {
+          const child = elements[childId];
+          if (!child) return null;
+          return <React.Fragment key={childId}>{renderElement(child, hasAutoLayout, flexDir)}</React.Fragment>;
+        });
+    }
+
+    return <div style={cssStyles}>{content}</div>;
+  };
+
+  if (!rootElement) {
+    return (
+      <div
+        style={{
+          width,
+          height,
+          background: page.backgroundColor || '#ffffff',
+          borderRadius: 3,
+        }}
+      />
+    );
+  }
+
+  // Check if page has auto-layout
+  const pageHasAutoLayout = rootElement.styles.display === 'flex' || rootElement.styles.display === 'grid';
+  const pageFlexDirection = rootElement.styles.flexDirection || 'column';
+
+  return (
+    <div
+      style={{
+        width,
+        height,
+        overflow: 'hidden',
+        borderRadius: 3,
+        background: page.backgroundColor || rootElement.styles.backgroundColor || '#ffffff',
+        position: 'relative',
+      }}
+    >
+      <div
+        style={{
+          transform: `scale(${scale})`,
+          transformOrigin: 'top left',
+          width: page.width,
+          minHeight: minContentHeight,
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          pointerEvents: 'none',
+          // Apply page's auto-layout styles
+          display: rootElement.styles.display || 'flex',
+          flexDirection: rootElement.styles.flexDirection || 'column',
+          justifyContent: rootElement.styles.justifyContent,
+          alignItems: rootElement.styles.alignItems || 'stretch',
+          gap: rootElement.styles.gap,
+          padding: rootElement.styles.padding,
+          paddingTop: rootElement.styles.paddingTop,
+          paddingRight: rootElement.styles.paddingRight,
+          paddingBottom: rootElement.styles.paddingBottom,
+          paddingLeft: rootElement.styles.paddingLeft,
+          backgroundColor: rootElement.styles.backgroundColor,
+        }}
+      >
+        {rootElement.children.map((childId) => {
+          const child = elements[childId];
+          if (!child) return null;
+          return <React.Fragment key={childId}>{renderElement(child, pageHasAutoLayout, pageFlexDirection)}</React.Fragment>;
+        })}
+      </div>
+    </div>
+  );
+}
+
+// Drag state for layers - shared across all LayerItem components
+interface DragState {
+  draggingId: string | null;
+  dropTargetId: string | null;
+  dropPosition: 'before' | 'after' | 'inside' | null;
+}
+
+// Layer drag context - use React context for shared state
+const LayerDragContext = React.createContext<{
+  dragState: DragState;
+  setDragState: (state: DragState) => void;
+}>({
+  dragState: { draggingId: null, dropTargetId: null, dropPosition: null },
+  setDragState: () => {},
+});
+
+// Container types that can accept children
+const CONTAINER_TYPES = ['page', 'frame', 'section', 'container', 'stack', 'row', 'grid'];
+
+// Layer Item Component - Compact Figma-style with drag & drop
 function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: number }) {
   const [isExpanded, setIsExpanded] = useState(true);
   const {
@@ -107,6 +354,7 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
     setHoveredElement,
     toggleVisibility,
     renameElement,
+    reorderElement,
     canvasSettings,
   } = useCanvasStore();
 
@@ -114,16 +362,155 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
   const theme = canvasSettings?.editorTheme || 'dark';
   const colors = THEME_COLORS[theme];
 
+  // Drag context
+  const { dragState, setDragState } = React.useContext(LayerDragContext);
+
   const isSelected = selectedElementIds.includes(element.id);
   const isHovered = hoveredElementId === element.id;
   const hasChildren = element.children.length > 0;
+  const isContainer = CONTAINER_TYPES.includes(element.type);
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(element.name);
 
+  const isDragging = dragState.draggingId === element.id;
+  const isDropTarget = dragState.dropTargetId === element.id;
+  const dropPosition = isDropTarget ? dragState.dropPosition : null;
+
+  // Handle drag start
+  const handleDragStart = (e: React.DragEvent) => {
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', element.id);
+    setDragState({ ...dragState, draggingId: element.id });
+  };
+
+  // Handle drag end
+  const handleDragEnd = () => {
+    // Perform the reorder if we have a valid drop target
+    if (dragState.draggingId && dragState.dropTargetId && dragState.dropPosition) {
+      reorderElement(dragState.draggingId, dragState.dropTargetId, dragState.dropPosition);
+    }
+    setDragState({ draggingId: null, dropTargetId: null, dropPosition: null });
+  };
+
+  // Handle drag over - determine drop position based on mouse position
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!dragState.draggingId || dragState.draggingId === element.id) return;
+
+    const rect = e.currentTarget.getBoundingClientRect();
+    const y = e.clientY - rect.top;
+    const height = rect.height;
+
+    let position: 'before' | 'after' | 'inside';
+
+    if (isContainer && y > height * 0.25 && y < height * 0.75) {
+      // Middle zone - drop inside container
+      position = 'inside';
+    } else if (y < height / 2) {
+      // Top half - drop before
+      position = 'before';
+    } else {
+      // Bottom half - drop after
+      position = 'after';
+    }
+
+    setDragState({
+      ...dragState,
+      dropTargetId: element.id,
+      dropPosition: position,
+    });
+  };
+
+  // Handle drag leave
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're actually leaving this element
+    const relatedTarget = e.relatedTarget as Node;
+    if (!e.currentTarget.contains(relatedTarget)) {
+      if (dragState.dropTargetId === element.id) {
+        setDragState({ ...dragState, dropTargetId: null, dropPosition: null });
+      }
+    }
+  };
+
+  // Keyboard navigation
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (isRenaming) return;
+
+    // Move element up/down with Cmd/Ctrl + arrow keys
+    if ((e.metaKey || e.ctrlKey) && isSelected) {
+      const parent = element.parentId ? elements[element.parentId] : null;
+      if (!parent) return;
+
+      const siblingIndex = parent.children.indexOf(element.id);
+
+      if (e.key === 'ArrowUp' || e.key === '[') {
+        // Move up (earlier in list = higher in visual order)
+        if (siblingIndex > 0) {
+          const targetId = parent.children[siblingIndex - 1];
+          reorderElement(element.id, targetId, 'before');
+          e.preventDefault();
+        }
+      } else if (e.key === 'ArrowDown' || e.key === ']') {
+        // Move down (later in list = lower in visual order)
+        if (siblingIndex < parent.children.length - 1) {
+          const targetId = parent.children[siblingIndex + 1];
+          reorderElement(element.id, targetId, 'after');
+          e.preventDefault();
+        }
+      }
+    }
+  };
+
+  // Calculate drop indicator styles
+  const getDropIndicatorStyle = (): React.CSSProperties | null => {
+    if (!isDropTarget || !dropPosition) return null;
+
+    if (dropPosition === 'before') {
+      return {
+        position: 'absolute',
+        top: 0,
+        left: depth * 16 + 10,
+        right: 10,
+        height: 2,
+        background: colors.accent,
+        borderRadius: 1,
+        zIndex: 10,
+      };
+    } else if (dropPosition === 'after') {
+      return {
+        position: 'absolute',
+        bottom: 0,
+        left: depth * 16 + 10,
+        right: 10,
+        height: 2,
+        background: colors.accent,
+        borderRadius: 1,
+        zIndex: 10,
+      };
+    }
+    return null;
+  };
+
+  const dropIndicatorStyle = getDropIndicatorStyle();
+
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
+      {/* Drop indicator line for before */}
+      {dropIndicatorStyle && dropPosition === 'before' && (
+        <div style={dropIndicatorStyle as React.CSSProperties} />
+      )}
+
       <div
         className="group"
+        draggable={!isRenaming}
+        onDragStart={handleDragStart}
+        onDragEnd={handleDragEnd}
+        onDragOver={handleDragOver}
+        onDragLeave={handleDragLeave}
+        onKeyDown={handleKeyDown}
+        tabIndex={0}
         style={{
           display: 'flex',
           alignItems: 'center',
@@ -134,10 +521,21 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
           marginLeft: 4,
           marginRight: 4,
           borderRadius: 6,
-          background: isSelected ? colors.accentLight : isHovered ? colors.hoverBg : 'transparent',
+          background: isDragging
+            ? 'rgba(168, 50, 72, 0.1)'
+            : isDropTarget && dropPosition === 'inside'
+            ? 'rgba(168, 50, 72, 0.15)'
+            : isSelected
+            ? colors.accentLight
+            : isHovered
+            ? colors.hoverBg
+            : 'transparent',
           borderLeft: isSelected ? `2px solid ${colors.accent}` : '2px solid transparent',
-          cursor: 'pointer',
-          transition: 'background 0.1s',
+          border: isDropTarget && dropPosition === 'inside' ? `2px dashed ${colors.accent}` : undefined,
+          cursor: isDragging ? 'grabbing' : 'grab',
+          opacity: isDragging ? 0.5 : 1,
+          transition: 'background 0.1s, opacity 0.15s',
+          outline: 'none',
         }}
         onClick={(e) => selectElement(element.id, e.shiftKey || e.metaKey || e.ctrlKey)}
         onMouseEnter={() => setHoveredElement(element.id)}
@@ -274,6 +672,11 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
         </button>
       </div>
 
+      {/* Drop indicator line for after */}
+      {dropIndicatorStyle && dropPosition === 'after' && (
+        <div style={dropIndicatorStyle as React.CSSProperties} />
+      )}
+
       {/* Children */}
       {hasChildren && isExpanded && (
         <div>
@@ -285,6 +688,28 @@ function LayerItem({ element, depth = 0 }: { element: CanvasElement; depth?: num
         </div>
       )}
     </div>
+  );
+}
+
+// Layer list wrapper with drag context
+function LayerList({ rootElement }: { rootElement: CanvasElement }) {
+  const elements = useCanvasStore((state) => state.elements);
+  const [dragState, setDragState] = useState<DragState>({
+    draggingId: null,
+    dropTargetId: null,
+    dropPosition: null,
+  });
+
+  return (
+    <LayerDragContext.Provider value={{ dragState, setDragState }}>
+      <div>
+        {rootElement.children.map((childId) => {
+          const child = elements[childId];
+          if (!child) return null;
+          return <LayerItem key={childId} element={child} depth={0} />;
+        })}
+      </div>
+    </LayerDragContext.Provider>
   );
 }
 
@@ -507,158 +932,197 @@ export function CanvasSidebar() {
               </button>
             </div>
 
-            {/* Page list */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-              {Object.values(pages).map((page) => (
-                <div
-                  key={page.id}
-                  className="group"
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 10,
-                    padding: '10px 12px',
-                    borderRadius: 6,
-                    cursor: 'pointer',
-                    transition: 'all 0.15s',
-                    background: page.id === currentPageId ? colors.hoverBg : 'transparent',
-                    border: page.id === currentPageId ? `1px solid ${colors.borderColor}` : '1px solid transparent',
-                  }}
-                  onClick={() => setCurrentPage(page.id)}
-                  onDoubleClick={() => {
-                    setEditingPageId(page.id);
-                    setNewPageName(page.name);
-                  }}
-                >
-                  {/* Page icon */}
+            {/* Page list - Figma Sites style with URL paths */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+              {Object.values(pages).map((page, index) => {
+                // Generate URL path from page name
+                const urlPath = index === 0
+                  ? '/'
+                  : '/' + page.name.toLowerCase()
+                      .replace(/\s+/g, '-')
+                      .replace(/[^a-z0-9-]/g, '');
+
+                return (
                   <div
+                    key={page.id}
+                    className="group"
                     style={{
-                      width: 32,
-                      height: 32,
                       display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: 6,
-                      background: page.id === currentPageId ? colors.accent : colors.hoverBg,
-                    }}
-                  >
-                    <svg
-                      width="14"
-                      height="14"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      stroke={page.id === currentPageId ? '#fff' : colors.textMuted}
-                      strokeWidth="1.5"
-                    >
-                      <rect x="3" y="3" width="18" height="18" rx="2" />
-                    </svg>
-                  </div>
-
-                  {/* Page name */}
-                  {editingPageId === page.id ? (
-                    <input
-                      type="text"
-                      value={newPageName}
-                      onChange={(e) => setNewPageName(e.target.value)}
-                      onBlur={() => {
-                        if (newPageName.trim()) renamePage(page.id, newPageName.trim());
-                        setEditingPageId(null);
-                      }}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter') {
-                          if (newPageName.trim()) renamePage(page.id, newPageName.trim());
-                          setEditingPageId(null);
-                        }
-                        if (e.key === 'Escape') setEditingPageId(null);
-                      }}
-                      style={{
-                        flex: 1,
-                        background: colors.inputBg,
-                        border: `1px solid ${colors.accent}`,
-                        borderRadius: 4,
-                        padding: '4px 8px',
-                        color: colors.textPrimary,
-                        fontSize: 13,
-                        outline: 'none',
-                      }}
-                      autoFocus
-                      onClick={(e) => e.stopPropagation()}
-                    />
-                  ) : (
-                    <span
-                      style={{
-                        flex: 1,
-                        fontSize: 13,
-                        fontWeight: 500,
-                        color: page.id === currentPageId ? colors.textPrimary : colors.textSecondary,
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                        whiteSpace: 'nowrap',
-                      }}
-                    >
-                      {page.name}
-                    </span>
-                  )}
-
-                  {/* Duplicate button */}
-                  <button
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      duplicatePage(page.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100"
-                    style={{
-                      width: 24,
-                      height: 24,
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      borderRadius: 4,
-                      border: 'none',
-                      background: 'transparent',
-                      color: colors.textDimmed,
+                      alignItems: 'flex-start',
+                      gap: 12,
+                      padding: '12px 14px',
+                      borderRadius: 8,
                       cursor: 'pointer',
                       transition: 'all 0.15s',
+                      background: page.id === currentPageId ? colors.accentLight : 'transparent',
+                      border: page.id === currentPageId
+                        ? `1px solid ${colors.accentMedium}`
+                        : `1px solid transparent`,
                     }}
-                    title="Duplica pagina"
+                    onClick={() => setCurrentPage(page.id)}
+                    onDoubleClick={() => {
+                      setEditingPageId(page.id);
+                      setNewPageName(page.name);
+                    }}
                   >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="9" y="9" width="13" height="13" rx="2" />
-                      <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
-                    </svg>
-                  </button>
-
-                  {/* Delete button */}
-                  {Object.keys(pages).length > 1 && (
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        deletePage(page.id);
+                    {/* Page thumbnail preview - real mini render */}
+                    <div
+                      style={{
+                        flexShrink: 0,
+                        position: 'relative',
+                        border: `1px solid ${colors.borderColor}`,
+                        borderRadius: 4,
+                        overflow: 'hidden',
                       }}
+                    >
+                      <MiniPagePreview page={page} width={56} height={40} />
+                      {/* Active indicator */}
+                      {page.id === currentPageId && (
+                        <div
+                          style={{
+                            position: 'absolute',
+                            top: 3,
+                            right: 3,
+                            width: 6,
+                            height: 6,
+                            borderRadius: '50%',
+                            background: colors.accent,
+                            boxShadow: '0 0 0 1px rgba(0,0,0,0.2)',
+                          }}
+                        />
+                      )}
+                    </div>
+
+                    {/* Page info */}
+                    <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                      {/* Page name */}
+                      {editingPageId === page.id ? (
+                        <input
+                          type="text"
+                          value={newPageName}
+                          onChange={(e) => setNewPageName(e.target.value)}
+                          onBlur={() => {
+                            if (newPageName.trim()) renamePage(page.id, newPageName.trim());
+                            setEditingPageId(null);
+                          }}
+                          onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                              if (newPageName.trim()) renamePage(page.id, newPageName.trim());
+                              setEditingPageId(null);
+                            }
+                            if (e.key === 'Escape') setEditingPageId(null);
+                          }}
+                          style={{
+                            width: '100%',
+                            background: colors.inputBg,
+                            border: `1px solid ${colors.accent}`,
+                            borderRadius: 4,
+                            padding: '2px 6px',
+                            color: colors.textPrimary,
+                            fontSize: 13,
+                            outline: 'none',
+                          }}
+                          autoFocus
+                          onClick={(e) => e.stopPropagation()}
+                        />
+                      ) : (
+                        <span
+                          style={{
+                            fontSize: 13,
+                            fontWeight: 500,
+                            color: page.id === currentPageId ? colors.textPrimary : colors.textSecondary,
+                            overflow: 'hidden',
+                            textOverflow: 'ellipsis',
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {page.name}
+                        </span>
+                      )}
+
+                      {/* URL path - like Figma Sites */}
+                      <span
+                        style={{
+                          fontSize: 11,
+                          fontFamily: 'SF Mono, Monaco, Consolas, monospace',
+                          color: colors.textDimmed,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {urlPath}
+                      </span>
+                    </div>
+
+                    {/* Action buttons */}
+                    <div
                       className="opacity-0 group-hover:opacity-100"
                       style={{
-                        width: 24,
-                        height: 24,
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        borderRadius: 4,
-                        border: 'none',
-                        background: 'transparent',
-                        color: colors.textDimmed,
-                        cursor: 'pointer',
-                        transition: 'all 0.15s',
+                        gap: 2,
+                        transition: 'opacity 0.15s',
                       }}
-                      title="Elimina pagina"
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <line x1="18" y1="6" x2="6" y2="18" />
-                        <line x1="6" y1="6" x2="18" y2="18" />
-                      </svg>
-                    </button>
-                  )}
-                </div>
-              ))}
+                      {/* Duplicate button */}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          duplicatePage(page.id);
+                        }}
+                        style={{
+                          width: 22,
+                          height: 22,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          borderRadius: 4,
+                          border: 'none',
+                          background: 'transparent',
+                          color: colors.textDimmed,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        title="Duplica pagina"
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <rect x="9" y="9" width="13" height="13" rx="2" />
+                          <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
+                        </svg>
+                      </button>
+
+                      {/* Delete button */}
+                      {Object.keys(pages).length > 1 && (
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            deletePage(page.id);
+                          }}
+                          style={{
+                            width: 22,
+                            height: 22,
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            borderRadius: 4,
+                            border: 'none',
+                            background: 'transparent',
+                            color: colors.textDimmed,
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                          title="Elimina pagina"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <line x1="18" y1="6" x2="6" y2="18" />
+                            <line x1="6" y1="6" x2="18" y2="18" />
+                          </svg>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
 
           </div>
@@ -761,14 +1225,10 @@ export function CanvasSidebar() {
               </div>
             </div>
 
-            {/* Layers list */}
+            {/* Layers list with drag & drop */}
             <div style={{ flex: 1, overflowY: 'auto', padding: '4px 0' }}>
             {rootElement && rootElement.children.length > 0 ? (
-              rootElement.children.map((childId) => {
-                const child = elements[childId];
-                if (!child) return null;
-                return <LayerItem key={childId} element={child} depth={0} />;
-              })
+              <LayerList rootElement={rootElement} />
             ) : (
               <div style={{ padding: '40px 20px', textAlign: 'center' }}>
                 <div

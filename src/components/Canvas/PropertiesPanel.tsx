@@ -705,7 +705,11 @@ const BLEND_MODES = [
 ];
 
 export function PropertiesPanel() {
-  const { selectedElementIds, elements, updateElementStyles, resizeElement, moveElement, renameElement, canvasSettings, pages, currentPageId, updatePage, showPageSettings } = useCanvasStore();
+  const { selectedElementIds, elements, updateElementStyles, resizeElement, moveElement, renameElement, canvasSettings, pages, currentPageId, updatePage, showPageSettings, setResponsiveStyles } = useCanvasStore();
+
+  // Get active breakpoint for responsive editing
+  const activeBreakpointId = useResponsiveStore((state) => state.activeBreakpointId);
+  const isDefaultBreakpoint = activeBreakpointId === 'desktop';
 
   // Theme
   const theme = canvasSettings?.editorTheme || 'dark';
@@ -905,10 +909,20 @@ export function PropertiesPanel() {
     );
   }
 
-  const styles = selectedElement.styles;
+  // Get effective styles for current breakpoint (base + responsive overrides)
+  const baseStyles = selectedElement.styles;
+  const responsiveOverrides = selectedElement.responsiveStyles?.[activeBreakpointId] || {};
+  const styles = isDefaultBreakpoint ? baseStyles : { ...baseStyles, ...responsiveOverrides };
 
+  // Update style - saves to base styles or responsive overrides based on breakpoint
   const updateStyle = (key: keyof ElementStyles, value: any) => {
-    updateElementStyles(selectedElement.id, { [key]: value });
+    if (isDefaultBreakpoint) {
+      // Desktop: update base styles
+      updateElementStyles(selectedElement.id, { [key]: value });
+    } else {
+      // Other breakpoints: update responsive overrides
+      setResponsiveStyles(selectedElement.id, activeBreakpointId, { [key]: value });
+    }
   };
 
   const updateSize = (key: 'width' | 'height', value: number) => {
@@ -991,6 +1005,45 @@ export function PropertiesPanel() {
         </div>
         <div style={{ fontSize: 11, color: colors.textDimmed, textTransform: 'capitalize' }}>{selectedElement.type}</div>
       </div>
+
+      {/* Breakpoint Indicator - shows when editing non-default breakpoint */}
+      {!isDefaultBreakpoint && (
+        <div
+          style={{
+            margin: '0 12px',
+            padding: '8px 12px',
+            background: 'rgba(168, 50, 72, 0.1)',
+            border: '1px solid rgba(168, 50, 72, 0.3)',
+            borderRadius: 8,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
+            marginBottom: 8,
+          }}
+        >
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A83248" strokeWidth="2">
+            {activeBreakpointId === 'tablet' ? (
+              <>
+                <rect x="4" y="2" width="16" height="20" rx="2" />
+                <line x1="10" y1="18" x2="14" y2="18" />
+              </>
+            ) : (
+              <>
+                <rect x="6" y="2" width="12" height="20" rx="2" />
+                <line x1="10" y1="18" x2="14" y2="18" />
+              </>
+            )}
+          </svg>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#A83248', textTransform: 'capitalize' }}>
+              {activeBreakpointId} override
+            </div>
+            <div style={{ fontSize: 10, color: '#71717a' }}>
+              Changes apply only to this breakpoint
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Position & Size */}
       <Section title="Layout">
@@ -2804,134 +2857,138 @@ export function PropertiesPanel() {
 
             {/* Filters */}
             <div>
-              <div style={{ fontSize: 10, color: '#52525b', marginBottom: 6, fontWeight: 600 }}>ADJUSTMENTS</div>
+              <div style={{ fontSize: 10, color: colors.textDimmed, marginBottom: 6, fontWeight: 600 }}>ADJUSTMENTS</div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: '#71717a', width: 60 }}>Brightness</span>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Brightness</span>
                   <input
                     type="range"
                     min="0"
                     max="200"
-                    value={parseInt(((styles as any).filter?.match(/brightness\((\d+)%\)/)?.[1]) || '100')}
-                    onChange={(e) => {
-                      const currentFilter = (styles as any).filter || '';
-                      const newBrightness = `brightness(${e.target.value}%)`;
-                      const newFilter = currentFilter.includes('brightness')
-                        ? currentFilter.replace(/brightness\(\d+%\)/, newBrightness)
-                        : `${currentFilter} ${newBrightness}`.trim();
-                      updateStyle('filter' as any, newFilter);
-                    }}
-                    style={{ flex: 1, accentColor: '#8B1E2B' }}
+                    value={styles.brightness ?? 100}
+                    onChange={(e) => updateStyle('brightness', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
                   />
-                  <span style={{ fontSize: 10, color: '#a1a1aa', width: 30, textAlign: 'right' }}>
-                    {parseInt(((styles as any).filter?.match(/brightness\((\d+)%\)/)?.[1]) || '100')}%
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.brightness ?? 100}%
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: '#71717a', width: 60 }}>Contrast</span>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Contrast</span>
                   <input
                     type="range"
                     min="0"
                     max="200"
-                    value={parseInt(((styles as any).filter?.match(/contrast\((\d+)%\)/)?.[1]) || '100')}
-                    onChange={(e) => {
-                      const currentFilter = (styles as any).filter || '';
-                      const newContrast = `contrast(${e.target.value}%)`;
-                      const newFilter = currentFilter.includes('contrast')
-                        ? currentFilter.replace(/contrast\(\d+%\)/, newContrast)
-                        : `${currentFilter} ${newContrast}`.trim();
-                      updateStyle('filter' as any, newFilter);
-                    }}
-                    style={{ flex: 1, accentColor: '#8B1E2B' }}
+                    value={styles.contrast ?? 100}
+                    onChange={(e) => updateStyle('contrast', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
                   />
-                  <span style={{ fontSize: 10, color: '#a1a1aa', width: 30, textAlign: 'right' }}>
-                    {parseInt(((styles as any).filter?.match(/contrast\((\d+)%\)/)?.[1]) || '100')}%
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.contrast ?? 100}%
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: '#71717a', width: 60 }}>Saturation</span>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Saturation</span>
                   <input
                     type="range"
                     min="0"
                     max="200"
-                    value={parseInt(((styles as any).filter?.match(/saturate\((\d+)%\)/)?.[1]) || '100')}
-                    onChange={(e) => {
-                      const currentFilter = (styles as any).filter || '';
-                      const newSaturate = `saturate(${e.target.value}%)`;
-                      const newFilter = currentFilter.includes('saturate')
-                        ? currentFilter.replace(/saturate\(\d+%\)/, newSaturate)
-                        : `${currentFilter} ${newSaturate}`.trim();
-                      updateStyle('filter' as any, newFilter);
-                    }}
-                    style={{ flex: 1, accentColor: '#8B1E2B' }}
+                    value={styles.saturation ?? 100}
+                    onChange={(e) => updateStyle('saturation', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
                   />
-                  <span style={{ fontSize: 10, color: '#a1a1aa', width: 30, textAlign: 'right' }}>
-                    {parseInt(((styles as any).filter?.match(/saturate\((\d+)%\)/)?.[1]) || '100')}%
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.saturation ?? 100}%
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: '#71717a', width: 60 }}>Blur</span>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Blur</span>
                   <input
                     type="range"
                     min="0"
                     max="20"
-                    value={parseInt(((styles as any).filter?.match(/blur\((\d+)px\)/)?.[1]) || '0')}
-                    onChange={(e) => {
-                      const currentFilter = (styles as any).filter || '';
-                      const val = parseInt(e.target.value);
-                      if (val === 0) {
-                        const newFilter = currentFilter.replace(/blur\(\d+px\)/, '').trim();
-                        updateStyle('filter' as any, newFilter || undefined);
-                      } else {
-                        const newBlur = `blur(${val}px)`;
-                        const newFilter = currentFilter.includes('blur')
-                          ? currentFilter.replace(/blur\(\d+px\)/, newBlur)
-                          : `${currentFilter} ${newBlur}`.trim();
-                        updateStyle('filter' as any, newFilter);
-                      }
-                    }}
-                    style={{ flex: 1, accentColor: '#8B1E2B' }}
+                    value={styles.blur ?? 0}
+                    onChange={(e) => updateStyle('blur', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
                   />
-                  <span style={{ fontSize: 10, color: '#a1a1aa', width: 30, textAlign: 'right' }}>
-                    {parseInt(((styles as any).filter?.match(/blur\((\d+)px\)/)?.[1]) || '0')}px
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.blur ?? 0}px
                   </span>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <span style={{ fontSize: 10, color: '#71717a', width: 60 }}>Grayscale</span>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Grayscale</span>
                   <input
                     type="range"
                     min="0"
                     max="100"
-                    value={parseInt(((styles as any).filter?.match(/grayscale\((\d+)%\)/)?.[1]) || '0')}
-                    onChange={(e) => {
-                      const currentFilter = (styles as any).filter || '';
-                      const val = parseInt(e.target.value);
-                      if (val === 0) {
-                        const newFilter = currentFilter.replace(/grayscale\(\d+%\)/, '').trim();
-                        updateStyle('filter' as any, newFilter || undefined);
-                      } else {
-                        const newGray = `grayscale(${val}%)`;
-                        const newFilter = currentFilter.includes('grayscale')
-                          ? currentFilter.replace(/grayscale\(\d+%\)/, newGray)
-                          : `${currentFilter} ${newGray}`.trim();
-                        updateStyle('filter' as any, newFilter);
-                      }
-                    }}
-                    style={{ flex: 1, accentColor: '#8B1E2B' }}
+                    value={styles.grayscale ?? 0}
+                    onChange={(e) => updateStyle('grayscale', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
                   />
-                  <span style={{ fontSize: 10, color: '#a1a1aa', width: 30, textAlign: 'right' }}>
-                    {parseInt(((styles as any).filter?.match(/grayscale\((\d+)%\)/)?.[1]) || '0')}%
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.grayscale ?? 0}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Hue</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="360"
+                    value={styles.hueRotate ?? 0}
+                    onChange={(e) => updateStyle('hueRotate', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
+                  />
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.hueRotate ?? 0}°
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Invert</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={styles.invert ?? 0}
+                    onChange={(e) => updateStyle('invert', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
+                  />
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.invert ?? 0}%
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{ fontSize: 10, color: colors.textMuted, width: 60 }}>Sepia</span>
+                  <input
+                    type="range"
+                    min="0"
+                    max="100"
+                    value={styles.sepia ?? 0}
+                    onChange={(e) => updateStyle('sepia', parseInt(e.target.value))}
+                    style={{ flex: 1, accentColor: colors.accent }}
+                  />
+                  <span style={{ fontSize: 10, color: colors.textSecondary, width: 30, textAlign: 'right' }}>
+                    {styles.sepia ?? 0}%
                   </span>
                 </div>
                 {/* Reset Filters Button */}
                 <button
-                  onClick={() => updateStyle('filter' as any, undefined)}
+                  onClick={() => {
+                    updateStyle('brightness', undefined);
+                    updateStyle('contrast', undefined);
+                    updateStyle('saturation', undefined);
+                    updateStyle('blur', undefined);
+                    updateStyle('grayscale', undefined);
+                    updateStyle('hueRotate', undefined);
+                    updateStyle('invert', undefined);
+                    updateStyle('sepia', undefined);
+                  }}
                   style={{
                     padding: '6px 12px',
-                    background: '#27272a',
-                    border: '1px solid rgba(255,255,255,0.1)',
+                    background: colors.inputBg,
+                    border: `1px solid ${colors.borderColor}`,
                     borderRadius: 4,
-                    color: '#a1a1aa',
+                    color: colors.textSecondary,
                     fontSize: 10,
                     cursor: 'pointer',
                     marginTop: 4,

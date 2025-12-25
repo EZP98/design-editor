@@ -1,0 +1,358 @@
+{
+  "name": "Hanzo Services",
+  "type": "services",
+  "style": "agency-light",
+  "tags": ["services", "features", "badges", "agency"],
+  "description": "Services section with floating colorful badges",
+  "json_structure": {
+    "type": "section",
+    "name": "Services",
+    "styles": {
+      "display": "flex",
+      "flexDirection": "column",
+      "alignItems": "center",
+      "padding": 80,
+      "gap": 48,
+      "backgroundColor": "#E8E8E8"
+    },
+    "children": [
+      {
+        "type": "text",
+        "name": "Description",
+        "content": "We help startups and enterprise to establish an emotional connection between their products and happy engaged customers",
+        "styles": {
+          "fontSize": 36,
+          "fontWeight": 400,
+          "color": "#000000",
+          "textAlign": "center",
+          "maxWidth": 900,
+          "lineHeight": 1.4
+        }
+      },
+      {
+        "type": "row",
+        "name": "Service Badges",
+        "styles": {
+          "display": "flex",
+          "flexWrap": "wrap",
+          "justifyContent": "center",
+          "gap": 16
+        },
+        "children": [
+          {
+            "type": "frame",
+            "name": "Badge Strategy",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 12,
+              "padding": 8,
+              "paddingLeft": 8,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Icon Bg",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "backgroundColor": "#FFD500",
+                  "borderRadius": 50,
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "name": "Icon",
+                    "iconName": "Sparkles",
+                    "styles": {
+                      "width": 20,
+                      "height": 20,
+                      "color": "#660080"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "Strategy",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 500,
+                  "color": "#1A1A1A"
+                }
+              }
+            ]
+          },
+          {
+            "type": "frame",
+            "name": "Badge UI/UX",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 12,
+              "padding": 8,
+              "paddingLeft": 8,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Icon Bg",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "backgroundColor": "#474747",
+                  "borderRadius": 50,
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "name": "Icon",
+                    "iconName": "Layout",
+                    "styles": {
+                      "width": 20,
+                      "height": 20,
+                      "color": "#BAFFD0"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "UI/UX",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 500,
+                  "color": "#1A1A1A"
+                }
+              }
+            ]
+          },
+          {
+            "type": "frame",
+            "name": "Badge Prototyping",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 12,
+              "padding": 8,
+              "paddingLeft": 8,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Icon Bg",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "backgroundColor": "#FF45AB",
+                  "borderRadius": 50,
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "name": "Icon",
+                    "iconName": "FileCode",
+                    "styles": {
+                      "width": 20,
+                      "height": 20,
+                      "color": "#C9FFFB"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "Prototyping",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 500,
+                  "color": "#1A1A1A"
+                }
+              }
+            ]
+          },
+          {
+            "type": "frame",
+            "name": "Badge Animation",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 12,
+              "padding": 8,
+              "paddingLeft": 8,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Icon Bg",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "backgroundColor": "#52FF69",
+                  "borderRadius": 50,
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "name": "Icon",
+                    "iconName": "Zap",
+                    "styles": {
+                      "width": 20,
+                      "height": 20,
+                      "color": "#3224FF"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "Animation",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 500,
+                  "color": "#1A1A1A"
+                }
+              }
+            ]
+          },
+          {
+            "type": "frame",
+            "name": "Badge Research",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 12,
+              "padding": 8,
+              "paddingLeft": 8,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Icon Bg",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "backgroundColor": "#05A9FF",
+                  "borderRadius": 50,
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "name": "Icon",
+                    "iconName": "Search",
+                    "styles": {
+                      "width": 20,
+                      "height": 20,
+                      "color": "#F8FFBF"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "Research",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 500,
+                  "color": "#1A1A1A"
+                }
+              }
+            ]
+          },
+          {
+            "type": "frame",
+            "name": "Badge Design Systems",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 12,
+              "padding": 8,
+              "paddingLeft": 8,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Icon Bg",
+                "styles": {
+                  "width": 40,
+                  "height": 40,
+                  "backgroundColor": "#FF5E00",
+                  "borderRadius": 50,
+                  "display": "flex",
+                  "alignItems": "center",
+                  "justifyContent": "center"
+                },
+                "children": [
+                  {
+                    "type": "icon",
+                    "name": "Icon",
+                    "iconName": "Grid3x3",
+                    "styles": {
+                      "width": 20,
+                      "height": 20,
+                      "color": "#FFF3C2"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "Design Systems",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 500,
+                  "color": "#1A1A1A"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

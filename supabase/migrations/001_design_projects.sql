@@ -34,15 +34,19 @@ CREATE INDEX IF NOT EXISTS idx_design_projects_updated_at ON design_projects(upd
 ALTER TABLE design_projects ENABLE ROW LEVEL SECURITY;
 
 -- RLS Policies: Users can only access their own projects
+DROP POLICY IF EXISTS "Users can view own projects" ON design_projects;
 CREATE POLICY "Users can view own projects" ON design_projects
   FOR SELECT USING (auth.uid() = user_id OR is_public = true);
 
+DROP POLICY IF EXISTS "Users can create own projects" ON design_projects;
 CREATE POLICY "Users can create own projects" ON design_projects
   FOR INSERT WITH CHECK (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can update own projects" ON design_projects;
 CREATE POLICY "Users can update own projects" ON design_projects
   FOR UPDATE USING (auth.uid() = user_id);
 
+DROP POLICY IF EXISTS "Users can delete own projects" ON design_projects;
 CREATE POLICY "Users can delete own projects" ON design_projects
   FOR DELETE USING (auth.uid() = user_id);
 
@@ -62,18 +66,4 @@ CREATE TRIGGER update_design_projects_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_updated_at_column();
 
--- Optional: Create a templates table for shared templates
-CREATE TABLE IF NOT EXISTS design_templates (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-  name TEXT NOT NULL,
-  description TEXT,
-  thumbnail_url TEXT,
-  canvas_data JSONB NOT NULL DEFAULT '{}'::jsonb,
-  category TEXT DEFAULT 'general',
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Allow anyone to read templates
-ALTER TABLE design_templates ENABLE ROW LEVEL SECURITY;
-CREATE POLICY "Anyone can view templates" ON design_templates
-  FOR SELECT USING (true);
+-- Note: design_templates table is created in 003_design_templates.sql with proper structure

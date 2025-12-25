@@ -13,3 +13,4 @@ export { TokensPanel } from './TokensPanel';
 export { ResponsiveToolbar, BreakpointSelector } from './ResponsiveToolbar';
 export { InteractionsPanel } from './InteractionsPanel';
 export { IconPicker, renderLucideIcon } from './IconPicker';
+export { CanvasPreview } from './CanvasPreview';

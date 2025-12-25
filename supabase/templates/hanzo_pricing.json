@@ -1,0 +1,368 @@
+{
+  "name": "Hanzo Pricing",
+  "type": "pricing",
+  "style": "agency-light",
+  "tags": ["pricing", "plans", "agency", "subscription"],
+  "description": "Premium pricing card with features list and testimonial",
+  "json_structure": {
+    "type": "section",
+    "name": "Pricing",
+    "styles": {
+      "display": "flex",
+      "flexDirection": "column",
+      "alignItems": "center",
+      "padding": 80,
+      "gap": 48,
+      "backgroundColor": "#E8E8E8"
+    },
+    "children": [
+      {
+        "type": "stack",
+        "name": "Header",
+        "styles": {
+          "display": "flex",
+          "flexDirection": "column",
+          "alignItems": "center",
+          "gap": 16
+        },
+        "children": [
+          {
+            "type": "frame",
+            "name": "Badge",
+            "styles": {
+              "display": "flex",
+              "alignItems": "center",
+              "gap": 8,
+              "padding": 8,
+              "paddingLeft": 16,
+              "paddingRight": 16,
+              "backgroundColor": "#ffffff",
+              "borderRadius": 50,
+              "borderWidth": 1,
+              "borderColor": "rgba(0,0,0,0.1)",
+              "borderStyle": "solid"
+            },
+            "children": [
+              {
+                "type": "frame",
+                "name": "Dot",
+                "styles": {
+                  "width": 6,
+                  "height": 6,
+                  "backgroundColor": "rgba(0,0,0,0.4)",
+                  "borderRadius": 50
+                }
+              },
+              {
+                "type": "text",
+                "name": "Label",
+                "content": "Pricing",
+                "styles": {
+                  "fontSize": 18,
+                  "fontStyle": "italic",
+                  "color": "rgba(0,0,0,0.5)"
+                }
+              },
+              {
+                "type": "frame",
+                "name": "Dot",
+                "styles": {
+                  "width": 6,
+                  "height": 6,
+                  "backgroundColor": "rgba(0,0,0,0.4)",
+                  "borderRadius": 50
+                }
+              }
+            ]
+          },
+          {
+            "type": "text",
+            "name": "Title",
+            "content": "Fixed Price, Zero Limits",
+            "styles": {
+              "fontSize": 32,
+              "fontWeight": 500,
+              "color": "#000000",
+              "letterSpacing": "-0.04em"
+            }
+          }
+        ]
+      },
+      {
+        "type": "frame",
+        "name": "Pricing Card",
+        "styles": {
+          "display": "flex",
+          "gap": 32,
+          "padding": 40,
+          "backgroundColor": "rgba(255,255,255,0.5)",
+          "borderRadius": 24,
+          "boxShadow": "0px 0px 0px 8px rgba(255, 255, 255, 0.25), 12px 16px 16px 0px rgba(0, 0, 0, 0.1)",
+          "maxWidth": 900
+        },
+        "children": [
+          {
+            "type": "stack",
+            "name": "Left - Price",
+            "styles": {
+              "display": "flex",
+              "flexDirection": "column",
+              "gap": 24,
+              "flex": 1
+            },
+            "children": [
+              {
+                "type": "row",
+                "name": "Toggle",
+                "styles": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "gap": 12
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "name": "Monthly",
+                    "content": "Monthly",
+                    "styles": {
+                      "fontSize": 16,
+                      "fontWeight": 500,
+                      "color": "#000000"
+                    }
+                  },
+                  {
+                    "type": "frame",
+                    "name": "Toggle Switch",
+                    "styles": {
+                      "width": 56,
+                      "height": 28,
+                      "backgroundColor": "#FF5E00",
+                      "borderRadius": 50,
+                      "padding": 4
+                    },
+                    "children": [
+                      {
+                        "type": "frame",
+                        "name": "Toggle Knob",
+                        "styles": {
+                          "width": 20,
+                          "height": 20,
+                          "backgroundColor": "#ffffff",
+                          "borderRadius": 50
+                        }
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "name": "Custom",
+                    "content": "Custom",
+                    "styles": {
+                      "fontSize": 16,
+                      "fontWeight": 500,
+                      "color": "rgba(0,0,0,0.25)"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "row",
+                "name": "Price",
+                "styles": {
+                  "display": "flex",
+                  "alignItems": "baseline",
+                  "gap": 4
+                },
+                "children": [
+                  {
+                    "type": "text",
+                    "name": "Amount",
+                    "content": "$7,500",
+                    "styles": {
+                      "fontSize": 56,
+                      "fontWeight": 700,
+                      "color": "#000000"
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "name": "Period",
+                    "content": "/mo",
+                    "styles": {
+                      "fontSize": 20,
+                      "color": "rgba(0,0,0,0.25)"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "row",
+                "name": "Availability",
+                "styles": {
+                  "display": "flex",
+                  "alignItems": "center",
+                  "gap": 8
+                },
+                "children": [
+                  {
+                    "type": "frame",
+                    "name": "Pulse Dot",
+                    "styles": {
+                      "width": 10,
+                      "height": 10,
+                      "backgroundColor": "#22c55e",
+                      "borderRadius": 50
+                    }
+                  },
+                  {
+                    "type": "text",
+                    "name": "Status",
+                    "content": "Booking Open — only 2 Spots Left",
+                    "styles": {
+                      "fontSize": 14,
+                      "color": "#000000"
+                    }
+                  }
+                ]
+              },
+              {
+                "type": "button",
+                "name": "CTA",
+                "content": "Book Free Discovery Call →",
+                "styles": {
+                  "backgroundColor": "#000000",
+                  "color": "#ffffff",
+                  "padding": 14,
+                  "paddingLeft": 24,
+                  "paddingRight": 24,
+                  "borderRadius": 50,
+                  "fontSize": 16,
+                  "fontWeight": 600,
+                  "boxShadow": "0px -16px 48px 0px rgb(0, 0, 0) inset"
+                }
+              }
+            ]
+          },
+          {
+            "type": "frame",
+            "name": "Right - Features",
+            "styles": {
+              "display": "flex",
+              "flexDirection": "column",
+              "gap": 24,
+              "padding": 24,
+              "backgroundColor": "rgba(255,255,255,0.75)",
+              "borderRadius": 12,
+              "flex": 1
+            },
+            "children": [
+              {
+                "type": "text",
+                "name": "Features Title",
+                "content": "What's included",
+                "styles": {
+                  "fontSize": 16,
+                  "fontWeight": 600,
+                  "color": "#000000"
+                }
+              },
+              {
+                "type": "stack",
+                "name": "Features List",
+                "styles": {
+                  "display": "flex",
+                  "flexDirection": "column",
+                  "gap": 12
+                },
+                "children": [
+                  {
+                    "type": "row",
+                    "name": "Feature 1",
+                    "styles": { "display": "flex", "alignItems": "center", "gap": 12 },
+                    "children": [
+                      { "type": "icon", "name": "Check", "iconName": "Plus", "styles": { "width": 20, "height": 20 } },
+                      { "type": "text", "content": "Unlimited design requests", "styles": { "fontSize": 14 } }
+                    ]
+                  },
+                  {
+                    "type": "row",
+                    "name": "Feature 2",
+                    "styles": { "display": "flex", "alignItems": "center", "gap": 12 },
+                    "children": [
+                      { "type": "icon", "name": "Check", "iconName": "Plus", "styles": { "width": 20, "height": 20 } },
+                      { "type": "text", "content": "Fast turnaround", "styles": { "fontSize": 14 } }
+                    ]
+                  },
+                  {
+                    "type": "row",
+                    "name": "Feature 3",
+                    "styles": { "display": "flex", "alignItems": "center", "gap": 12 },
+                    "children": [
+                      { "type": "icon", "name": "Check", "iconName": "Plus", "styles": { "width": 20, "height": 20 } },
+                      { "type": "text", "content": "Fixed monthly rate", "styles": { "fontSize": 14 } }
+                    ]
+                  },
+                  {
+                    "type": "row",
+                    "name": "Feature 4",
+                    "styles": { "display": "flex", "alignItems": "center", "gap": 12 },
+                    "children": [
+                      { "type": "icon", "name": "Check", "iconName": "Plus", "styles": { "width": 20, "height": 20 } },
+                      { "type": "text", "content": "Pause anytime", "styles": { "fontSize": 14 } }
+                    ]
+                  }
+                ]
+              },
+              {
+                "type": "frame",
+                "name": "Testimonial",
+                "styles": {
+                  "display": "flex",
+                  "flexDirection": "column",
+                  "gap": 12,
+                  "paddingTop": 24,
+                  "borderTopWidth": 1,
+                  "borderTopColor": "rgba(0,0,0,0.1)",
+                  "borderTopStyle": "solid"
+                },
+                "children": [
+                  {
+                    "type": "row",
+                    "name": "Author",
+                    "styles": { "display": "flex", "alignItems": "center", "gap": 12 },
+                    "children": [
+                      {
+                        "type": "image",
+                        "name": "Avatar",
+                        "src": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=96",
+                        "styles": { "width": 48, "height": 48, "borderRadius": 50, "objectFit": "cover" }
+                      },
+                      {
+                        "type": "stack",
+                        "styles": { "display": "flex", "flexDirection": "column", "gap": 2 },
+                        "children": [
+                          { "type": "text", "content": "Helena Moreau", "styles": { "fontSize": 14, "fontWeight": 600 } },
+                          { "type": "text", "content": "Creative Director", "styles": { "fontSize": 12, "color": "rgba(0,0,0,0.5)" } }
+                        ]
+                      }
+                    ]
+                  },
+                  {
+                    "type": "text",
+                    "name": "Quote",
+                    "content": "Astrid's minimalist design approach transformed our brand. The simplicity made us stand out.",
+                    "styles": {
+                      "fontSize": 14,
+                      "color": "#000000",
+                      "lineHeight": 1.5
+                    }
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
+}

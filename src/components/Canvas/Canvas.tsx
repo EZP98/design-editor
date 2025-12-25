@@ -76,6 +76,7 @@ import { CanvasElementRenderer } from './CanvasElementRenderer';
 import { SelectionOverlay } from './SelectionOverlay';
 import { CanvasToolbar } from './CanvasToolbar';
 import { ContextMenu } from './ContextMenu';
+import { useResponsiveStore, DEFAULT_BREAKPOINTS, Breakpoint } from '../../lib/canvas/responsive';
 
 interface CanvasProps {
   zoom: number;
@@ -127,6 +128,14 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
     toggleEditorTheme,
     setShowPageSettings,
   } = useCanvasStore();
+
+  // Responsive store for multi-breakpoint view
+  const {
+    breakpoints,
+    multiBreakpointView,
+    activeBreakpointId,
+    setActiveBreakpoint,
+  } = useResponsiveStore();
 
   // Get theme colors
   const editorTheme = canvasSettings?.editorTheme || 'dark';
@@ -312,27 +321,36 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
     }
   }, [marquee, zoom, pan, elements, pages, currentPageId]);
 
+  // Container types that can have children - must match canvasStore
+  const CONTAINER_TYPES = ['page', 'frame', 'section', 'container', 'stack', 'row', 'grid', 'box'];
+
   // Add element handler - adds to selected container if it can contain children
   const handleAddElement = useCallback(
-    (type: string) => {
-      // Check if there's a selected element that can be a parent (frame, stack, grid, page)
+    (type: string, options?: { iconName?: string }) => {
+      // Check if there's a selected element that can be a parent
       let targetParentId: string | undefined;
 
       if (selectedElementIds.length === 1) {
         const selectedElement = elements[selectedElementIds[0]];
-        if (selectedElement && ['frame', 'stack', 'grid', 'page'].includes(selectedElement.type)) {
+        if (selectedElement && CONTAINER_TYPES.includes(selectedElement.type)) {
           // Add as child of the selected container
           targetParentId = selectedElement.id;
         } else if (selectedElement?.parentId) {
           // If selected element is not a container, add as sibling (to the same parent)
           const parent = elements[selectedElement.parentId];
-          if (parent && ['frame', 'stack', 'grid', 'page'].includes(parent.type)) {
+          if (parent && CONTAINER_TYPES.includes(parent.type)) {
             targetParentId = parent.id;
           }
         }
       }
 
-      addElement(type as ElementType, targetParentId);
+      const elementId = addElement(type as ElementType, targetParentId);
+
+      // If it's an icon with a specific icon name, update its content
+      if (type === 'icon' && options?.iconName && elementId) {
+        const { updateElementContent } = useCanvasStore.getState();
+        updateElementContent(elementId, options.iconName);
+      }
     },
     [addElement, selectedElementIds, elements]
   );
@@ -779,11 +797,13 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
     const isCurrentPage = page.id === currentPageId;
 
     // Check for hug mode and calculate page size
+    // Default to 'hug' for height so pages auto-expand with content
     const resizeX = (rootElement.styles as any).resizeX || 'fixed';
-    const resizeY = (rootElement.styles as any).resizeY || 'fixed';
+    const resizeY = (rootElement.styles as any).resizeY || 'hug';
 
     let pageWidth = rootElement.size.width;
     let pageHeight = rootElement.size.height;
+    const isHeightHug = resizeY === 'hug';
 
     if (resizeX === 'hug' || resizeY === 'hug') {
       const bounds = calculateContentBounds(rootElement.children);
@@ -791,7 +811,8 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
         pageWidth = Math.max(200, bounds.maxX);
       }
       if (resizeY === 'hug') {
-        pageHeight = Math.max(200, bounds.maxY);
+        // For hug mode, use content bounds as minimum, but keep at least 900px for empty pages
+        pageHeight = Math.max(900, bounds.maxY);
       }
     }
 
@@ -841,7 +862,9 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
           <circle cx="7.5" cy="11.5" r="2" />
         </svg>
         <span>{page.name}</span>
-        <span style={{ opacity: 0.6, fontSize: 11 }}>{Math.round(pageWidth)} × {Math.round(pageHeight)}</span>
+        <span style={{ opacity: 0.6, fontSize: 11 }}>
+          {Math.round(pageWidth)} × {isHeightHug ? 'Auto' : Math.round(pageHeight)}
+        </span>
       </div>
     );
 
@@ -855,7 +878,8 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
             data-canvas-export={isCurrentPage ? 'true' : undefined}
             style={{
               width: pageWidth,
-              height: pageHeight,
+              // Use minHeight for hug mode so page expands with content
+              ...(isHeightHug ? { minHeight: pageHeight } : { height: pageHeight }),
               backgroundColor: rootElement.styles.backgroundColor || '#ffffff',
               borderRadius: 8,
               boxShadow: editorTheme === 'light'
@@ -933,18 +957,15 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
             });
           })()}
 
-          {/* Selection overlays - only for current page, SOLO per frame/page */}
+          {/* Selection overlays - SOLO per page root element */}
+          {/* Tutti gli altri elementi usano outline inline da CanvasElementRenderer */}
+          {/* Questo evita problemi di posizionamento quando gli elementi sono in flow layout */}
           {isCurrentPage && selectedElementIds.map((id) => {
             const element = elements[id];
             if (!element) return null;
 
-            // SOLO frame e page ottengono SelectionOverlay
-            // Altri elementi usano outline inline da CanvasElementRenderer
-            if (element.type !== 'frame' && element.type !== 'page') {
-              return null;
-            }
-
-            // Page root element
+            // SOLO page root element ottiene SelectionOverlay
+            // Tutti gli altri elementi (frame, section, etc.) usano inline outline
             if (element.type === 'page' && element.id === rootElement.id) {
               const pageElement = {
                 ...element,
@@ -953,59 +974,10 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
               return <SelectionOverlay key={`sel-${id}`} element={pageElement} zoom={zoom} />;
             }
 
-            // Frame - calcola offset se ha parent con posizione assoluta
-            let current = element;
-            let offsetX = 0;
-            let offsetY = 0;
-
-            while (current.parentId) {
-              if (current.parentId === rootElement.id) break;
-              const parent = elements[current.parentId];
-              if (!parent) return null;
-
-              // Se il parent ha auto-layout, il frame è posizionato dal flexbox
-              // In questo caso non usiamo offset (position è 0,0)
-              if (parent.styles.display === 'flex' || parent.styles.display === 'grid') {
-                // Frame dentro auto-layout - mostra solo outline inline, no resize handles
-                return null;
-              }
-
-              offsetX += parent.position.x;
-              offsetY += parent.position.y;
-              current = parent;
-            }
-            if (current.parentId !== rootElement.id) return null;
-
-            // IMPORTANTE: Controlla anche se il rootElement (Page) ha auto-layout
-            // In questo caso, i figli diretti sono posizionati dal flexbox, non da position.x/y
-            if (rootElement.styles.display === 'flex' || rootElement.styles.display === 'grid') {
-              // Frame è figlio diretto di una pagina con auto-layout
-              // La posizione è gestita dal flexbox - usa outline inline invece
-              return null;
-            }
-
-            return (
-              <SelectionOverlay
-                key={`sel-${id}`}
-                element={element}
-                zoom={zoom}
-                displayOffset={{ x: offsetX, y: offsetY }}
-              />
-            );
+            // Tutti gli altri elementi usano outline inline (gestito da CanvasElementRenderer)
+            return null;
           })}
 
-          {/* Empty state - only for current page */}
-          {isCurrentPage && rootElement.children.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-              <div className="text-center">
-                <div className="text-gray-300 text-lg mb-2">Empty canvas</div>
-                <div className="text-gray-500 text-sm">
-                  Press <kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-xs">F</kbd> for frame,{' '}
-                  <kbd className="px-1.5 py-0.5 bg-gray-700 rounded text-xs">T</kbd> for text
-                </div>
-              </div>
-            </div>
-          )}
           </div>
       </>
     );
@@ -1085,10 +1057,144 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
         }}
       >
         {/* Render pages based on view mode */}
-        {viewMode === 'multi'
-          ? Object.values(pages).map((page) => renderPage(page, false))
-          : pages[currentPageId] && renderPage(pages[currentPageId], false)
-        }
+        {multiBreakpointView && pages[currentPageId] ? (
+          // Multi-breakpoint view: Desktop, Tablet, Mobile side by side
+          <div style={{ display: 'flex', gap: 40, alignItems: 'flex-start' }}>
+            {breakpoints.map((bp, index) => {
+              const page = pages[currentPageId];
+              const rootElement = elements[page.rootElementId];
+              if (!rootElement) return null;
+
+              const isActiveBreakpoint = bp.id === activeBreakpointId;
+              const pageHasAutoLayout = rootElement.styles.display === 'flex' || rootElement.styles.display === 'grid';
+
+              // Calculate content bounds for hug mode
+              const resizeY = (rootElement.styles as any).resizeY || 'hug';
+              let pageHeight = rootElement.size.height;
+              const isHeightHug = resizeY === 'hug';
+
+              if (isHeightHug) {
+                const bounds = calculateContentBounds(rootElement.children);
+                pageHeight = Math.max(900, bounds.maxY);
+              }
+
+              return (
+                <div
+                  key={bp.id}
+                  style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}
+                >
+                  {/* Breakpoint header */}
+                  <div
+                    onClick={() => setActiveBreakpoint(bp.id)}
+                    style={{
+                      width: bp.width,
+                      padding: '10px 16px',
+                      background: isActiveBreakpoint ? '#A83248' : '#27272a',
+                      borderRadius: '10px 10px 0 0',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      color: '#fff',
+                      fontSize: 12,
+                      fontWeight: 600,
+                      cursor: 'pointer',
+                      boxShadow: '0 -4px 20px rgba(0,0,0,0.3)',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {/* Breakpoint icon */}
+                      {bp.icon === 'desktop' && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="2" y="3" width="20" height="14" rx="2" />
+                          <line x1="8" y1="21" x2="16" y2="21" />
+                          <line x1="12" y1="17" x2="12" y2="21" />
+                        </svg>
+                      )}
+                      {bp.icon === 'tablet' && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="4" y="2" width="16" height="20" rx="2" />
+                          <line x1="12" y1="18" x2="12" y2="18" />
+                        </svg>
+                      )}
+                      {bp.icon === 'mobile' && (
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                          <rect x="5" y="2" width="14" height="20" rx="2" />
+                          <line x1="12" y1="18" x2="12" y2="18" />
+                        </svg>
+                      )}
+                      <span>{bp.name}</span>
+                      {bp.isDefault && (
+                        <span style={{
+                          fontSize: 9,
+                          background: 'rgba(255,255,255,0.2)',
+                          padding: '2px 6px',
+                          borderRadius: 4
+                        }}>
+                          Primary
+                        </span>
+                      )}
+                    </div>
+                    <span style={{ opacity: 0.7 }}>{bp.width}px</span>
+                  </div>
+
+                  {/* Page content at this breakpoint width */}
+                  <div
+                    className="relative"
+                    style={{
+                      width: bp.width,
+                      minHeight: isHeightHug ? pageHeight : rootElement.size.height,
+                      backgroundColor: rootElement.styles.backgroundColor || '#ffffff',
+                      borderRadius: '0 0 8px 8px',
+                      boxShadow: isActiveBreakpoint
+                        ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A83248'
+                        : '0 25px 100px rgba(0,0,0,0.3)',
+                      display: rootElement.styles.display || 'block',
+                      flexDirection: rootElement.styles.flexDirection,
+                      justifyContent: rootElement.styles.justifyContent,
+                      alignItems: rootElement.styles.alignItems,
+                      gap: rootElement.styles.gap,
+                      padding: rootElement.styles.padding,
+                      overflow: 'hidden',
+                    }}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setActiveBreakpoint(bp.id);
+                      selectElement(rootElement.id);
+                    }}
+                  >
+                    {/* Render elements with breakpoint-specific styles */}
+                    {rootElement.children.map((childId) => {
+                      const child = elements[childId];
+                      if (!child || !child.visible) return null;
+                      return (
+                        <CanvasElementRenderer
+                          key={`${childId}-${bp.id}`}
+                          element={child}
+                          elements={elements}
+                          zoom={zoom}
+                          isSelected={selectedElementIds.includes(childId) && isActiveBreakpoint}
+                          isHovered={hoveredElementId === childId && isActiveBreakpoint}
+                          onSelect={(id, add) => {
+                            setActiveBreakpoint(bp.id);
+                            selectElement(id, add);
+                          }}
+                          onHover={(id) => isActiveBreakpoint && setHoveredElement(id)}
+                          parentHasAutoLayout={pageHasAutoLayout}
+                          parentFlexDirection={rootElement.styles.flexDirection || 'column'}
+                        />
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          // Normal view mode
+          viewMode === 'multi'
+            ? Object.values(pages).map((page) => renderPage(page, false))
+            : pages[currentPageId] && renderPage(pages[currentPageId], false)
+        )}
       </div>
 
       {/* Floating Toolbar */}

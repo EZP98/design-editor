@@ -130,7 +130,7 @@ export const AIImagePlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
   const [images, setImages] = useState<GeneratedImage[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [showModels, setShowModels] = useState(false);
-  const [tab, setTab] = useState<'image' | '3d'>('image');
+  const [mode, setMode] = useState<'image' | '3d'>('image'); // Renamed from tab to mode
 
   // 3D state
   const [imageUrl3D, setImageUrl3D] = useState('');
@@ -204,7 +204,8 @@ export const AIImagePlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
     const w = Math.min(selectedSize.w, currentPage.width * 0.6);
     const h = (w / selectedSize.w) * selectedSize.h;
 
-    const elementId = addElement('image', currentPage.rootElementId, {
+    // Don't pass parentId - let canvasStore use selected container or default to page root
+    const elementId = addElement('image', undefined, {
       x: (currentPage.width - w) / 2,
       y: (currentPage.height - h) / 2,
     });
@@ -246,66 +247,80 @@ export const AIImagePlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       }}
     >
-      {/* Tabs - matching PropertiesPanel section header style */}
-      <div style={{ display: 'flex', borderBottom: `1px solid ${colors.borderColor}` }}>
-        {[
-          { id: 'image', label: 'Image', icon: Image },
-          { id: '3d', label: '3D', icon: Box },
-        ].map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id as 'image' | '3d')}
-            style={{
-              flex: 1,
-              padding: '10px',
-              fontSize: 11,
-              fontWeight: 600,
-              textTransform: 'uppercase',
-              letterSpacing: '0.05em',
-              color: tab === t.id ? colors.textPrimary : colors.textMuted,
-              background: 'transparent',
-              border: 'none',
-              borderBottom: `2px solid ${tab === t.id ? colors.accent : 'transparent'}`,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: 6,
-            }}
-          >
-            <t.icon size={12} />
-            {t.label}
-          </button>
-        ))}
-      </div>
-
       {/* Content */}
       <div style={{ flex: 1, overflow: 'auto' }}>
-        {tab === 'image' ? (
+        {/* Prompt Input */}
+        <div style={{ padding: 12, borderBottom: `1px solid ${colors.borderColor}` }}>
+          <textarea
+            value={mode === 'image' ? prompt : imageUrl3D}
+            onChange={(e) => mode === 'image' ? setPrompt(e.target.value) : setImageUrl3D(e.target.value)}
+            placeholder={mode === 'image' ? "Describe the image you want to create..." : "Paste image URL to convert to 3D..."}
+            style={{
+              width: '100%',
+              height: 70,
+              padding: 10,
+              fontSize: 12,
+              backgroundColor: colors.inputBg,
+              border: `1px solid ${colors.borderColor}`,
+              borderRadius: 6,
+              color: colors.textPrimary,
+              resize: 'none',
+              outline: 'none',
+              fontFamily: 'inherit',
+            }}
+            onFocus={(e) => { e.target.style.borderColor = colors.accent; }}
+            onBlur={(e) => { e.target.style.borderColor = colors.borderColor; }}
+          />
+
+          {/* Mode Toggle - Image / 3D */}
+          <div style={{ display: 'flex', gap: 6, marginTop: 8 }}>
+            <button
+              onClick={() => setMode('image')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: 11,
+                fontWeight: 500,
+                color: mode === 'image' ? colors.textPrimary : colors.textMuted,
+                background: mode === 'image' ? colors.accentLight : colors.inputBg,
+                border: `1px solid ${mode === 'image' ? colors.accent : colors.borderColor}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <Image size={14} />
+              Generate Image
+            </button>
+            <button
+              onClick={() => setMode('3d')}
+              style={{
+                flex: 1,
+                padding: '8px 12px',
+                fontSize: 11,
+                fontWeight: 500,
+                color: mode === '3d' ? colors.textPrimary : colors.textMuted,
+                background: mode === '3d' ? colors.accentLight : colors.inputBg,
+                border: `1px solid ${mode === '3d' ? colors.accent : colors.borderColor}`,
+                borderRadius: 6,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 6,
+              }}
+            >
+              <Box size={14} />
+              Image → 3D
+            </button>
+          </div>
+        </div>
+
+        {mode === 'image' ? (
           <>
-            {/* Prompt */}
-            <div style={{ padding: 12, borderBottom: `1px solid ${colors.borderColor}` }}>
-              <textarea
-                value={prompt}
-                onChange={(e) => setPrompt(e.target.value)}
-                placeholder="Describe the image you want to create..."
-                style={{
-                  width: '100%',
-                  height: 70,
-                  padding: 10,
-                  fontSize: 12,
-                  backgroundColor: colors.inputBg,
-                  border: `1px solid ${colors.borderColor}`,
-                  borderRadius: 6,
-                  color: colors.textPrimary,
-                  resize: 'none',
-                  outline: 'none',
-                  fontFamily: 'inherit',
-                }}
-                onFocus={(e) => { e.target.style.borderColor = colors.accent; }}
-                onBlur={(e) => { e.target.style.borderColor = colors.borderColor; }}
-              />
-            </div>
 
             {/* Model Selection */}
             <Section title="Model">
@@ -496,26 +511,22 @@ export const AIImagePlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
             )}
           </>
         ) : (
-          /* 3D Tab */
+          /* 3D Mode */
           <>
-            <div style={{ padding: 12 }}>
-              <div style={{ padding: 10, background: colors.accentLight, borderRadius: 6, border: `1px solid ${colors.accent}30` }}>
-                <div style={{ fontSize: 11, color: colors.textPrimary, fontWeight: 500 }}>Image to 3D with TripoSR</div>
-                <div style={{ fontSize: 10, color: colors.textMuted, marginTop: 4 }}>
-                  Convert an image to a 3D GLB model. Use a generated image or paste a URL.
-                </div>
-              </div>
-            </div>
-
+            {/* Use Generated Image - only show if there are generated images */}
             {images.length > 0 && (
-              <Section title="Use Generated Image">
+              <Section title="Or Select Generated Image">
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
                   {images.slice(0, 8).map(img => (
                     <div
                       key={img.id}
                       onClick={() => {
-                        setSelected3DImage(selected3DImage === img.url ? null : img.url);
-                        if (selected3DImage !== img.url) setImageUrl3D('');
+                        if (selected3DImage === img.url) {
+                          setSelected3DImage(null);
+                        } else {
+                          setSelected3DImage(img.url);
+                          setImageUrl3D(''); // Clear URL input when selecting image
+                        }
                       }}
                       style={{
                         borderRadius: 4,
@@ -532,28 +543,6 @@ export const AIImagePlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
                 </div>
               </Section>
             )}
-
-            <Section title="Or Paste URL">
-              <input
-                type="text"
-                value={imageUrl3D}
-                onChange={(e) => {
-                  setImageUrl3D(e.target.value);
-                  if (e.target.value) setSelected3DImage(null);
-                }}
-                placeholder="https://example.com/image.png"
-                style={{
-                  width: '100%',
-                  padding: 10,
-                  fontSize: 11,
-                  backgroundColor: colors.inputBg,
-                  border: `1px solid ${colors.borderColor}`,
-                  borderRadius: 6,
-                  color: colors.textPrimary,
-                  outline: 'none',
-                }}
-              />
-            </Section>
 
             {error3D && (
               <div style={{ margin: '0 12px 12px', padding: 10, fontSize: 11, color: '#ef4444', background: 'rgba(239,68,68,0.1)', borderRadius: 6 }}>
@@ -584,19 +573,19 @@ export const AIImagePlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
                 {isGenerating3D ? (
                   <>
                     <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
-                    Generating 3D... (~30s)
+                    Converting to 3D... (~30s)
                   </>
                 ) : (
                   <>
                     <Box size={14} />
-                    Generate 3D
+                    Convert to 3D Model
                   </>
                 )}
               </button>
             </div>
 
             {models3D.length > 0 && (
-              <Section title="3D Models">
+              <Section title="Generated 3D Models">
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   {models3D.map(m => (
                     <div key={m.id} style={{ padding: 10, background: colors.inputBg, borderRadius: 6, border: `1px solid ${colors.borderColor}` }}>

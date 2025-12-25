@@ -9,8 +9,8 @@ import React, { useState, useRef } from 'react';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
 import { CanvasElement, ElementType } from '../../lib/canvas/types';
 
-// Element type icons
-const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
+// Element type icons - partial record with fallback to frame icon
+const TYPE_ICONS: Partial<Record<ElementType, React.ReactNode>> = {
   page: (
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="3" y="3" width="18" height="18" rx="2" />
@@ -25,6 +25,18 @@ const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
       <rect x="3" y="3" width="18" height="18" rx="2" />
       <line x1="3" y1="9" x2="21" y2="9" />
+    </svg>
+  ),
+  container: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="4" y="4" width="16" height="16" rx="2" />
+    </svg>
+  ),
+  row: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="3" y="8" width="5" height="8" rx="1" />
+      <rect x="10" y="8" width="5" height="8" rx="1" />
+      <rect x="17" y="8" width="5" height="8" rx="1" />
     </svg>
   ),
   stack: (
@@ -85,42 +97,38 @@ const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
   ),
 };
 
-// Drag and drop state
-interface DragState {
-  draggedId: string | null;
-  targetId: string | null;
-  dropPosition: 'inside' | 'before' | 'after' | null;
-}
+// Default icon for types without a specific icon
+const DEFAULT_ICON = (
+  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+    <rect x="3" y="3" width="18" height="18" rx="2" />
+  </svg>
+);
 
-const dragState: DragState = {
-  draggedId: null,
-  targetId: null,
-  dropPosition: null,
+// Global drag state using refs for immediate updates (avoids React state timing issues)
+const globalDragState = {
+  draggedId: null as string | null,
+  dropTarget: null as { id: string; position: 'inside' | 'before' | 'after' } | null,
 };
 
 interface LayerItemProps {
   element: CanvasElement;
   depth: number;
-  onDragStart: (id: string) => void;
-  onDragEnd: () => void;
-  onDragOver: (id: string, position: 'inside' | 'before' | 'after') => void;
-  onDrop: (targetId: string, position: 'inside' | 'before' | 'after') => void;
-  draggedId: string | null;
-  dropTarget: { id: string; position: 'inside' | 'before' | 'after' } | null;
+  onDrop: (draggedId: string, targetId: string, position: 'inside' | 'before' | 'after') => void;
+  forceUpdate: number; // Used to trigger re-renders when drag state changes
 }
 
 function LayerItem({
   element,
   depth,
-  onDragStart,
-  onDragEnd,
-  onDragOver,
   onDrop,
-  draggedId,
-  dropTarget,
+  forceUpdate,
 }: LayerItemProps) {
   const [isExpanded, setIsExpanded] = useState(true);
   const rowRef = useRef<HTMLDivElement>(null);
+
+  // Read from global drag state
+  const draggedId = globalDragState.draggedId;
+  const dropTarget = globalDragState.dropTarget;
 
   const {
     elements,
@@ -138,7 +146,8 @@ function LayerItem({
   const hasChildren = element.children.length > 0;
   const isDragging = draggedId === element.id;
   const isDropTarget = dropTarget?.id === element.id;
-  const canAcceptDrop = element.type === 'frame' || element.type === 'page' || element.type === 'section';
+  const containerTypes = ['frame', 'page', 'section', 'stack', 'grid', 'container', 'row', 'box'];
+  const canAcceptDrop = containerTypes.includes(element.type);
 
   const [isRenaming, setIsRenaming] = useState(false);
   const [newName, setNewName] = useState(element.name);
@@ -154,14 +163,17 @@ function LayerItem({
     e.stopPropagation();
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', element.id);
-    onDragStart(element.id);
+    // Set global drag state immediately
+    globalDragState.draggedId = element.id;
+    globalDragState.dropTarget = null;
   };
 
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (!rowRef.current || draggedId === element.id) return;
+    const currentDraggedId = globalDragState.draggedId;
+    if (!rowRef.current || !currentDraggedId || currentDraggedId === element.id) return;
 
     const rect = rowRef.current.getBoundingClientRect();
     const y = e.clientY - rect.top;
@@ -183,20 +195,30 @@ function LayerItem({
       position = y < height / 2 ? 'before' : 'after';
     }
 
-    onDragOver(element.id, position);
+    // Update global drop target
+    globalDragState.dropTarget = { id: element.id, position };
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     e.stopPropagation();
 
-    if (dropTarget && draggedId !== element.id) {
-      onDrop(dropTarget.id, dropTarget.position);
+    const currentDraggedId = globalDragState.draggedId;
+    const currentDropTarget = globalDragState.dropTarget;
+
+    if (currentDraggedId && currentDropTarget && currentDraggedId !== currentDropTarget.id) {
+      onDrop(currentDraggedId, currentDropTarget.id, currentDropTarget.position);
     }
+
+    // Reset global state
+    globalDragState.draggedId = null;
+    globalDragState.dropTarget = null;
   };
 
   const handleDragEnd = () => {
-    onDragEnd();
+    // Reset global state
+    globalDragState.draggedId = null;
+    globalDragState.dropTarget = null;
   };
 
   // Calculate drop indicator style
@@ -249,7 +271,7 @@ function LayerItem({
           ${isDragging ? 'opacity-50' : ''}
         `}
         style={{ paddingLeft: depth * 16 + 8 }}
-        onClick={() => selectElement(element.id)}
+        onClick={(e) => selectElement(element.id, e.shiftKey || e.metaKey || e.ctrlKey)}
         onMouseEnter={() => setHoveredElement(element.id)}
         onMouseLeave={() => setHoveredElement(null)}
         onDoubleClick={() => setIsRenaming(true)}
@@ -375,12 +397,8 @@ function LayerItem({
                 key={childId}
                 element={child}
                 depth={depth + 1}
-                onDragStart={onDragStart}
-                onDragEnd={onDragEnd}
-                onDragOver={onDragOver}
                 onDrop={onDrop}
-                draggedId={draggedId}
-                dropTarget={dropTarget}
+                forceUpdate={forceUpdate}
               />
             );
           })}
@@ -392,33 +410,23 @@ function LayerItem({
 
 export function CanvasLayers() {
   const { pages, elements, currentPageId, addPage, setCurrentPage, reorderElement } = useCanvasStore();
-  const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dropTarget, setDropTarget] = useState<{ id: string; position: 'inside' | 'before' | 'after' } | null>(null);
+  const [, setForceUpdate] = useState(0);
 
   const currentPage = pages[currentPageId];
   const rootElement = currentPage ? elements[currentPage.rootElementId] : null;
 
-  const handleDragStart = (id: string) => {
-    setDraggedId(id);
-  };
-
-  const handleDragEnd = () => {
-    setDraggedId(null);
-    setDropTarget(null);
-  };
-
-  const handleDragOver = (id: string, position: 'inside' | 'before' | 'after') => {
-    if (draggedId && id !== draggedId) {
-      setDropTarget({ id, position });
-    }
-  };
-
-  const handleDrop = (targetId: string, position: 'inside' | 'before' | 'after') => {
+  const handleDrop = (draggedId: string, targetId: string, position: 'inside' | 'before' | 'after') => {
     if (!draggedId || draggedId === targetId) return;
 
     // Use the store's reorderElement function which handles all the logic
     reorderElement(draggedId, targetId, position);
-    handleDragEnd();
+
+    // Reset global state
+    globalDragState.draggedId = null;
+    globalDragState.dropTarget = null;
+
+    // Force re-render to update UI
+    setForceUpdate(n => n + 1);
   };
 
   return (
@@ -480,12 +488,8 @@ export function CanvasLayers() {
                   key={childId}
                   element={child}
                   depth={0}
-                  onDragStart={handleDragStart}
-                  onDragEnd={handleDragEnd}
-                  onDragOver={handleDragOver}
                   onDrop={handleDrop}
-                  draggedId={draggedId}
-                  dropTarget={dropTarget}
+                  forceUpdate={0}
                 />
               );
             })

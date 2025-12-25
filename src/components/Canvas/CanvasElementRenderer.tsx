@@ -5,14 +5,116 @@
  * Supports dragging like Figma/Framer.
  */
 
-import React, { useRef, useCallback, useState, useEffect } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useMemo, memo } from 'react';
 import { motion } from 'framer-motion';
-import { CanvasElement } from '../../lib/canvas/types';
+import { CanvasElement, ElementStyles } from '../../lib/canvas/types';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
+import { useResponsiveStore, getStylesForBreakpoint } from '../../lib/canvas/responsive';
 import { renderLucideIcon } from './IconPicker';
 
 // Container element types that can accept children
 const CONTAINER_TYPES = ['frame', 'stack', 'grid', 'section', 'container', 'row', 'page', 'box'];
+
+// Memoized Image Renderer for performance
+interface ImageRendererProps {
+  src?: string;
+  alt?: string;
+  styles: ElementStyles;
+  crop?: {
+    x: number;
+    y: number;
+    width: number;
+    height: number;
+  };
+}
+
+const ImageRenderer = memo(function ImageRenderer({ src, alt, styles, crop }: ImageRendererProps) {
+  // Memoize filter string calculation
+  const imageFilter = useMemo(() => {
+    const filterParts: string[] = [];
+    if (styles.brightness !== undefined && styles.brightness !== 100) {
+      filterParts.push(`brightness(${styles.brightness}%)`);
+    }
+    if (styles.contrast !== undefined && styles.contrast !== 100) {
+      filterParts.push(`contrast(${styles.contrast}%)`);
+    }
+    if (styles.saturation !== undefined && styles.saturation !== 100) {
+      filterParts.push(`saturate(${styles.saturation}%)`);
+    }
+    if (styles.blur && styles.blur > 0) {
+      filterParts.push(`blur(${styles.blur}px)`);
+    }
+    if (styles.grayscale && styles.grayscale > 0) {
+      filterParts.push(`grayscale(${styles.grayscale}%)`);
+    }
+    if (styles.hueRotate && styles.hueRotate !== 0) {
+      filterParts.push(`hue-rotate(${styles.hueRotate}deg)`);
+    }
+    if (styles.invert && styles.invert > 0) {
+      filterParts.push(`invert(${styles.invert}%)`);
+    }
+    if (styles.sepia && styles.sepia > 0) {
+      filterParts.push(`sepia(${styles.sepia}%)`);
+    }
+    return filterParts.length > 0 ? filterParts.join(' ') : undefined;
+  }, [styles.brightness, styles.contrast, styles.saturation, styles.blur, styles.grayscale, styles.hueRotate, styles.invert, styles.sepia]);
+
+  // Check if crop is applied
+  const hasCrop = crop && (
+    crop.x !== 0 ||
+    crop.y !== 0 ||
+    crop.width !== 100 ||
+    crop.height !== 100
+  );
+
+  if (hasCrop && crop) {
+    const scaleX = 100 / crop.width;
+    const scaleY = 100 / crop.height;
+    const translateX = -crop.x * scaleX;
+    const translateY = -crop.y * scaleY;
+
+    return (
+      <div style={{
+        width: '100%',
+        height: '100%',
+        overflow: 'hidden',
+        position: 'relative',
+      }}>
+        <img
+          src={src || 'https://via.placeholder.com/200x150'}
+          alt={alt || 'Image'}
+          loading="lazy"
+          style={{
+            width: `${scaleX * 100}%`,
+            height: `${scaleY * 100}%`,
+            objectFit: 'cover',
+            pointerEvents: 'none',
+            transform: `translate(${translateX}%, ${translateY}%)`,
+            filter: imageFilter,
+          }}
+          draggable={false}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <img
+      src={src || 'https://via.placeholder.com/200x150'}
+      alt={alt || 'Image'}
+      loading="lazy"
+      style={{
+        width: '100%',
+        height: '100%',
+        objectFit: styles.objectFit || 'cover',
+        objectPosition: styles.objectPosition || 'center',
+        pointerEvents: 'none',
+        filter: imageFilter,
+      }}
+      draggable={false}
+    />
+  );
+});
 
 interface CanvasElementRendererProps {
   element: CanvasElement;
@@ -28,7 +130,8 @@ interface CanvasElementRendererProps {
   parentFlexDirection?: 'row' | 'column' | 'row-reverse' | 'column-reverse';
 }
 
-export function CanvasElementRenderer({
+// Memoized component to prevent unnecessary re-renders with heavy Figma imports
+export const CanvasElementRenderer = memo(function CanvasElementRenderer({
   element,
   elements,
   zoom,
@@ -53,6 +156,18 @@ export function CanvasElementRenderer({
   const saveToHistory = useCanvasStore((state) => state.saveToHistory);
   const updateElementContent = useCanvasStore((state) => state.updateElementContent);
   const resizeElement = useCanvasStore((state) => state.resizeElement);
+
+  // Get selection state reactively (for nested elements)
+  const selectedElementIds = useCanvasStore((state) => state.selectedElementIds);
+  const hoveredElementId = useCanvasStore((state) => state.hoveredElementId);
+
+  // Get active breakpoint for responsive styles
+  const activeBreakpointId = useResponsiveStore((state) => state.activeBreakpointId);
+
+  // Merge base styles with responsive overrides for current breakpoint
+  const effectiveStyles = useMemo(() => {
+    return getStylesForBreakpoint(element.styles, element.responsiveStyles, activeBreakpointId);
+  }, [element.styles, element.responsiveStyles, activeBreakpointId]);
 
   // Listen for Alt key for inspect mode
   useEffect(() => {
@@ -113,57 +228,62 @@ export function CanvasElementRenderer({
     }
   }, [isSelected, isEditingText, element.id, updateElementContent]);
 
-  // Handle element click with manual double-click detection
-  // Implements Figma-style selection:
-  // - Click selects parent container first
-  // - Click again to select nested element
-  // - Cmd/Ctrl+Click for direct deep selection
+  // Handle element click - Figma-style selection
+  // Note: Shift+Click is handled by onPointerDown for reliability
   const handleClick = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
       if (element.locked) return;
-
-      // If editing text, don't change selection
       if (isEditingText) return;
 
-      // Check for double-click (manual detection for better compatibility with framer-motion)
+      // Shift+Click is handled by onPointerDown
+      if (e.shiftKey) return;
+
+      // Double-click detection for text editing
       const now = Date.now();
       const timeSinceLastClick = now - lastClickTimeRef.current;
       lastClickTimeRef.current = now;
 
       if (timeSinceLastClick < 400 && isTextElement && !hasDraggedRef.current) {
-        // Double-click detected - enter edit mode
         setIsEditingText(true);
         return;
       }
 
-      // Only select if we didn't just finish dragging
-      if (!hasDraggedRef.current) {
-        // Figma-style selection behavior:
-        // Cmd/Ctrl+Click = deep select (directly select this element)
-        const deepSelect = e.metaKey || e.ctrlKey;
-
-        if (deepSelect) {
-          // Direct deep selection - select this element regardless of parent
-          onSelect(element.id, e.shiftKey);
-        } else {
-          // Normal click - check if we should select parent first
-          const parent = element.parentId ? elements[element.parentId] : null;
-          const parentIsContainer = parent && CONTAINER_TYPES.includes(parent.type);
-          const parentIsPage = parent?.type === 'page';
-          const { selectedElementIds } = useCanvasStore.getState();
-          const parentIsSelected = parent && selectedElementIds.includes(parent.id);
-
-          // If parent is a container (not page) and not selected, select parent first
-          if (parentIsContainer && !parentIsPage && !parentIsSelected) {
-            onSelect(parent.id, e.shiftKey);
-          } else {
-            // Parent is already selected or is a page - select this element
-            onSelect(element.id, e.shiftKey);
-          }
-        }
+      // Skip selection if we just finished dragging
+      if (hasDraggedRef.current) {
+        hasDraggedRef.current = false;
+        return;
       }
-      hasDraggedRef.current = false;
+
+      // Cmd/Ctrl+Click: Deep select - select this element directly
+      const cmdKey = e.metaKey || e.ctrlKey;
+      if (cmdKey) {
+        onSelect(element.id, false);
+        return;
+      }
+
+      // NORMAL CLICK: Figma parent-first behavior
+      const { selectedElementIds } = useCanvasStore.getState();
+      const thisElementIsSelected = selectedElementIds.includes(element.id);
+
+      // If already selected, do nothing (prevents toggle)
+      if (thisElementIsSelected) {
+        return;
+      }
+
+      // Check if parent container needs to be selected first
+      const parent = element.parentId ? elements[element.parentId] : null;
+      const parentIsContainer = parent && CONTAINER_TYPES.includes(parent.type);
+      const parentIsPage = parent?.type === 'page';
+      const parentIsSelected = parent && selectedElementIds.includes(parent.id);
+
+      if (parentIsContainer && !parentIsPage && !parentIsSelected) {
+        // Select parent first
+        onSelect(parent.id, false);
+      } else {
+        // Select this element
+        onSelect(element.id, false);
+      }
     },
     [element.id, element.parentId, element.locked, elements, onSelect, isEditingText, isTextElement]
   );
@@ -278,9 +398,10 @@ export function CanvasElementRenderer({
     dragStartPositionsRef.current = {};
   }, [saveToHistory]);
 
-  // Convert styles to CSS
-  const getStyles = (): React.CSSProperties => {
-    const { styles } = element;
+  // Convert styles to CSS - memoized to prevent recalculations
+  const computedStyles = useMemo((): React.CSSProperties => {
+    // Use effectiveStyles which includes responsive overrides for current breakpoint
+    const styles = effectiveStyles;
 
     // When parent has auto-layout, children MUST use relative positioning to follow flex/grid flow
     // When parent doesn't have auto-layout, use absolute positioning for free movement
@@ -290,21 +411,20 @@ export function CanvasElementRenderer({
     const isTextType = element.type === 'text' || element.type === 'heading' || element.type === 'paragraph';
     const autoFillText = isTextType && parentHasAutoLayout;
 
-    // Determine outline/border for selection/hover state
-    // Show inline outline for:
-    // 1. Non-frame elements (they don't get SelectionOverlay anymore)
-    // 2. Any element in auto-layout (position can't be calculated for SelectionOverlay)
-    const isFrame = element.type === 'frame' || element.type === 'page';
-    const needsInlineOutline = !isFrame || parentHasAutoLayout;
+    // Determine selection/hover visual state
+    // Use outline instead of box-shadow - outline is NOT clipped by parent overflow:hidden
+    const isPageElement = element.type === 'page';
 
-    let outlineStyle: string = 'none';
-    let outlineOffset: number | string = 0;
-    if (isSelected && needsInlineOutline) {
-      outlineStyle = '2px solid #8B1E2B';
-      outlineOffset = 2; // Esterno all'elemento per non sovrapporsi al contenuto
+    // Selection outline will be applied via CSS outline property (not box-shadow)
+    // This ensures selection is always visible regardless of parent overflow settings
+    let selectionOutline: string | undefined;
+    let selectionOutlineOffset: number | undefined;
+    if (isSelected && !isPageElement) {
+      selectionOutline = '2px solid #8B1E2B';
+      selectionOutlineOffset = -1;
     } else if (isHovered && !isSelected) {
-      outlineStyle = '2px solid rgba(139, 30, 43, 0.8)';
-      outlineOffset = 2;
+      selectionOutline = '1px solid rgba(139, 30, 43, 0.5)';
+      selectionOutlineOffset = 0;
     }
 
     // Handle Fill/Hug resizing modes
@@ -312,13 +432,19 @@ export function CanvasElementRenderer({
     const resizeY = (styles as any).resizeY || 'fixed';
 
     // Check parent flex direction for responsive sizing
-    const isParentRow = parentFlexDirection === 'row' || parentFlexDirection === 'row-reverse';
     const isParentColumn = parentFlexDirection === 'column' || parentFlexDirection === 'column-reverse' || !parentFlexDirection;
+
+    // Flex child properties when in auto layout
+    const isRow = parentFlexDirection === 'row' || parentFlexDirection === 'row-reverse';
+    const mainAxisFill = isRow ? resizeX === 'fill' : resizeY === 'fill';
+    const crossAxisFill = isRow ? resizeY === 'fill' : resizeX === 'fill';
 
     // Determine width based on resize mode
     let width: number | string = element.size.width;
     if (parentHasAutoLayout && resizeX === 'fill') {
-      width = '100%';
+      // In ROW layout, let flex handle the width distribution (don't set explicit width)
+      // In COLUMN layout, fill means 100% width
+      width = isRow ? 'auto' : '100%';
     } else if (resizeX === 'hug') {
       width = 'auto';
     } else if (autoFillText && resizeX === 'fixed' && isParentColumn) {
@@ -330,7 +456,9 @@ export function CanvasElementRenderer({
     // Determine height based on resize mode
     let height: number | string = element.size.height;
     if (parentHasAutoLayout && resizeY === 'fill') {
-      height = '100%';
+      // In COLUMN layout, let flex handle the height distribution
+      // In ROW layout, fill means 100% height (stretch)
+      height = isRow ? '100%' : 'auto';
     } else if (resizeY === 'hug') {
       // Use fit-content for proper content hugging (like Figma)
       height = 'fit-content';
@@ -338,6 +466,20 @@ export function CanvasElementRenderer({
       // Text height should be auto for natural text flow
       height = 'fit-content';
     }
+
+    // Layout based on element type
+    const isTextElement = element.type === 'text' || element.type === 'heading' || element.type === 'paragraph';
+    const hasVerticalAlign = styles.textAlignVertical && styles.textAlignVertical !== 'top';
+
+    // Padding resolution
+    const basePadding = typeof styles.padding === 'number' ? styles.padding : (parseInt(String(styles.padding)) || 0);
+    const pt = styles.paddingTop ?? basePadding;
+    const pr = styles.paddingRight ?? basePadding;
+    const pb = styles.paddingBottom ?? basePadding;
+    const pl = styles.paddingLeft ?? basePadding;
+
+    // Element's own boxShadow (selection is now handled via outline)
+    const elementBoxShadow = styles.boxShadow;
 
     const css: React.CSSProperties = {
       position: useAbsolute ? 'absolute' : 'relative',
@@ -348,88 +490,44 @@ export function CanvasElementRenderer({
       width,
       height,
       cursor: element.locked ? 'not-allowed' : (parentHasAutoLayout ? 'default' : 'move'),
-      outline: outlineStyle,
-      outlineOffset,
       opacity: element.visible ? (styles.opacity ?? 1) : 0.3,
       userSelect: 'none',
       boxSizing: 'border-box',
       zIndex: 1, // Ensure elements are above the artboard background click layer
       // Flex child properties when in auto layout
-      ...(parentHasAutoLayout ? (() => {
-        // In flex-direction: row, main axis is horizontal (width), cross axis is vertical (height)
-        // In flex-direction: column, main axis is vertical (height), cross axis is horizontal (width)
-        const isRow = parentFlexDirection === 'row' || parentFlexDirection === 'row-reverse';
-
-        // For main axis (flexGrow affects this):
-        // - row: resizeX fill uses flexGrow
-        // - column: resizeY fill uses flexGrow
-        const mainAxisFill = isRow ? resizeX === 'fill' : resizeY === 'fill';
-
-        // For cross axis (alignSelf: stretch affects this):
-        // - row: resizeY fill uses alignSelf stretch
-        // - column: resizeX fill uses alignSelf stretch
-        const crossAxisFill = isRow ? resizeY === 'fill' : resizeX === 'fill';
-
-        return {
-          flexShrink: mainAxisFill ? 1 : 0,
-          flexGrow: mainAxisFill ? 1 : 0,
-          flexBasis: mainAxisFill ? 0 : 'auto',
-          alignSelf: crossAxisFill ? 'stretch' : undefined,
-        };
-      })() : {}),
+      ...(parentHasAutoLayout ? {
+        flexShrink: mainAxisFill ? 1 : 0,
+        flexGrow: mainAxisFill ? 1 : 0,
+        flexBasis: mainAxisFill ? 0 : 'auto',
+        alignSelf: crossAxisFill ? 'stretch' : undefined,
+      } : {}),
       // Layout - for text with vertical alignment, use flex to align content
-      ...(() => {
-        // Check if this is a text element with vertical alignment
-        const isTextElement = element.type === 'text' || element.type === 'heading' || element.type === 'paragraph';
-        const hasVerticalAlign = styles.textAlignVertical && styles.textAlignVertical !== 'top';
-
-        if (isTextElement && hasVerticalAlign) {
-          // Use flexbox for vertical text alignment
-          const verticalAlignMap: Record<string, string> = {
-            'top': 'flex-start',
-            'center': 'center',
-            'bottom': 'flex-end',
-          };
-          return {
-            display: 'flex' as const,
-            flexDirection: 'column' as const,
-            justifyContent: verticalAlignMap[styles.textAlignVertical || 'top'],
-          };
-        }
-        // Normal layout
-        return {
-          display: styles.display || 'block',
-          flexDirection: styles.flexDirection,
-          justifyContent: styles.justifyContent,
-          alignItems: styles.alignItems,
-        };
-      })(),
+      ...(isTextElement && hasVerticalAlign ? {
+        display: 'flex' as const,
+        flexDirection: 'column' as const,
+        justifyContent: styles.textAlignVertical === 'center' ? 'center' : styles.textAlignVertical === 'bottom' ? 'flex-end' : 'flex-start',
+      } : {
+        display: styles.display || 'block',
+        flexDirection: styles.flexDirection,
+        justifyContent: styles.justifyContent,
+        alignItems: styles.alignItems,
+      }),
       gap: styles.gap,
       gridTemplateColumns: styles.gridTemplateColumns,
-      // Spacing - resolve padding values consistently (shorthand fallback like PropertiesPanel)
-      ...(() => {
-        const basePadding = typeof styles.padding === 'number' ? styles.padding : (parseInt(String(styles.padding)) || 0);
-        const pt = styles.paddingTop ?? basePadding;
-        const pr = styles.paddingRight ?? basePadding;
-        const pb = styles.paddingBottom ?? basePadding;
-        const pl = styles.paddingLeft ?? basePadding;
-        // Set individual values - only include if > 0 to avoid clutter, but 0 is valid
-        return {
-          paddingTop: pt,
-          paddingRight: pr,
-          paddingBottom: pb,
-          paddingLeft: pl,
-        };
-      })(),
+      // Padding
+      paddingTop: pt,
+      paddingRight: pr,
+      paddingBottom: pb,
+      paddingLeft: pl,
       // Background - order matters: background shorthand first, then specific properties override
       ...(styles.background ? { background: styles.background } : {}),
       backgroundColor: styles.backgroundColor,
       backgroundImage: styles.backgroundImage,
       // Border
-      borderRadius: styles.borderRadius,
-      borderWidth: styles.borderWidth,
+      borderRadius: styles.borderRadius !== undefined ? `${styles.borderRadius}px` : undefined,
+      borderWidth: styles.borderWidth !== undefined ? `${styles.borderWidth}px` : undefined,
       borderColor: styles.borderColor,
-      borderStyle: styles.borderStyle,
+      borderStyle: styles.borderStyle || (styles.borderWidth ? 'solid' : undefined),
       // Typography
       fontSize: styles.fontSize,
       fontWeight: styles.fontWeight,
@@ -442,16 +540,19 @@ export function CanvasElementRenderer({
       textTransform: styles.textTransform,
       whiteSpace: styles.whiteSpace,
       // Border - individual radius
-      borderTopLeftRadius: styles.borderTopLeftRadius,
-      borderTopRightRadius: styles.borderTopRightRadius,
-      borderBottomLeftRadius: styles.borderBottomLeftRadius,
-      borderBottomRightRadius: styles.borderBottomRightRadius,
+      borderTopLeftRadius: styles.borderTopLeftRadius !== undefined ? `${styles.borderTopLeftRadius}px` : undefined,
+      borderTopRightRadius: styles.borderTopRightRadius !== undefined ? `${styles.borderTopRightRadius}px` : undefined,
+      borderBottomLeftRadius: styles.borderBottomLeftRadius !== undefined ? `${styles.borderBottomLeftRadius}px` : undefined,
+      borderBottomRightRadius: styles.borderBottomRightRadius !== undefined ? `${styles.borderBottomRightRadius}px` : undefined,
       // Background
       backgroundSize: styles.backgroundSize,
       backgroundPosition: styles.backgroundPosition,
       backgroundRepeat: styles.backgroundRepeat,
-      // Effects
-      boxShadow: styles.boxShadow,
+      // Effects - element's own shadow
+      boxShadow: elementBoxShadow,
+      // Selection outline - uses CSS outline which is NOT clipped by overflow:hidden
+      outline: selectionOutline,
+      outlineOffset: selectionOutlineOffset,
       filter: styles.filter,
       backdropFilter: styles.backdropFilter,
       overflow: styles.overflow || (element.type === 'frame' || element.type === 'image' ? 'hidden' : undefined),
@@ -464,19 +565,18 @@ export function CanvasElementRenderer({
     };
 
     return css;
-  };
+  }, [element, effectiveStyles, isSelected, isHovered, parentHasAutoLayout, parentFlexDirection, selectedElementIds, hoveredElementId]);
 
-  // Parse padding values for visualization
-  const getPaddingValues = () => {
-    const { styles } = element;
+  // Parse padding values for visualization - memoized
+  const paddingValues = useMemo(() => {
+    const styles = effectiveStyles;
     const parsePx = (val: string | number | undefined): number => {
-      if (val === undefined || val === null) return NaN; // Return NaN to indicate "not set"
+      if (val === undefined || val === null) return NaN;
       if (typeof val === 'number') return val;
       const parsed = parseFloat(val);
       return isNaN(parsed) ? NaN : parsed;
     };
 
-    // Check for individual padding or shorthand (use ?? to match PropertiesPanel logic)
     const basePadding = typeof styles.padding === 'number' ? styles.padding : (parseInt(String(styles.padding)) || 0);
     const top = parsePx(styles.paddingTop);
     const right = parsePx(styles.paddingRight);
@@ -489,9 +589,7 @@ export function CanvasElementRenderer({
       bottom: isNaN(bottom) ? basePadding : bottom,
       left: isNaN(left) ? basePadding : left,
     };
-  };
-
-  const paddingValues = getPaddingValues();
+  }, [effectiveStyles]);
   const hasPadding = paddingValues.top > 0 || paddingValues.right > 0 ||
                      paddingValues.bottom > 0 || paddingValues.left > 0;
 
@@ -525,7 +623,7 @@ export function CanvasElementRenderer({
                 caretColor: '#8B1E2B',
                 background: 'rgba(139, 30, 43, 0.05)',
                 borderRadius: 2,
-                // Typography styles are on the container div via getStyles()
+                // Typography styles are on the container div via computedStyles
               }}
             />
           );
@@ -538,7 +636,7 @@ export function CanvasElementRenderer({
               width: '100%',
               whiteSpace: 'pre-wrap',
               wordBreak: 'break-word',
-              // Typography styles are on the container div via getStyles()
+              // Typography styles are on the container div via computedStyles
             }}
           >
             {element.content || ''}
@@ -574,16 +672,11 @@ export function CanvasElementRenderer({
 
       case 'image':
         return (
-          <img
-            src={element.src || 'https://via.placeholder.com/200x150'}
-            alt={element.alt || 'Image'}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              pointerEvents: 'none',
-            }}
-            draggable={false}
+          <ImageRenderer
+            src={element.src}
+            alt={element.alt}
+            styles={element.styles}
+            crop={element.crop}
           />
         );
 
@@ -730,7 +823,7 @@ export function CanvasElementRenderer({
         const isPage = element.type === 'page';
         const hasAutoLayout = isPage || element.styles.display === 'flex' || element.styles.display === 'grid';
         const flexDirection = element.styles.flexDirection || 'column';
-        // Render children
+        // Render children - use reactive selection state from store hook
         return element.children.map((childId) => {
           const child = elements[childId];
           if (!child || !child.visible) return null;
@@ -740,8 +833,8 @@ export function CanvasElementRenderer({
               element={child}
               elements={elements}
               zoom={zoom}
-              isSelected={useCanvasStore.getState().selectedElementIds.includes(childId)}
-              isHovered={useCanvasStore.getState().hoveredElementId === childId}
+              isSelected={selectedElementIds.includes(childId)}
+              isHovered={hoveredElementId === childId}
               onSelect={onSelect}
               onHover={onHover}
               parentHasAutoLayout={hasAutoLayout}
@@ -764,8 +857,8 @@ export function CanvasElementRenderer({
                 element={child}
                 elements={elements}
                 zoom={zoom}
-                isSelected={useCanvasStore.getState().selectedElementIds.includes(childId)}
-                isHovered={useCanvasStore.getState().hoveredElementId === childId}
+                isSelected={selectedElementIds.includes(childId)}
+                isHovered={hoveredElementId === childId}
                 onSelect={onSelect}
                 onHover={onHover}
                 parentHasAutoLayout={defaultHasAutoLayout}
@@ -782,6 +875,27 @@ export function CanvasElementRenderer({
   // Elements in auto-layout containers cannot be freely dragged (they follow the layout flow)
   const canDrag = !element.locked && !parentHasAutoLayout && !isEditingText;
 
+  // Handle pointer down for multi-selection (Shift+Click)
+  // Using onPointerDown because it's more reliable than onClick with framer-motion
+  const handlePointerDown = useCallback(
+    (e: React.PointerEvent) => {
+      // Only handle left click
+      if (e.button !== 0) return;
+      if (element.locked) return;
+      if (isEditingText) return;
+
+      const shiftKey = e.shiftKey;
+
+      // SHIFT+CLICK: Always add/remove from selection immediately
+      if (shiftKey) {
+        e.stopPropagation();
+        e.preventDefault();
+        onSelect(element.id, true);
+      }
+    },
+    [element.id, element.locked, isEditingText, onSelect]
+  );
+
   return (
     <motion.div
       ref={elementRef}
@@ -794,10 +908,11 @@ export function CanvasElementRenderer({
       onDrag={handleDrag}
       onDragEnd={handleDragEnd}
       style={{
-        ...getStyles(),
-        zIndex: isDragging ? 9999 : getStyles().zIndex,
+        ...computedStyles,
+        zIndex: isDragging ? 9999 : computedStyles.zIndex,
       }}
       whileDrag={{ cursor: 'grabbing' }}
+      onPointerDown={handlePointerDown}
       onClick={handleClick}
       onDoubleClick={handleDoubleClick}
       onMouseEnter={() => onHover(element.id)}
@@ -1029,4 +1144,36 @@ export function CanvasElementRenderer({
       {renderContent()}
     </motion.div>
   );
-}
+}, (prevProps, nextProps) => {
+  // Custom comparison for memo - return true if props are equal (skip re-render)
+  // We need to compare the element object deeply since it may have changed
+  if (prevProps.isSelected !== nextProps.isSelected) return false;
+  if (prevProps.isHovered !== nextProps.isHovered) return false;
+  if (prevProps.zoom !== nextProps.zoom) return false;
+  if (prevProps.parentHasAutoLayout !== nextProps.parentHasAutoLayout) return false;
+  if (prevProps.parentFlexDirection !== nextProps.parentFlexDirection) return false;
+
+  // Deep compare element - check key properties
+  const prevEl = prevProps.element;
+  const nextEl = nextProps.element;
+  if (prevEl.id !== nextEl.id) return false;
+  if (prevEl.position.x !== nextEl.position.x || prevEl.position.y !== nextEl.position.y) return false;
+  if (prevEl.size.width !== nextEl.size.width || prevEl.size.height !== nextEl.size.height) return false;
+  if (prevEl.content !== nextEl.content) return false;
+  if (prevEl.visible !== nextEl.visible) return false;
+  if (prevEl.locked !== nextEl.locked) return false;
+  if (prevEl.src !== nextEl.src) return false;
+  if (prevEl.children.length !== nextEl.children.length) return false;
+
+  // Compare styles - use JSON for deep comparison (safe for simple objects)
+  if (JSON.stringify(prevEl.styles) !== JSON.stringify(nextEl.styles)) return false;
+  if (JSON.stringify(prevEl.crop) !== JSON.stringify(nextEl.crop)) return false;
+  if (JSON.stringify(prevEl.responsiveStyles) !== JSON.stringify(nextEl.responsiveStyles)) return false;
+
+  // Compare elements record - check if any children changed
+  for (const childId of nextEl.children) {
+    if (prevProps.elements[childId] !== nextProps.elements[childId]) return false;
+  }
+
+  return true;
+});
