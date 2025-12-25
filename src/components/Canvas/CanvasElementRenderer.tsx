@@ -347,24 +347,34 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
     saveToHistory('Edit text');
   }, [element.id, updateElementContent, saveToHistory]);
 
+  // Get reorderElement from store
+  const reorderElement = useCanvasStore((state) => state.reorderElement);
+
+  // For auto-layout reorder tracking
+  const dragReorderTargetRef = useRef<{ id: string; position: 'before' | 'after' } | null>(null);
+
   // Handle drag start
   const handleDragStart = useCallback(() => {
-    if (element.locked || parentHasAutoLayout) return;
+    if (element.locked) return;
+    // Allow drag in auto-layout for reordering
     setIsDragging(true);
     hasDraggedRef.current = false;
+    dragReorderTargetRef.current = null;
 
-    // Store start positions of ALL selected elements (or just this one if not selected)
-    const state = useCanvasStore.getState();
-    const selectedIds = isSelected ? state.selectedElementIds : [element.id];
-    const startPositions: Record<string, { x: number; y: number }> = {};
+    if (!parentHasAutoLayout) {
+      // Store start positions of ALL selected elements (or just this one if not selected)
+      const state = useCanvasStore.getState();
+      const selectedIds = isSelected ? state.selectedElementIds : [element.id];
+      const startPositions: Record<string, { x: number; y: number }> = {};
 
-    for (const id of selectedIds) {
-      const el = state.elements[id];
-      if (el && !el.locked) {
-        startPositions[id] = { x: el.position.x, y: el.position.y };
+      for (const id of selectedIds) {
+        const el = state.elements[id];
+        if (el && !el.locked) {
+          startPositions[id] = { x: el.position.x, y: el.position.y };
+        }
       }
+      dragStartPositionsRef.current = startPositions;
     }
-    dragStartPositionsRef.current = startPositions;
 
     // Select if not already selected
     if (!isSelected) {
@@ -373,30 +383,74 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
   }, [element.id, element.locked, isSelected, onSelect, parentHasAutoLayout]);
 
   // Handle drag - update ALL selected elements in real-time
-  const handleDrag = useCallback((event: any, info: { offset: { x: number; y: number } }) => {
-    if (Object.keys(dragStartPositionsRef.current).length === 0 || element.locked || parentHasAutoLayout) return;
-
+  const handleDrag = useCallback((event: any, info: { offset: { x: number; y: number }; point: { x: number; y: number } }) => {
+    if (element.locked) return;
     hasDraggedRef.current = true;
-    const offsetX = info.offset.x / zoom;
-    const offsetY = info.offset.y / zoom;
 
-    // Move ALL selected elements together
-    for (const [id, startPos] of Object.entries(dragStartPositionsRef.current)) {
-      moveElement(id, {
-        x: Math.round(startPos.x + offsetX),
-        y: Math.round(startPos.y + offsetY),
-      });
+    if (parentHasAutoLayout) {
+      // For auto-layout: detect which sibling we're over for reordering
+      const parent = element.parentId ? elements[element.parentId] : null;
+      if (!parent) return;
+
+      const siblings = parent.children.filter(id => id !== element.id);
+      const isVertical = (parent.styles.flexDirection || 'column') === 'column' || parent.styles.flexDirection === 'column-reverse';
+
+      // Find which sibling we're closest to
+      let closestSibling: { id: string; position: 'before' | 'after' } | null = null;
+      let minDistance = Infinity;
+
+      for (const sibId of siblings) {
+        const sibEl = document.querySelector(`[data-element-id="${sibId}"]`);
+        if (!sibEl) continue;
+
+        const rect = sibEl.getBoundingClientRect();
+        const sibCenter = isVertical
+          ? rect.top + rect.height / 2
+          : rect.left + rect.width / 2;
+        const dragPos = isVertical ? info.point.y : info.point.x;
+        const distance = Math.abs(dragPos - sibCenter);
+
+        if (distance < minDistance) {
+          minDistance = distance;
+          closestSibling = {
+            id: sibId,
+            position: dragPos < sibCenter ? 'before' : 'after'
+          };
+        }
+      }
+
+      dragReorderTargetRef.current = closestSibling;
+    } else {
+      // Normal drag: move by position
+      if (Object.keys(dragStartPositionsRef.current).length === 0) return;
+
+      const offsetX = info.offset.x / zoom;
+      const offsetY = info.offset.y / zoom;
+
+      // Move ALL selected elements together
+      for (const [id, startPos] of Object.entries(dragStartPositionsRef.current)) {
+        moveElement(id, {
+          x: Math.round(startPos.x + offsetX),
+          y: Math.round(startPos.y + offsetY),
+        });
+      }
     }
-  }, [element.locked, zoom, moveElement, parentHasAutoLayout]);
+  }, [element.locked, element.parentId, elements, zoom, moveElement, parentHasAutoLayout]);
 
   // Handle drag end
   const handleDragEnd = useCallback(() => {
     if (hasDraggedRef.current) {
-      saveToHistory('Move element');
+      if (parentHasAutoLayout && dragReorderTargetRef.current) {
+        // Reorder in auto-layout
+        reorderElement(element.id, dragReorderTargetRef.current.id, dragReorderTargetRef.current.position);
+      } else if (!parentHasAutoLayout) {
+        saveToHistory('Move element');
+      }
     }
     setIsDragging(false);
     dragStartPositionsRef.current = {};
-  }, [saveToHistory]);
+    dragReorderTargetRef.current = null;
+  }, [saveToHistory, parentHasAutoLayout, element.id, reorderElement]);
 
   // Convert styles to CSS - memoized to prevent recalculations
   const computedStyles = useMemo((): React.CSSProperties => {
@@ -489,7 +543,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
       } : {}),
       width,
       height,
-      cursor: element.locked ? 'not-allowed' : (parentHasAutoLayout ? 'default' : 'move'),
+      cursor: element.locked ? 'not-allowed' : (parentHasAutoLayout ? 'grab' : 'move'),
       opacity: element.visible ? (styles.opacity ?? 1) : 0.3,
       userSelect: 'none',
       boxSizing: 'border-box',
@@ -872,8 +926,8 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
   };
 
   // Can this element be dragged?
-  // Elements in auto-layout containers cannot be freely dragged (they follow the layout flow)
-  const canDrag = !element.locked && !parentHasAutoLayout && !isEditingText;
+  // Elements can be dragged for movement (normal) or reordering (auto-layout)
+  const canDrag = !element.locked && !isEditingText;
 
   // Handle pointer down for multi-selection (Shift+Click)
   // Using onPointerDown because it's more reliable than onClick with framer-motion
