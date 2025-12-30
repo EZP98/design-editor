@@ -569,13 +569,16 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       };
     }
 
+    // If parent has auto-layout (flex), children should be relative to participate in flow
+    const defaultPositionType = parentHasAutoLayout ? 'relative' : 'absolute';
+
     const newElement: CanvasElement = {
       id,
       type,
       name,
       position: elementPos,
       size: config.size || { width: 100, height: 100 },
-      positionType: 'absolute',
+      positionType: defaultPositionType,
       styles: { ...(config.styles || {}), ...autoLayoutStyles },
       content: config.content,
       // Generate unique random image URL for each image element
