@@ -995,25 +995,22 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             return;
           }
 
-          // Add elements to canvas
+          // Add elements to canvas - ALWAYS create new page for clean slate
           const store = useCanvasStore.getState();
-          let pageId: string | undefined;
+          const pageName = (allElements[0]?.name as string) || 'AI Design';
+          const pageId = store.addPage();
           let parentId: string | undefined;
 
-          if (createAsNewPage) {
-            const pageName = (allElements[0]?.name as string) || 'AI Generated';
-            pageId = store.addPage();
-            if (pageId) {
-              store.renamePage(pageId, pageName);
-              const page = store.pages[pageId];
-              if (page) {
-                store.renameElement(page.rootElementId, pageName);
-                parentId = page.rootElementId;
-              }
-              store.setCurrentPage(pageId);
+          if (pageId) {
+            store.renamePage(pageId, pageName);
+            const page = store.pages[pageId];
+            if (page) {
+              store.renameElement(page.rootElementId, pageName);
+              parentId = page.rootElementId;
             }
-            setCreateAsNewPage(false);
+            store.setCurrentPage(pageId);
           }
+          setCreateAsNewPage(false);
 
           const ids = addElementsFromAI(allElements, parentId);
           allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
