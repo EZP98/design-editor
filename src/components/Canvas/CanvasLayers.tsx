@@ -266,7 +266,7 @@ function LayerItem({
         onDragLeave={() => {}}
         className={`
           relative flex items-center gap-1 px-2 py-1 cursor-pointer text-xs group
-          ${isSelected ? 'bg-[#8B1E2B]/40 text-white' : 'text-gray-400 hover:bg-white/5'}
+          ${isSelected ? 'bg-[#8B5CF6]/40 text-white' : 'text-gray-400 hover:bg-white/5'}
           ${isHovered && !isSelected ? 'bg-white/10' : ''}
           ${isDragging ? 'opacity-50' : ''}
         `}
@@ -326,7 +326,7 @@ function LayerItem({
                 setIsRenaming(false);
               }
             }}
-            className="flex-1 bg-transparent border border-[#8B1E2B] rounded px-1 text-white outline-none"
+            className="flex-1 bg-transparent border border-[#8B5CF6] rounded px-1 text-white outline-none"
             autoFocus
             onClick={(e) => e.stopPropagation()}
           />

@@ -116,7 +116,7 @@ const ELEMENTS: Array<{
     ),
     defaultStyles: {
       padding: '12px 24px',
-      backgroundColor: '#8B1E2B',
+      backgroundColor: '#8B5CF6',
       color: '#ffffff',
       borderRadius: '8px',
       fontWeight: '500',
@@ -174,7 +174,7 @@ const ELEMENTS: Array<{
       </svg>
     ),
     defaultStyles: {
-      color: '#8B1E2B',
+      color: '#8B5CF6',
       textDecoration: 'underline',
       fontSize: '16px',
       cursor: 'pointer',
@@ -362,7 +362,7 @@ export function ElementToolbar({ onAddElement, onDescribeWithAI, disabled }: Ele
                   style={{
                     padding: '8px 12px',
                     background: aiPrompt.trim()
-                      ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                      ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
                       : '#333',
                     border: 'none',
                     borderRadius: 4,

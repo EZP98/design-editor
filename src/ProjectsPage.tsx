@@ -48,7 +48,7 @@ const PROJECT_GRADIENTS = [
   'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
   'linear-gradient(135deg, #11998e 0%, #38ef7d 100%)',
   'linear-gradient(135deg, #ee0979 0%, #ff6a00 100%)',
-  'linear-gradient(135deg, #8B1E2B 0%, #A83248 100%)',
+  'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
   'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
   'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
 ];
@@ -209,7 +209,7 @@ const ProjectsPage: React.FC = () => {
             width: 28,
             height: 28,
             borderRadius: 7,
-            background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+            background: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
           }} />
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 700, letterSpacing: '-0.02em' }}>
             OBJECTS
@@ -346,7 +346,7 @@ const ProjectsPage: React.FC = () => {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                background: prompt.trim() ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)' : 'rgba(255, 255, 255, 0.04)',
+                background: prompt.trim() ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)' : 'rgba(255, 255, 255, 0.04)',
                 border: 'none',
                 borderRadius: 10,
                 color: prompt.trim() ? '#fff' : '#555',
@@ -400,7 +400,7 @@ const ProjectsPage: React.FC = () => {
                   marginBottom: 12,
                 }}
                 onMouseEnter={(e) => {
-                  e.currentTarget.style.borderColor = '#A83248';
+                  e.currentTarget.style.borderColor = '#A78BFA';
                   e.currentTarget.style.background = 'rgba(168, 50, 72, 0.1)';
                 }}
                 onMouseLeave={(e) => {
@@ -598,7 +598,7 @@ const ProjectsPage: React.FC = () => {
                       width: 32,
                       height: 32,
                       border: '2px solid rgba(255, 255, 255, 0.08)',
-                      borderTopColor: '#A83248',
+                      borderTopColor: '#A78BFA',
                       borderRadius: '50%',
                       animation: 'spin 1s linear infinite',
                       margin: '0 auto',
@@ -631,7 +631,7 @@ const ProjectsPage: React.FC = () => {
                             padding: '2px 6px',
                             background: 'rgba(168, 50, 72, 0.2)',
                             borderRadius: 4,
-                            color: '#A83248',
+                            color: '#A78BFA',
                             fontSize: 10,
                             fontWeight: 500,
                           }}>

@@ -5,7 +5,52 @@
  * - Use <boltArtifact> tags for code output
  * - Use React + TypeScript + Tailwind
  * - Generate production-ready, visually stunning code
+ *
+ * Enhanced with:
+ * - Style presets (Framer Dark, Linear, Stripe, etc.)
+ * - Component library (pre-designed beautiful components)
+ * - Few-shot examples (concrete examples for AI learning)
  */
+
+// Import design tokens for design scheme injection
+import {
+  COLOR_PALETTES,
+  TYPOGRAPHY_SCALES,
+  SPACING_SYSTEMS,
+  RADIUS_STYLES,
+  DESIGN_PRESETS,
+  getPresetByVibe,
+  getRandomPreset,
+  type ColorPalette,
+  type TypographyScale,
+  type SpacingSystem,
+  type RadiusStyle,
+  type DesignPreset,
+} from '../design-system/tokens';
+
+// Import new design system components
+import {
+  STYLE_PRESETS,
+  TOPIC_PALETTES,
+  getPresetById,
+  getPalettesByTopic,
+  getPalette,
+  formatPaletteForPrompt,
+  type StylePreset,
+  type TopicPalette,
+} from '../designSystem/stylePresets';
+
+import {
+  COMPONENT_LIBRARY,
+  getComponentsByCategory,
+  type ComponentBlock,
+  type ComponentCategory,
+} from '../designSystem/componentLibrary';
+
+import {
+  FEW_SHOT_EXAMPLES,
+  formatExamplesForPrompt,
+} from '../designSystem/fewShotExamples';
 
 export const SYSTEM_PROMPT = `You are OBJECTS, an expert AI assistant and exceptional senior software developer with vast knowledge across multiple programming languages, frameworks, and best practices.
 
@@ -234,10 +279,10 @@ When the user provides visual style changes (from the visual editor):
 `;
 
 /**
- * Format templates from Supabase as few-shot examples for AI
+ * Format templates from Supabase as MANDATORY structures for AI
  *
- * Few-shot prompting is the key technique for consistent AI output.
- * By showing 3-5 high-quality examples, the AI learns the exact format.
+ * CRITICAL: Templates are not suggestions - they are REQUIRED structures.
+ * The AI must copy these structures exactly, only changing content/colors.
  */
 export function formatTemplatesForPrompt(templates: Array<{
   name?: string;
@@ -248,13 +293,25 @@ export function formatTemplatesForPrompt(templates: Array<{
 }>): string {
   if (!templates || templates.length === 0) return '';
 
-  // Format each template as a clear example
-  const examples = templates.map((t, index) => {
-    // Ensure the JSON structure follows our layout rules
-    const structure = ensureLayoutRules(t.json_structure);
-    const json = JSON.stringify(structure, null, 0); // Compact JSON
+  // Count elements recursively
+  const countElements = (obj: Record<string, unknown>): number => {
+    let count = 1;
+    if (Array.isArray(obj.children)) {
+      for (const child of obj.children) {
+        count += countElements(child as Record<string, unknown>);
+      }
+    }
+    return count;
+  };
 
-    return `EXAMPLE ${index + 1} - ${t.type.toUpperCase()} (${t.style}):
+  // Format each template with MANDATORY language
+  const examples = templates.map((t, index) => {
+    const structure = ensureLayoutRules(t.json_structure);
+    const elementCount = countElements(structure);
+    // Compact JSON to save tokens
+    const json = JSON.stringify({ elements: [structure] });
+
+    return `▶ ${(t.name || t.type).toUpperCase()} (${elementCount} elements):
 ${json}`;
   });
 
@@ -296,39 +353,346 @@ function ensureLayoutRules(structure: Record<string, unknown>): Record<string, u
 }
 
 /**
- * Design Mode System Prompt
- * Instructs AI to output ONLY canvas elements in JSON format
- * RULES only - examples come from Supabase templates dynamically
+ * Animation presets for design elements
  */
-export const DESIGN_MODE_PROMPT = `You are a world-class designer creating website designs.
+export const ANIMATION_PRESETS = {
+  fadeIn: { name: 'Fade In', duration: 0.5 },
+  slideUp: { name: 'Slide Up', duration: 0.5 },
+  slideDown: { name: 'Slide Down', duration: 0.5 },
+  slideLeft: { name: 'Slide Left', duration: 0.5 },
+  slideRight: { name: 'Slide Right', duration: 0.5 },
+  scaleIn: { name: 'Scale In', duration: 0.4 },
+  bounce: { name: 'Bounce', duration: 0.6 },
+  pulse: { name: 'Pulse', duration: 0.5 },
+} as const;
 
-OUTPUT FORMAT: {"elements":[<section1>, <section2>, ...]}
+export type AnimationPreset = keyof typeof ANIMATION_PRESETS;
 
-ELEMENT TYPES:
-• section: Full-width container (display:flex, flexDirection:column, resizeX:fill)
-• row: Horizontal container (display:flex, flexDirection:row) - children MUST have "resizeX":"fill"
-• frame: Card/container
-• stack: Vertical stack
-• text: Text with "content" property
-• button: Button with "content" property
-• image: Image with "src" (use Unsplash URLs)
-• icon: Lucide icon with "iconName" property
+/**
+ * Design Mode System Prompt - SEMANTIC LAYOUT SYSTEM
+ * Uses sizing (fit/fill/fixed) + layout (direction/gap/padding) + animation presets
+ * Pattern from AI Design Studio v2
+ *
+ * THINK FIRST APPROACH: Like v0.dev, analyze request before generating
+ */
+export const DESIGN_MODE_PROMPT = `You are a world-class designer. Before generating any JSON, you MUST think first.
 
-CRITICAL LAYOUT RULES:
-1. All children inside a "row" MUST have "resizeX":"fill" to distribute width equally
-2. All sections should have display:"flex" and flexDirection:"column"
-3. Use gap for spacing between children, padding for internal space
-4. Never hardcode pixel widths on row children - use resizeX:"fill"
+═══════════════════════════════════════════════════════════════
+STEP 1: THINK FIRST (MANDATORY)
+═══════════════════════════════════════════════════════════════
 
-STYLE PROPERTIES:
-• Layout: display, flexDirection, alignItems, justifyContent, gap, flexWrap
-• Spacing: padding, paddingTop/Right/Bottom/Left
-• Background: backgroundColor, backgroundImage
-• Typography: fontSize (48-72 for titles, 16-20 for body), fontWeight (400-700), color
-• Border: borderRadius (8-24), borderWidth, borderColor, borderStyle
-• Sizing: resizeX ("fill" or "hug"), width/height (only for images)
+Before generating ANY JSON output, analyze the user's request:
 
-OUTPUT RAW JSON ONLY. No markdown, no explanation, no code fences.`;
+<design_thinking>
+1. TOPIC: What is this design about? (wine, fitness, restaurant, tech, etc.)
+2. MOOD: What feeling should it convey? (elegant, energetic, minimal, luxurious, etc.)
+3. AUDIENCE: Who is the target user? (professionals, young people, luxury consumers, etc.)
+4. COLORS: What colors fit this topic?
+   - Wine → burgundy (#722F37), gold (#C9A227), cream (#F5F5DC)
+   - Fitness → orange (#FF6B35), teal (#2EC4B6), dark blue (#011627)
+   - Tech → indigo (#6366F1), cyan (#22D3EE), black (#0D0D0D)
+   - Restaurant → warm gold (#D4A574), brown (#8B4513), cream (#FFF8DC)
+   - Luxury → black (#0A0A0A), gold (#C9A227), white (#FFFFFF)
+5. HEADLINES: What specific text fits this topic?
+   - Write 2-3 headline options specific to the topic
+   - NEVER use generic text like "Build Something Beautiful"
+6. IMAGES: What imagery fits this topic?
+   - Suggest specific image types (not generic placeholder)
+</design_thinking>
+
+AFTER completing your design_thinking, output ONLY JSON: {"elements":[...]}
+
+═══════════════════════════════════════════════════════════════
+STEP 2: CONTENT RULES (CRITICAL)
+═══════════════════════════════════════════════════════════════
+
+Based on your design_thinking, create UNIQUE content:
+
+HEADLINES must be topic-specific:
+- "tema vino" → "Scopri i Nostri Vini Pregiati" NOT "Build Something Beautiful"
+- "fitness" → "Trasforma il Tuo Corpo Oggi" NOT "Start Your Journey"
+- "ristorante" → "Un Viaggio nei Sapori" NOT "Welcome to Our Site"
+
+COLORS must match the topic:
+- Use the color palette from your design_thinking
+- Apply consistently across sections
+- Background, text, buttons, accents
+
+IMAGES must be relevant:
+- Use Unsplash URLs with topic-relevant keywords
+- Example for wine: "https://images.unsplash.com/photo-WINE-CELLAR?w=800"
+- Example for fitness: "https://images.unsplash.com/photo-GYM-WORKOUT?w=800"
+
+═══════════════════════════════════════════════════════════════
+STEP 3: LAYOUT RULES (REQUIRED)
+═══════════════════════════════════════════════════════════════
+
+FORBIDDEN (will break the design):
+- position property (no x, y, absolute, fixed)
+- left, right, top, bottom properties
+- width/height in style (use sizing instead)
+
+REQUIRED:
+- Use sizing.width/height: "fill" | "fit" | "fixed"
+- Use layout.direction: "column" | "row"
+- Use layout.gap, layout.padding for spacing
+
+═══════════════════════════════════════════════════════════════
+SEMANTIC LAYOUT SYSTEM (FLEXBOX-BASED, LIKE FRAMER/FIGMA)
+═══════════════════════════════════════════════════════════════
+
+NODE STRUCTURE:
+{
+  "type": "section|frame|card|row|text|button|image|icon",
+  "name": "Element Name",
+  "content": "Text content (for text/button)",
+  "src": "image URL (for image)",
+  "iconName": "Lucide icon name (for icon)",
+
+  "sizing": {
+    "width": "fill|fit|fixed",      // fill=100%, fit=content, fixed=px
+    "height": "fill|fit|fixed",
+    "fixedWidth": 200,              // only when width="fixed"
+    "fixedHeight": 100              // only when height="fixed"
+  },
+
+  "layout": {                        // only for containers
+    "direction": "column|row",
+    "gap": 16,
+    "padding": 24,
+    "paddingTop": 60,               // override specific sides
+    "align": "center|start|end|stretch"
+  },
+
+  "style": {
+    "background": "#0a0a0a",
+    "color": "#ffffff",
+    "fontSize": 48,
+    "fontWeight": 700,
+    "borderRadius": 16,
+    "border": "1px solid #333"
+  },
+
+  "animation": {
+    "preset": "fadeIn|slideUp|slideDown|slideLeft|scaleIn|bounce",
+    "delay": 0.2,
+    "duration": 0.5
+  },
+
+  "children": [...]                  // nested elements
+}
+
+═══════════════════════════════════════════════════════════════
+SIZING MODES (FRAMER-STYLE)
+═══════════════════════════════════════════════════════════════
+
+• fill  → Takes 100% of parent / grows to fill available space
+• fit   → Shrinks to content size (hugs content)
+• fixed → Exact pixel size (uses fixedWidth/fixedHeight)
+
+DEFAULT SIZING BY TYPE:
+- section:   width=fill, height=fit (full-width, content-height)
+- frame:     width=fill, height=fit
+- row:       width=fill, height=fit
+- card:      width=fill, height=fit
+- text:      width=fit, height=fit
+- button:    width=fit, height=fit
+- image:     width=fixed, height=fixed (MUST specify dimensions)
+- icon:      width=fixed, height=fixed (fixedWidth/Height: 24-48)
+
+═══════════════════════════════════════════════════════════════
+ROW CHILDREN - AUTOMATIC FILL BEHAVIOR
+═══════════════════════════════════════════════════════════════
+
+When inside a ROW (direction: "row"), children should use width="fill"
+to distribute space evenly. This creates equal columns automatically.
+
+EXAMPLE - Two equal columns:
+{
+  "type": "row",
+  "layout": {"direction": "row", "gap": 24},
+  "children": [
+    {"type": "frame", "sizing": {"width": "fill"}, ...},
+    {"type": "frame", "sizing": {"width": "fill"}, ...}
+  ]
+}
+
+Both children get 50% width automatically.
+
+═══════════════════════════════════════════════════════════════
+ELEMENT TYPES
+═══════════════════════════════════════════════════════════════
+
+• section  - Full-width page section (header, hero, features, footer)
+• frame    - Generic container
+• card     - Styled container with background/border/shadow
+• row      - Horizontal flex container
+• text     - Text content (title, subtitle, paragraph, label)
+• button   - Clickable button
+• image    - Image element (use src property)
+• icon     - Lucide icon (use iconName: "ArrowRight", "Star", etc.)
+• input    - Form input (use placeholder property)
+• link     - Anchor link (use href property)
+
+═══════════════════════════════════════════════════════════════
+EXAMPLE STRUCTURE (ADAPT CONTENT TO USER'S TOPIC)
+═══════════════════════════════════════════════════════════════
+
+This shows the JSON STRUCTURE. Replace [TOPIC_HEADLINE], [TOPIC_SUBTITLE],
+[TOPIC_COLOR], etc. with content from your design_thinking.
+
+{
+  "elements": [
+    {
+      "type": "frame",
+      "name": "App",
+      "sizing": {"width": "fill", "height": "fill"},
+      "layout": {"direction": "column", "gap": 0},
+      "style": {"background": "[TOPIC_BG_COLOR]"},
+      "children": [
+        {
+          "type": "section",
+          "name": "Hero",
+          "sizing": {"width": "fill", "height": "fit"},
+          "layout": {"direction": "column", "gap": 16, "padding": 64, "align": "center"},
+          "animation": {"preset": "fadeIn"},
+          "children": [
+            {
+              "type": "text",
+              "name": "Headline",
+              "content": "[TOPIC_HEADLINE - from design_thinking]",
+              "sizing": {"width": "fit", "height": "fit"},
+              "style": {"fontSize": 48, "color": "[TOPIC_TEXT_COLOR]", "fontWeight": 700}
+            },
+            {
+              "type": "text",
+              "name": "Subheadline",
+              "content": "[TOPIC_SUBHEADLINE - specific to topic]",
+              "sizing": {"width": "fit", "height": "fit"},
+              "style": {"fontSize": 20, "color": "[TOPIC_MUTED_COLOR]"}
+            },
+            {
+              "type": "button",
+              "name": "CTA",
+              "content": "[TOPIC_CTA_TEXT]",
+              "sizing": {"width": "fit", "height": "fit"},
+              "style": {"background": "[TOPIC_PRIMARY_COLOR]", "color": "#FFFFFF", "borderRadius": 12, "paddingX": 32, "paddingY": 16}
+            }
+          ]
+        },
+        {
+          "type": "section",
+          "name": "Features",
+          "sizing": {"width": "fill", "height": "fit"},
+          "layout": {"direction": "column", "gap": 32, "padding": 64},
+          "children": [
+            {
+              "type": "row",
+              "name": "Feature Grid",
+              "layout": {"direction": "row", "gap": 24},
+              "children": [
+                {
+                  "type": "card",
+                  "sizing": {"width": "fill"},
+                  "layout": {"direction": "column", "gap": 12, "padding": 24},
+                  "children": [
+                    {"type": "text", "content": "[FEATURE_1_TITLE]", "style": {"fontSize": 20, "fontWeight": 600}},
+                    {"type": "text", "content": "[FEATURE_1_DESC]", "style": {"fontSize": 16, "color": "[MUTED]"}}
+                  ]
+                },
+                {
+                  "type": "card",
+                  "sizing": {"width": "fill"},
+                  "layout": {"direction": "column", "gap": 12, "padding": 24},
+                  "children": [
+                    {"type": "text", "content": "[FEATURE_2_TITLE]", "style": {"fontSize": 20, "fontWeight": 600}},
+                    {"type": "text", "content": "[FEATURE_2_DESC]", "style": {"fontSize": 16, "color": "[MUTED]"}}
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+REMEMBER: Replace ALL bracketed [PLACEHOLDERS] with actual content from your design_thinking!
+
+═══════════════════════════════════════════════════════════════
+STYLE GUIDELINES
+═══════════════════════════════════════════════════════════════
+
+SECTIONS:
+- padding: 60-100, gap: 24-48
+- Use paddingTop for extra top spacing
+
+CARDS:
+- borderRadius: 12-20
+- border: "1px solid #E8E4DE" or similar subtle border
+- Use box-shadow for elevation
+
+TEXT:
+- Title: fontSize 28-48, fontWeight 600-700
+- Subtitle: fontSize 16-20, muted color
+- Body: fontSize 14-16
+
+BUTTONS:
+- padding: 12-20, borderRadius: 8-50
+- Primary: solid background
+- Secondary: border only, transparent background
+
+IMAGES:
+- Always specify fixedWidth and fixedHeight
+- Use borderRadius for rounded images
+
+ANIMATIONS:
+- Stagger delays: 0, 0.1, 0.2, 0.3...
+- Use slideUp for vertical reveals
+- Use slideLeft for horizontal cards
+- Use scaleIn for modal/card entrances
+
+═══════════════════════════════════════════════════════════════
+⚠️ COMMON MISTAKES TO AVOID
+═══════════════════════════════════════════════════════════════
+
+❌ WRONG - Using position coordinates:
+{"position": {"x": 100, "y": 50}}
+
+✅ CORRECT - Using layout:
+{"layout": {"direction": "column", "gap": 16, "padding": 24}}
+
+❌ WRONG - Using CSS position:
+{"style": {"position": "absolute", "top": "50px"}}
+
+✅ CORRECT - Using sizing:
+{"sizing": {"width": "fill", "height": "fit"}}
+
+❌ WRONG - Using width/height in style:
+{"style": {"width": "200px", "height": "100px"}}
+
+✅ CORRECT - Using fixed sizing:
+{"sizing": {"width": "fixed", "height": "fixed", "fixedWidth": 200, "fixedHeight": 100}}
+
+GENERATE 2-4 SECTIONS with 5-15 elements total.`;
+
+/**
+ * Format a compact design scheme for AI injection
+ * Keep it SHORT - long prompts confuse the AI
+ */
+export function formatDesignScheme(presetName?: DesignPreset | string): string {
+  // Get preset (or random if not specified)
+  const preset = presetName && presetName in DESIGN_PRESETS
+    ? DESIGN_PRESETS[presetName as DesignPreset]
+    : DESIGN_PRESETS[getRandomPreset()];
+
+  const colors = COLOR_PALETTES[preset.colors as ColorPalette];
+
+  // ULTRA COMPACT - just the essential colors
+  return `
+COLORS: bg="${colors.bg}" text="${colors.primary}" accent="${colors.accent}" muted="${colors.muted}"`;
+}
 
 /**
  * Get design prompt with dynamic templates from Supabase
@@ -337,6 +701,7 @@ OUTPUT RAW JSON ONLY. No markdown, no explanation, no code fences.`;
 export function getDesignPromptWithTemplates(options?: {
   style?: string;
   pageType?: string;
+  designPreset?: DesignPreset | string;
   templates?: Array<{
     type: string;
     style: string;
@@ -346,33 +711,447 @@ export function getDesignPromptWithTemplates(options?: {
 }): string {
   let prompt = DESIGN_MODE_PROMPT;
 
-  // Add color palettes
-  prompt += `
+  // Determine design preset from style or use random
+  let presetName: DesignPreset | string | undefined = options?.designPreset;
+  if (!presetName && options?.style) {
+    presetName = getPresetByVibe(options.style);
+  }
 
-COLOR PALETTES:
-• Dark Modern: bg=#09090b, surface=#18181b, accent=#a855f7, text=#ffffff, muted=rgba(255,255,255,0.5)
-• Light Elegant: bg=#FAFAF9, surface=#ffffff, accent=#18181b, text=#0a0a0a, muted=#71717a
-• Playful: pink=#FFC9F0, yellow=#FFE68C, blue=#9DDCFF, cream=#FFFBF5, borders=#000000
-• Gradient Purple: linear-gradient(135deg, #667eea 0%, #764ba2 100%)
-• Gradient Sunset: linear-gradient(135deg, #f093fb 0%, #f5576c 100%)
-• Glass Dark: bg=rgba(255,255,255,0.05), border=rgba(255,255,255,0.1)`;
+  // Add the complete design scheme (like Bolt DIY)
+  prompt += formatDesignScheme(presetName);
 
-  // Add templates from Supabase as few-shot examples
-  // This is the key technique for consistent, high-quality AI output
-  if (options?.templates && options.templates.length > 0) {
-    const examples = formatTemplatesForPrompt(options.templates);
-    prompt += `
+  // DISABLED: Supabase templates make the prompt too long and confuse the AI
+  // The hardcoded templates in DESIGN_MODE_PROMPT are sufficient
+  // if (options?.templates && options.templates.length > 0) { ... }
 
+  return prompt;
+}
+
+/**
+ * Document Types - All types of design documents AI can generate
+ */
+export type DocumentType =
+  | 'website'      // Web pages, landing pages
+  | 'brand-manual' // Brand guidelines, style guides
+  | 'pitch-deck'   // Presentation slides
+  | 'social-media' // Instagram, Stories, LinkedIn posts
+  | 'print'        // Poster, flyer, business card, brochure
+  | 'ui-kit'       // Component library, design system
+  | 'editorial'    // Magazine, article layouts
+  | 'marketing'    // Banner, ads, email templates
+  | 'packaging'    // Label, box design
+  | 'menu'         // Restaurant menus, price lists
+  | 'resume'       // CV, portfolio
+  | 'infographic'; // Data visualization, charts
+
+/**
+ * Document type configurations with specific rules
+ */
+export const DOCUMENT_TYPE_CONFIGS: Record<DocumentType, {
+  name: string;
+  keywords: string[];
+  pageSize?: { width: number; height: number };
+  aspectRatio?: string;
+  prompt: string;
+}> = {
+  'website': {
+    name: 'Website / Landing Page',
+    keywords: ['sito', 'website', 'landing', 'homepage', 'web', 'pagina'],
+    prompt: `DOCUMENT TYPE: Website / Landing Page
+- Full-width sections stacked vertically
+- Header (72px height), Hero, Features, CTA, Footer
+- Responsive layout, mobile-first
+- Navigation with logo and menu items
+- Call-to-action buttons prominent`
+  },
+  'brand-manual': {
+    name: 'Brand Manual / Guidelines',
+    keywords: ['brand', 'manual', 'guidelines', 'linee guida', 'brand book', 'identity', 'marchio'],
+    pageSize: { width: 1920, height: 1080 },
+    prompt: `DOCUMENT TYPE: Brand Manual / Guidelines
+Generate structured brand documentation with these sections:
+
+1. COVER PAGE
+- Large logo centered
+- Brand name in brand typography
+- "Brand Guidelines" or "Brand Manual" subtitle
+- Version/date
+
+2. BRAND OVERVIEW
+- Mission statement
+- Brand values (3-5 values with icons)
+- Brand personality keywords
+- Tone of voice description
+
+3. LOGO USAGE
+- Primary logo (large, centered)
+- Logo variations (horizontal, vertical, icon-only)
+- Clear space rules (show minimum margins)
+- Minimum size specifications
+- Incorrect usage examples (crossed out)
+
+4. COLOR PALETTE
+- Primary colors with:
+  - Large color swatch (100x100px minimum)
+  - Color name
+  - HEX code
+  - RGB values
+  - CMYK values (for print)
+- Secondary colors same format
+- Color combinations/pairings
+- Do's and Don'ts for color usage
+
+5. TYPOGRAPHY
+- Primary typeface with specimen (Aa Bb Cc... 0-9)
+- Font weights showcase (Light, Regular, Medium, Bold)
+- Heading styles (H1, H2, H3 with sizes)
+- Body text specifications
+- Line height and spacing rules
+
+6. IMAGERY STYLE
+- Photo style examples (mood, lighting, subjects)
+- Illustration style if applicable
+- Icon style guidelines
+- Image treatment (filters, overlays)
+
+7. APPLICATIONS
+- Business card mockup
+- Letterhead mockup
+- Social media templates
+- Signage examples
+
+LAYOUT RULES:
+- Use consistent grid (12-column)
+- Generous white space
+- Section headers clearly marked
+- Page numbers
+- Consistent margins (80-100px)`
+  },
+  'pitch-deck': {
+    name: 'Pitch Deck / Presentation',
+    keywords: ['pitch', 'deck', 'presentation', 'presentazione', 'slides', 'investor'],
+    pageSize: { width: 1920, height: 1080 },
+    aspectRatio: '16:9',
+    prompt: `DOCUMENT TYPE: Pitch Deck / Presentation
+Generate slides with 16:9 aspect ratio (1920x1080):
+
+SLIDE TYPES TO INCLUDE:
+1. TITLE SLIDE - Company name, tagline, logo
+2. PROBLEM - The problem you're solving
+3. SOLUTION - Your product/service
+4. MARKET SIZE - TAM/SAM/SOM with numbers
+5. BUSINESS MODEL - How you make money
+6. TRACTION - Key metrics, growth charts
+7. TEAM - Founders with photos and titles
+8. ASK - Funding amount and use of funds
+9. CONTACT - CTA and contact info
+
+LAYOUT RULES:
+- One key message per slide
+- Large headlines (48-72px)
+- Minimal text, maximum impact
+- Consistent header/footer placement
+- Slide numbers
+- Icons and visuals over text
+- Dark or gradient backgrounds work well
+- Accent color for key numbers`
+  },
+  'social-media': {
+    name: 'Social Media Content',
+    keywords: ['instagram', 'social', 'post', 'story', 'stories', 'linkedin', 'twitter', 'facebook', 'tiktok', 'reel'],
+    prompt: `DOCUMENT TYPE: Social Media Content
+
+INSTAGRAM POST (1080x1080):
+- Bold headline
+- Clean imagery
+- Brand colors
+- CTA or hashtags
+
+INSTAGRAM STORY (1080x1920):
+- Vertical full-screen
+- Interactive elements space
+- Swipe up CTA area
+- Text safe zone (top 15%, bottom 20% clear)
+
+LINKEDIN POST (1200x627):
+- Professional tone
+- Clear value proposition
+- Author info area
+
+CAROUSEL (1080x1080 per slide):
+- Hook on first slide
+- One point per slide
+- Clear progression
+- CTA on last slide
+
+LAYOUT RULES:
+- Eye-catching first frame
+- Brand elements (logo, colors)
+- Readable text (min 24px)
+- Safe zones for UI elements`
+  },
+  'print': {
+    name: 'Print Materials',
+    keywords: ['poster', 'flyer', 'volantino', 'business card', 'biglietto', 'brochure', 'stampa', 'print', 'manifesto'],
+    prompt: `DOCUMENT TYPE: Print Materials
+
+POSTER (A3/A2):
+- Strong visual hierarchy
+- One focal point
+- Event details clear
+- Brand elements
+
+FLYER (A5/A4):
+- Front: Hero image + headline
+- Back: Details, contact, map
+- QR code for digital link
+
+BUSINESS CARD (85x55mm):
+- Front: Logo, name, title
+- Back: Contact details, QR
+- Minimal, elegant
+
+BROCHURE (A4 tri-fold):
+- Cover: Hero + headline
+- Inside panels: Features/benefits
+- Back: Contact + CTA
+
+LAYOUT RULES:
+- CMYK color space
+- Bleed area (3mm)
+- High contrast for readability
+- Print-safe fonts
+- Consider fold lines`
+  },
+  'ui-kit': {
+    name: 'UI Kit / Design System',
+    keywords: ['ui kit', 'design system', 'component', 'componenti', 'library', 'libreria'],
+    prompt: `DOCUMENT TYPE: UI Kit / Design System
+
+SECTIONS TO INCLUDE:
+1. COLOR TOKENS
+- Primary, secondary, accent
+- Semantic colors (success, warning, error, info)
+- Neutral scale (gray-50 to gray-900)
+- Each with hex and usage note
+
+2. TYPOGRAPHY SCALE
+- Display (48-72px)
+- Headings (H1-H6)
+- Body (16px, 14px)
+- Caption (12px)
+- Show font-weight variants
+
+3. SPACING SCALE
+- 4px, 8px, 12px, 16px, 24px, 32px, 48px, 64px
+- Visual representation
+
+4. BUTTON COMPONENTS
+- Primary, Secondary, Outline, Ghost, Link
+- States: default, hover, active, disabled
+- Sizes: sm, md, lg
+
+5. INPUT COMPONENTS
+- Text input with label
+- States: empty, filled, focus, error
+- Textarea, select, checkbox, radio
+
+6. CARD COMPONENTS
+- Basic card
+- Card with image
+- Card with actions
+- Interactive card
+
+7. NAVIGATION
+- Navbar variants
+- Sidebar
+- Breadcrumbs
+- Tabs
+
+LAYOUT RULES:
+- Organized in a grid
+- Clear labeling
+- Consistent spacing
+- Dark/light mode variants`
+  },
+  'editorial': {
+    name: 'Editorial / Magazine',
+    keywords: ['magazine', 'rivista', 'article', 'articolo', 'editorial', 'blog', 'journal'],
+    prompt: `DOCUMENT TYPE: Editorial / Magazine Layout
+
+ELEMENTS:
+- Feature headline (large, dramatic)
+- Subheadline/deck
+- Byline (author, date)
+- Body text columns
+- Pull quotes (large, styled)
+- Drop caps
+- Image with caption
+- Sidebar/callout boxes
+
+LAYOUT RULES:
+- Multi-column grid (2-3 columns)
+- Generous margins
+- Clear hierarchy
+- Pull quotes break monotony
+- Images full-bleed or with margins
+- Page numbers
+- Running headers`
+  },
+  'marketing': {
+    name: 'Marketing Materials',
+    keywords: ['banner', 'ad', 'ads', 'email', 'newsletter', 'marketing', 'advertising', 'pubblicità'],
+    prompt: `DOCUMENT TYPE: Marketing Materials
+
+BANNER AD (various sizes):
+- 728x90 (leaderboard)
+- 300x250 (medium rectangle)
+- 160x600 (skyscraper)
+- Clear CTA button
+- Logo visible
+- Minimal text
+
+EMAIL TEMPLATE:
+- Header with logo
+- Hero image
+- Main message
+- CTA button (prominent)
+- Secondary content
+- Footer with unsubscribe
+
+LAYOUT RULES:
+- Instant message clarity
+- Strong CTA
+- Brand colors
+- Mobile-friendly
+- Fast loading (simple design)`
+  },
+  'packaging': {
+    name: 'Packaging Design',
+    keywords: ['packaging', 'label', 'etichetta', 'box', 'scatola', 'bottle', 'bottiglia', 'confezione'],
+    prompt: `DOCUMENT TYPE: Packaging Design
+
+ELEMENTS:
+- Product name (prominent)
+- Brand logo
+- Product description
+- Key benefits/features
+- Ingredients/specs
+- Barcode area
+- Regulatory info area
+- Visual/illustration
+
+LAYOUT RULES:
+- 360° consideration
+- Hierarchy at shelf
+- Legibility at distance
+- Die-cut awareness
+- Color for category`
+  },
+  'menu': {
+    name: 'Menu / Price List',
+    keywords: ['menu', 'menù', 'price list', 'listino', 'ristorante', 'restaurant', 'food'],
+    prompt: `DOCUMENT TYPE: Menu / Price List
+
+SECTIONS:
+- Header (restaurant name, logo)
+- Categories (Antipasti, Primi, Secondi, etc.)
+- Items with:
+  - Name (prominent)
+  - Description (italic, smaller)
+  - Price (aligned right)
+  - Dietary icons (V, VG, GF)
+- Specials/featured items
+- Footer (allergen info, contact)
+
+LAYOUT RULES:
+- Easy scanning
+- Clear price alignment
+- Category separation
+- Elegant typography
+- Consider single-page or multi-page`
+  },
+  'resume': {
+    name: 'Resume / CV / Portfolio',
+    keywords: ['resume', 'cv', 'curriculum', 'portfolio', 'portfolio'],
+    pageSize: { width: 595, height: 842 }, // A4
+    prompt: `DOCUMENT TYPE: Resume / CV
+
+SECTIONS:
+- Header (name, title, contact, photo optional)
+- Summary/objective
+- Experience (company, role, dates, achievements)
+- Education
+- Skills (visual bars or tags)
+- Languages
+- Projects/portfolio links
+
+LAYOUT RULES:
+- Clean, scannable
+- Reverse chronological
+- Quantified achievements
+- Consistent formatting
+- One-two pages max
+- ATS-friendly structure`
+  },
+  'infographic': {
+    name: 'Infographic',
+    keywords: ['infographic', 'infografica', 'data', 'dati', 'visualization', 'visualizzazione', 'chart', 'grafico', 'statistics'],
+    prompt: `DOCUMENT TYPE: Infographic
+
+ELEMENTS:
+- Strong title/headline
+- Key statistics (large numbers)
+- Icons representing concepts
+- Flow/process diagrams
+- Comparison charts
+- Timeline if applicable
+- Source citations
+- Brand footer
+
+LAYOUT RULES:
+- Vertical scroll-friendly
+- Visual hierarchy
+- Color-coded sections
+- Minimal text
+- Data visualization focus
+- Shareable dimensions`
+  },
+};
+
+/**
+ * Detect document type from user message
+ */
+export function detectDocumentType(message: string): DocumentType {
+  const lowerMessage = message.toLowerCase();
+
+  for (const [type, config] of Object.entries(DOCUMENT_TYPE_CONFIGS) as [DocumentType, typeof DOCUMENT_TYPE_CONFIGS[DocumentType]][]) {
+    if (config.keywords.some(keyword => lowerMessage.includes(keyword))) {
+      return type;
+    }
+  }
+
+  // Default to website
+  return 'website';
+}
+
+/**
+ * Get document-specific prompt section
+ */
+export function getDocumentTypePrompt(type: DocumentType): string {
+  const config = DOCUMENT_TYPE_CONFIGS[type];
+
+  let prompt = `\n═══════════════════════════════════════════════════════════════
+📄 ${config.name.toUpperCase()}
 ═══════════════════════════════════════════════════════════════
-FEW-SHOT EXAMPLES - FOLLOW THESE PATTERNS EXACTLY
-═══════════════════════════════════════════════════════════════
-Study these examples carefully. They show the EXACT structure and styling you must use.
-Note how row children always have "resizeX":"fill" for equal distribution.
+${config.prompt}
+`;
 
-${examples}
-
-═══════════════════════════════════════════════════════════════
-Generate designs that match these patterns in structure and quality.`;
+  if (config.pageSize) {
+    prompt += `\nPAGE SIZE: ${config.pageSize.width}x${config.pageSize.height}px`;
+  }
+  if (config.aspectRatio) {
+    prompt += `\nASPECT RATIO: ${config.aspectRatio}`;
   }
 
   return prompt;
@@ -494,7 +1273,7 @@ ${brandColors.map(c => `- ${c.name}: "${c.value}"`).join('\n')}
 
 /**
  * Format current canvas elements as context for AI
- * Kept minimal to avoid confusing the AI
+ * Pass FULL JSON so AI can modify existing elements
  */
 export function formatCanvasContextForAI(elements: Array<{
   id: string;
@@ -503,22 +1282,53 @@ export function formatCanvasContextForAI(elements: Array<{
   styles?: Record<string, unknown>;
   content?: string;
   children?: string[];
-}>): string {
+}>, userMessage?: string): string {
   // Filter out page elements - only show actual content
   const contentElements = elements.filter(el => el.type !== 'page');
 
-  // Only provide context if there are meaningful elements (more than 2)
-  if (contentElements.length < 3) return '';
+  if (contentElements.length === 0) return '';
 
-  // Just list section names to give theme context without overwhelming
+  // Detect if user wants to MODIFY existing elements
+  const modifyKeywords = ['modifica', 'cambia', 'change', 'update', 'edit', 'colore', 'color', 'testo', 'text', 'dimensione', 'size'];
+  const isModifyRequest = userMessage && modifyKeywords.some(kw => userMessage.toLowerCase().includes(kw));
+
+  // Build a simplified representation of current canvas
+  const elementsInfo = contentElements.map(el => ({
+    id: el.id,
+    type: el.type,
+    name: el.name,
+    content: el.content || undefined,
+  }));
+
+  if (isModifyRequest) {
+    return `
+═══════════════════════════════════════════════════════════════════════════════
+🎯 MODIFY EXISTING ELEMENTS - DO NOT CREATE NEW SECTIONS
+═══════════════════════════════════════════════════════════════════════════════
+
+The user wants to MODIFY existing elements, not create new ones.
+
+CURRENT CANVAS ELEMENTS:
+${JSON.stringify(elementsInfo, null, 2)}
+
+INSTRUCTIONS:
+1. Find the element the user wants to modify
+2. Output ONLY the modified element(s) with their ID
+3. Keep the same structure, only change what the user asked
+4. Output format: {"elements": [{"id": "existing-id", ...modified properties...}]}
+
+DO NOT create new sections. ONLY modify existing elements.
+`;
+  }
+
+  // For new content requests, just mention existing sections
   const sectionNames = contentElements
     .filter(el => el.type === 'section')
-    .map(el => el.name)
-    .slice(0, 5);
+    .map(el => el.name);
 
   if (sectionNames.length === 0) return '';
 
-  return `\nExisting sections: ${sectionNames.join(', ')}. Generate complementary sections.`;
+  return `\nExisting sections on canvas: ${sectionNames.join(', ')}. Create new sections that complement these.`;
 }
 
 /**
@@ -528,6 +1338,10 @@ export function getSystemPrompt(options?: {
   mode?: 'design' | 'code';
   projectFiles?: string;
   designStyle?: DesignStyle;
+  /** Design preset from tokens.ts (e.g., 'noir-impact', 'candy-playful') */
+  designPreset?: DesignPreset | string;
+  /** User message - used to detect if they want to modify existing elements */
+  userMessage?: string;
   designTokens?: {
     colors: Array<{ id: string; name: string; value: string; group?: string }>;
     radii: Array<{ id: string; name: string; value: number }>;
@@ -556,11 +1370,22 @@ export function getSystemPrompt(options?: {
 }): string {
   // Use design prompt for design mode
   if (options?.mode === 'design') {
-    // Start with dynamic template-based prompt
+    // Start with dynamic template-based prompt including design scheme
     let prompt = getDesignPromptWithTemplates({
       style: options.designStyle,
+      designPreset: options.designPreset,
       templates: options.templates,
     });
+
+    // Detect document type from user message and add specific instructions
+    if (options.userMessage) {
+      const documentType = detectDocumentType(options.userMessage);
+      if (documentType !== 'website') {
+        // Add document-specific instructions for non-website documents
+        prompt += getDocumentTypePrompt(documentType);
+        console.log(`[SystemPrompt] Detected document type: ${documentType}`);
+      }
+    }
 
     // Add design tokens context if provided
     if (options.designTokens) {
@@ -569,7 +1394,7 @@ export function getSystemPrompt(options?: {
 
     // Add current canvas context if provided
     if (options.currentCanvas && options.currentCanvas.length > 0) {
-      prompt += '\n\n' + formatCanvasContextForAI(options.currentCanvas);
+      prompt += '\n\n' + formatCanvasContextForAI(options.currentCanvas, options.userMessage);
     }
 
     return prompt;
@@ -708,3 +1533,447 @@ export const CSS_TO_TAILWIND: Record<string, (value: string) => string> = {
   opacity: (v) => `opacity-${Math.round(parseFloat(v) * 100)}`,
   boxShadow: (v) => v === 'none' ? 'shadow-none' : `shadow-[${v.replace(/\s+/g, '_')}]`,
 };
+
+// ============================================
+// ENHANCED DESIGN SYSTEM INTEGRATION
+// ============================================
+
+/**
+ * Format a style preset for AI prompt injection
+ * Provides the AI with a complete design system to follow
+ */
+export function formatStylePresetForAI(presetId: string): string {
+  const preset = getPresetById(presetId);
+  if (!preset) return '';
+
+  return `
+═══════════════════════════════════════════════════════════════
+🎨 DESIGN SYSTEM: ${preset.name.toUpperCase()}
+═══════════════════════════════════════════════════════════════
+
+${preset.description}
+
+COLOR PALETTE:
+- Background Primary: "${preset.colors.bgPrimary}"
+- Background Secondary: "${preset.colors.bgSecondary}"
+- Background Tertiary: "${preset.colors.bgTertiary}"
+- Text Primary: "${preset.colors.textPrimary}"
+- Text Secondary: "${preset.colors.textSecondary}"
+- Text Tertiary: "${preset.colors.textTertiary}"
+- Primary Accent: "${preset.colors.primary}"
+- Secondary Accent: "${preset.colors.secondary}"
+- Border: "${preset.colors.border}"
+
+TYPOGRAPHY:
+- Font Family: "${preset.typography.fontFamily.heading}"
+- Display: ${preset.typography.scale.display.size}px, weight ${preset.typography.scale.display.weight}
+- H1: ${preset.typography.scale.h1.size}px, weight ${preset.typography.scale.h1.weight}
+- H2: ${preset.typography.scale.h2.size}px, weight ${preset.typography.scale.h2.weight}
+- Body: ${preset.typography.scale.body.size}px, weight ${preset.typography.scale.body.weight}
+
+SPACING:
+- Section Padding: ${preset.spacing.section}px
+- Large Gap: ${preset.spacing.xxl}px
+- Medium Gap: ${preset.spacing.lg}px
+- Small Gap: ${preset.spacing.md}px
+
+BORDER RADIUS:
+- Cards: ${preset.radius.lg}px
+- Buttons: ${preset.radius.md}px
+- Badges: ${preset.radius.sm}px
+
+SHADOWS:
+- Card Shadow: "${preset.shadows.md}"
+- Large Shadow: "${preset.shadows.lg}"
+
+BUTTON STYLES:
+- Primary: bg="${preset.components.button.primary.backgroundColor}", color="${preset.components.button.primary.color}", radius=${preset.components.button.primary.borderRadius}
+- Secondary: bg="${preset.components.button.secondary.backgroundColor}", color="${preset.components.button.secondary.color}"
+
+APPLY THIS DESIGN SYSTEM TO ALL GENERATED ELEMENTS.
+`;
+}
+
+/**
+ * Get available style preset IDs for user selection with color preview
+ */
+export interface StylePresetOption {
+  id: string;
+  name: string;
+  description: string;
+  colors: {
+    bg: string;
+    primary: string;
+    accent: string;
+    text: string;
+  };
+  preview: string;
+}
+
+export function getAvailableStylePresets(): StylePresetOption[] {
+  return STYLE_PRESETS.map(p => ({
+    id: p.id,
+    name: p.name,
+    description: p.description,
+    colors: {
+      bg: p.colors.bgPrimary,
+      primary: p.colors.primary,
+      accent: p.colors.accent,
+      text: p.colors.textPrimary,
+    },
+    preview: p.preview,
+  }));
+}
+
+/**
+ * Get topic palettes for UI selection
+ */
+export function getTopicPalettes(): Array<{ topic: string; palettes: TopicPalette[] }> {
+  return Object.entries(TOPIC_PALETTES).map(([topic, palettes]) => ({
+    topic,
+    palettes,
+  }));
+}
+
+/**
+ * Get a specific topic's color palettes
+ */
+export function getTopicColorOptions(topic: string): TopicPalette[] {
+  return TOPIC_PALETTES[topic] || [];
+}
+
+/**
+ * Format component library examples for AI reference
+ * Shows the AI what beautiful components look like
+ */
+export function formatComponentExamplesForAI(categories?: ComponentCategory[]): string {
+  const components = categories
+    ? categories.flatMap(cat => getComponentsByCategory(cat))
+    : COMPONENT_LIBRARY.slice(0, 5); // Default to first 5 components
+
+  if (components.length === 0) return '';
+
+  return `
+═══════════════════════════════════════════════════════════════
+📦 COMPONENT REFERENCE LIBRARY
+═══════════════════════════════════════════════════════════════
+
+Use these pre-designed components as TEMPLATES. Copy their structure
+and adapt the content for the user's request.
+
+${components.map(comp => `
+▶ ${comp.name.toUpperCase()} (${comp.category})
+${comp.description}
+${JSON.stringify(comp.element, null, 2)}
+`).join('\n---\n')}
+`;
+}
+
+/**
+ * Format few-shot examples for AI learning
+ * Shows concrete input → output examples
+ */
+export function formatFewShotExamplesForAI(category?: string): string {
+  const examples = category
+    ? FEW_SHOT_EXAMPLES.filter(e => e.category === category)
+    : FEW_SHOT_EXAMPLES.slice(0, 2); // Default to first 2 examples
+
+  if (examples.length === 0) return '';
+
+  return `
+═══════════════════════════════════════════════════════════════
+📐 STRUCTURAL REFERENCE - ADAPT CONTENT TO USER'S REQUEST
+═══════════════════════════════════════════════════════════════
+
+⚠️ CRITICAL: These are STRUCTURE examples only!
+
+YOU MUST:
+1. Use the JSON structure and layout patterns from examples
+2. COMPLETELY REWRITE all text content for the user's specific topic
+3. Choose colors that match the user's theme (NOT the example colors)
+4. Select relevant images for the user's topic
+5. Create unique, contextual content - NEVER copy example text
+
+EXAMPLE ADAPTATION:
+- If user says "wine theme" → headlines like "Discover Our Finest Wines", burgundy/gold colors
+- If user says "fitness app" → headlines like "Transform Your Body", energetic colors
+- If user says "restaurant" → headlines like "A Culinary Journey", warm appetizing colors
+
+The example text like "Build Something Beautiful" is PLACEHOLDER ONLY.
+Your output must have completely different, topic-specific content.
+
+${formatExamplesForPrompt(examples)}
+`;
+}
+
+/**
+ * Get enhanced design prompt with full design system
+ * This is the main function to use for high-quality AI design generation
+ */
+export function getEnhancedDesignPrompt(options?: {
+  /** Style preset to use (e.g., 'framer-dark', 'linear-dark', 'minimal-light') */
+  stylePreset?: string;
+  /** Categories of components to include as examples */
+  componentCategories?: ComponentCategory[];
+  /** Include few-shot examples for this category */
+  fewShotCategory?: 'landing' | 'portfolio' | 'saas' | 'ecommerce' | 'blog';
+  /** User's message for context */
+  userMessage?: string;
+  /** Current canvas elements */
+  currentCanvas?: Array<{
+    id: string;
+    type: string;
+    name: string;
+    styles?: Record<string, unknown>;
+    content?: string;
+    children?: string[];
+  }>;
+}): string {
+  // Start with base design prompt
+  let prompt = DESIGN_MODE_PROMPT;
+
+  // Add style preset if specified
+  if (options?.stylePreset) {
+    prompt += '\n\n' + formatStylePresetForAI(options.stylePreset);
+  }
+
+  // Add component examples if categories specified
+  if (options?.componentCategories && options.componentCategories.length > 0) {
+    prompt += '\n\n' + formatComponentExamplesForAI(options.componentCategories);
+  }
+
+  // Add few-shot examples if category specified
+  if (options?.fewShotCategory) {
+    prompt += '\n\n' + formatFewShotExamplesForAI(options.fewShotCategory);
+  }
+
+  // Add canvas context for modification requests
+  if (options?.currentCanvas && options.currentCanvas.length > 0) {
+    prompt += '\n\n' + formatCanvasContextForAI(options.currentCanvas, options.userMessage);
+  }
+
+  return prompt;
+}
+
+/**
+ * Quick helper to get a production-ready design prompt
+ * with sensible defaults for common use cases
+ */
+export function getQuickDesignPrompt(type: 'saas' | 'portfolio' | 'ecommerce' | 'blog' = 'saas'): string {
+  const presetMap: Record<string, string> = {
+    saas: 'framer-dark',
+    portfolio: 'minimal-light',
+    ecommerce: 'stripe-gradient',
+    blog: 'linear-dark',
+  };
+
+  const categoryMap: Record<string, ComponentCategory[]> = {
+    saas: ['hero', 'features', 'pricing', 'cta'],
+    portfolio: ['hero', 'cards'],
+    ecommerce: ['hero', 'cards', 'cta'],
+    blog: ['navbar', 'cards', 'footer'],
+  };
+
+  return getEnhancedDesignPrompt({
+    stylePreset: presetMap[type],
+    componentCategories: categoryMap[type],
+    fewShotCategory: type as 'saas' | 'portfolio' | 'ecommerce' | 'blog',
+  });
+}
+
+// ============================================
+// DESIGN INTENT EXTRACTION
+// ============================================
+
+/**
+ * Design intent extracted from user message
+ */
+export interface DesignIntent {
+  topic: string;
+  mood: string[];
+  suggestedColors: {
+    primary: string;
+    secondary: string;
+    accent: string;
+    background: string;
+    text: string;
+  };
+  suggestedImages: string[];
+  language: 'it' | 'en';
+  palette?: TopicPalette;
+}
+
+/**
+ * Extract design intent from user message
+ * This pre-processes the user's request to help the AI generate contextual content
+ */
+export function extractDesignIntent(userMessage: string): DesignIntent {
+  const lowerMessage = userMessage.toLowerCase();
+
+  // Detect language
+  const italianKeywords = ['crea', 'tema', 'pagina', 'sito', 'per', 'con', 'stile', 'elegante', 'moderno'];
+  const isItalian = italianKeywords.some(kw => lowerMessage.includes(kw));
+  const language = isItalian ? 'it' : 'en';
+
+  // Detect topic
+  let topic = 'general';
+  const topicKeywords: Record<string, string[]> = {
+    wine: ['vino', 'wine', 'cantina', 'winery', 'enoteca', 'sommelier', 'vitigno'],
+    restaurant: ['ristorante', 'restaurant', 'cucina', 'chef', 'menu', 'food', 'cibo', 'trattoria'],
+    fitness: ['fitness', 'gym', 'palestra', 'workout', 'yoga', 'sport', 'wellness'],
+    tech: ['tech', 'software', 'app', 'saas', 'startup', 'ai', 'tecnologia', 'tool'],
+    fashion: ['moda', 'fashion', 'abbigliamento', 'luxury', 'brand'],
+    portfolio: ['portfolio', 'designer', 'artista', 'creativo', 'personale'],
+    coffee: ['caffe', 'coffee', 'cafe', 'bar', 'bakery'],
+    travel: ['viaggio', 'travel', 'hotel', 'turismo', 'vacanza'],
+    music: ['musica', 'music', 'band', 'dj', 'festival', 'concerto'],
+    realestate: ['immobiliare', 'real estate', 'casa', 'appartamento', 'architettura'],
+    medical: ['medico', 'medical', 'salute', 'healthcare', 'clinica'],
+    education: ['educazione', 'education', 'corso', 'scuola', 'learning'],
+    finance: ['finanza', 'finance', 'banca', 'investimenti', 'crypto'],
+    nature: ['natura', 'nature', 'eco', 'green', 'sostenibile'],
+  };
+
+  for (const [topicName, keywords] of Object.entries(topicKeywords)) {
+    if (keywords.some(kw => lowerMessage.includes(kw))) {
+      topic = topicName;
+      break;
+    }
+  }
+
+  // Detect mood
+  const moodKeywords: Record<string, string[]> = {
+    elegante: ['elegante', 'elegant', 'raffinato', 'sofisticato', 'chic'],
+    moderno: ['moderno', 'modern', 'contemporaneo', 'contemporary', 'minimal'],
+    energico: ['energico', 'energetic', 'dinamico', 'bold', 'vivace'],
+    lussuoso: ['lusso', 'luxury', 'premium', 'esclusivo', 'exclusive'],
+    caldo: ['caldo', 'warm', 'accogliente', 'cozy', 'inviting'],
+    fresco: ['fresco', 'fresh', 'clean', 'pulito', 'leggero'],
+    professionale: ['professionale', 'professional', 'corporate', 'business'],
+    creativo: ['creativo', 'creative', 'artistico', 'artistic'],
+  };
+
+  const detectedMoods: string[] = [];
+  for (const [mood, keywords] of Object.entries(moodKeywords)) {
+    if (keywords.some(kw => lowerMessage.includes(kw))) {
+      detectedMoods.push(mood);
+    }
+  }
+
+  // Get color palette based on topic
+  const palette = getPalette(topic);
+  const suggestedColors = palette ? {
+    primary: palette.colors.primary,
+    secondary: palette.colors.secondary,
+    accent: palette.colors.accent,
+    background: palette.colors.background,
+    text: palette.colors.text,
+  } : {
+    // Default tech colors
+    primary: '#6366F1',
+    secondary: '#818CF8',
+    accent: '#22D3EE',
+    background: '#0D0D0D',
+    text: '#FFFFFF',
+  };
+
+  const suggestedImages = palette?.suggestedImages || ['abstract', 'product', 'team'];
+
+  return {
+    topic,
+    mood: detectedMoods.length > 0 ? detectedMoods : ['moderno'],
+    suggestedColors,
+    suggestedImages,
+    language,
+    palette,
+  };
+}
+
+/**
+ * Format design intent for AI prompt injection
+ */
+export function formatDesignIntentForPrompt(intent: DesignIntent): string {
+  const paletteInfo = intent.palette ? formatPaletteForPrompt(intent.palette) : '';
+
+  return `
+═══════════════════════════════════════════════════════════════
+DETECTED DESIGN INTENT - USE THIS FOR YOUR DESIGN
+═══════════════════════════════════════════════════════════════
+
+TOPIC: ${intent.topic.toUpperCase()}
+MOOD: ${intent.mood.join(', ')}
+LANGUAGE: ${intent.language === 'it' ? 'Italian' : 'English'}
+
+${paletteInfo}
+
+CONTENT GUIDELINES:
+- Write headlines in ${intent.language === 'it' ? 'Italian' : 'English'}
+- Use colors from the palette above
+- Include imagery related to: ${intent.suggestedImages.join(', ')}
+- Match the mood: ${intent.mood.join(', ')}
+
+REMEMBER: Create UNIQUE, CONTEXTUAL content for "${intent.topic}"!
+Do NOT use generic placeholder text.
+`;
+}
+
+/**
+ * Get enhanced design prompt with design intent injection
+ * This is the main function for design mode that ensures contextual generation
+ */
+export interface DesignPromptOptions {
+  userMessage: string;
+  stylePresetId?: string;
+  selectedPalette?: TopicPalette;
+}
+
+export function getDesignPromptWithIntent(userMessage: string, options?: { stylePresetId?: string; selectedPalette?: TopicPalette }): string {
+  // Extract design intent from user message
+  const intent = extractDesignIntent(userMessage);
+
+  // If a palette was explicitly selected, use it
+  if (options?.selectedPalette) {
+    intent.palette = options.selectedPalette;
+    intent.suggestedColors = options.selectedPalette.colors;
+  }
+
+  // Start with base design prompt
+  let prompt = DESIGN_MODE_PROMPT;
+
+  // Add style preset if specified
+  if (options?.stylePresetId) {
+    prompt += '\n\n' + formatStylePresetForAI(options.stylePresetId);
+  }
+
+  // Add design intent with palette info
+  prompt += '\n\n' + formatDesignIntentForPrompt(intent);
+
+  // If there's a selected palette, add explicit color instructions
+  if (options?.selectedPalette) {
+    prompt += `\n\n═══════════════════════════════════════════════════════════════
+USER SELECTED PALETTE: ${options.selectedPalette.name}
+═══════════════════════════════════════════════════════════════
+
+THE USER HAS EXPLICITLY CHOSEN THIS COLOR PALETTE. YOU MUST USE THESE EXACT COLORS:
+
+Primary Color: ${options.selectedPalette.colors.primary}
+Secondary Color: ${options.selectedPalette.colors.secondary}
+Accent Color: ${options.selectedPalette.colors.accent}
+Background Color: ${options.selectedPalette.colors.background}
+Text Color: ${options.selectedPalette.colors.text}
+
+Mood: ${options.selectedPalette.mood.join(', ')}
+
+DO NOT deviate from this palette. These are the user's explicit color choices.
+`;
+  }
+
+  // Add structural examples (no content to copy)
+  const structuralExamples = formatFewShotExamplesForAI(intent.topic === 'portfolio' ? 'portfolio' : 'landing');
+  prompt += '\n\n' + structuralExamples;
+
+  return prompt;
+}
+
+// Export types for external use
+export type { StylePreset, ComponentBlock, ComponentCategory, TopicPalette };

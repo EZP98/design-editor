@@ -522,7 +522,7 @@ export function CanvasToolbar({
                         e.currentTarget.style.color = '#ccc';
                       }}
                     >
-                      <span style={{ color: '#A83248' }}>{Icons[item.icon]}</span>
+                      <span style={{ color: '#A78BFA' }}>{Icons[item.icon]}</span>
                       <div style={{ flex: 1 }}>
                         <div style={{ fontSize: 13, fontWeight: 500 }}>{item.label}</div>
                         {'description' in item && (
@@ -559,7 +559,7 @@ export function CanvasToolbar({
                       border: '1px solid rgba(168, 50, 72, 0.2)',
                     }}
                   >
-                    <div style={{ fontSize: 11, color: '#A83248', fontWeight: 600, marginBottom: 4 }}>
+                    <div style={{ fontSize: 11, color: '#A78BFA', fontWeight: 600, marginBottom: 4 }}>
                       Blocchi Semantici
                     </div>
                     <div style={{ fontSize: 11, color: '#888' }}>
@@ -781,7 +781,7 @@ function ToolButton({
         color: active
           ? (isDark ? '#fff' : '#1a1a1a')
           : accent
-          ? '#A83248'
+          ? '#A78BFA'
           : (isDark ? '#888' : '#666'),
         cursor: 'pointer',
         transition: 'all 0.15s ease',
@@ -797,7 +797,7 @@ function ToolButton({
       onMouseLeave={(e) => {
         if (!active) {
           e.currentTarget.style.background = accent ? 'rgba(168, 50, 72, 0.15)' : 'transparent';
-          e.currentTarget.style.color = accent ? '#A83248' : (isDark ? '#888' : '#666');
+          e.currentTarget.style.color = accent ? '#A78BFA' : (isDark ? '#888' : '#666');
         }
       }}
     >

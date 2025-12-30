@@ -40,7 +40,7 @@ function stylesToTailwind(styles: Record<string, string>): string {
   // Background
   if (styles.backgroundColor === '#f3f4f6') classes.push('bg-gray-100');
   else if (styles.backgroundColor === '#f9fafb') classes.push('bg-gray-50');
-  else if (styles.backgroundColor === '#8B1E2B') classes.push('bg-indigo-500');
+  else if (styles.backgroundColor === '#8B5CF6') classes.push('bg-indigo-500');
   else if (styles.backgroundColor === '#e5e7eb') classes.push('bg-gray-200');
 
   // Border radius
@@ -59,7 +59,7 @@ function stylesToTailwind(styles: Record<string, string>): string {
   if (styles.fontSize === '14px') classes.push('text-sm');
   if (styles.color === '#1f2937') classes.push('text-gray-800');
   if (styles.color === '#ffffff') classes.push('text-white');
-  if (styles.color === '#8B1E2B') classes.push('text-indigo-500');
+  if (styles.color === '#8B5CF6') classes.push('text-indigo-500');
   if (styles.fontWeight === '500') classes.push('font-medium');
   if (styles.lineHeight === '1.5') classes.push('leading-relaxed');
 

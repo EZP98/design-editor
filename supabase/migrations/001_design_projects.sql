@@ -1,12 +1,9 @@
 -- Design Projects Table
 -- Stores user design projects with canvas state
 
--- Enable UUID extension
-CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
-
 -- Create design_projects table
 CREATE TABLE IF NOT EXISTS design_projects (
-  id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   user_id UUID REFERENCES auth.users(id) ON DELETE CASCADE,
 
   -- Project metadata

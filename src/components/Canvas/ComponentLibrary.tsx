@@ -159,10 +159,31 @@ const COMPONENT_CATEGORIES = [
           flexDirection: 'column',
           alignItems: 'center',
           padding: 48,
-          backgroundColor: '#8B1E2B',
+          backgroundColor: '#8B5CF6',
           borderRadius: 16,
           gap: 16,
         },
+      },
+    ],
+  },
+  {
+    id: 'media',
+    name: 'Media',
+    icon: <MediaIcon />,
+    components: [
+      {
+        id: 'model3d',
+        type: 'model3d' as ElementType,
+        name: 'Modello 3D',
+        description: 'Visualizzatore GLB/GLTF',
+        preview: <Model3DPreview />,
+      },
+      {
+        id: 'video',
+        type: 'video' as ElementType,
+        name: 'Video',
+        description: 'Video player',
+        preview: <VideoPreview />,
       },
     ],
   },
@@ -439,7 +460,7 @@ function ButtonPreview() {
     <div
       style={{
         padding: '8px 16px',
-        background: '#8B1E2B',
+        background: '#8B5CF6',
         borderRadius: 6,
         fontSize: 10,
         color: '#fff',
@@ -494,7 +515,7 @@ function InputPreview() {
 
 function LinkPreview() {
   return (
-    <span style={{ color: '#8B1E2B', fontSize: 11, textDecoration: 'underline' }}>Link text</span>
+    <span style={{ color: '#8B5CF6', fontSize: 11, textDecoration: 'underline' }}>Link text</span>
   );
 }
 
@@ -511,7 +532,7 @@ function IconPreview() {
         justifyContent: 'center',
       }}
     >
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B1E2B" strokeWidth="2">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2">
         <polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" />
       </svg>
     </div>
@@ -535,7 +556,7 @@ function HeroPreview() {
     >
       <div style={{ width: 24, height: 4, background: '#fff', borderRadius: 1 }} />
       <div style={{ width: 16, height: 2, background: '#888', borderRadius: 1 }} />
-      <div style={{ width: 14, height: 6, background: '#8B1E2B', borderRadius: 2, marginTop: 2 }} />
+      <div style={{ width: 14, height: 6, background: '#8B5CF6', borderRadius: 2, marginTop: 2 }} />
     </div>
   );
 }
@@ -558,7 +579,7 @@ function FeaturesPreview() {
             gap: 2,
           }}
         >
-          <div style={{ width: 6, height: 6, background: '#8B1E2B', borderRadius: '50%' }} />
+          <div style={{ width: 6, height: 6, background: '#8B5CF6', borderRadius: '50%' }} />
           <div style={{ width: 8, height: 2, background: '#555', borderRadius: 1 }} />
         </div>
       ))}
@@ -572,7 +593,7 @@ function CTAPreview() {
       style={{
         width: 52,
         height: 32,
-        background: 'linear-gradient(135deg, #8B1E2B 0%, #A83248 100%)',
+        background: 'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
         borderRadius: 4,
         display: 'flex',
         flexDirection: 'column',
@@ -603,14 +624,14 @@ function TemplatesIcon() {
 
 function TemplatePreview({ type }: { type: string }) {
   const colors: Record<string, string> = {
-    hero: '#8B1E2B',
+    hero: '#8B5CF6',
     services: '#3B82F6',
     pricing: '#10B981',
     footer: '#6366F1',
     cta: '#F59E0B',
     features: '#EC4899',
   };
-  const color = colors[type] || '#8B1E2B';
+  const color = colors[type] || '#8B5CF6';
 
   return (
     <div style={{
@@ -659,6 +680,57 @@ function SectionsIcon() {
       <rect x="3" y="3" width="18" height="6" rx="1" />
       <rect x="3" y="12" width="18" height="9" rx="1" />
     </svg>
+  );
+}
+
+function MediaIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <path d="M12 2L2 7l10 5 10-5-10-5z" />
+      <path d="M2 17l10 5 10-5" />
+      <path d="M2 12l10 5 10-5" />
+    </svg>
+  );
+}
+
+function Model3DPreview() {
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: '#18181b',
+      borderRadius: 6,
+      display: 'flex',
+      flexDirection: 'column',
+      alignItems: 'center',
+      justifyContent: 'center',
+      gap: 4,
+    }}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#71717a" strokeWidth="1.5">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
+      </svg>
+      <span style={{ fontSize: 8, color: '#52525b' }}>3D</span>
+    </div>
+  );
+}
+
+function VideoPreview() {
+  return (
+    <div style={{
+      width: '100%',
+      height: '100%',
+      backgroundColor: '#18181b',
+      borderRadius: 6,
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    }}>
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="#71717a">
+        <path d="M8 5v14l11-7z" />
+      </svg>
+    </div>
   );
 }
 

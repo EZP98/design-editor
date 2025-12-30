@@ -1,19 +1,19 @@
 /**
  * Export Plugin
  *
- * Export canvas to PNG, JPG, SVG, or PDF
+ * Export canvas to PNG, JPG, SVG, JSON or Figma-compatible formats
  */
 
 import React, { useState, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useCanvasStore } from '../../../lib/canvas/canvasStore';
-import { THEME_COLORS } from '../../../lib/canvas/types';
+import { THEME_COLORS, CanvasElement } from '../../../lib/canvas/types';
 import * as LucideIcons from 'lucide-react';
 import { PluginComponentProps } from './PluginPanel';
 import { toPng, toJpeg, toSvg } from 'html-to-image';
 import { saveAs } from 'file-saver';
 
-type ExportFormat = 'png' | 'jpg' | 'svg';
+type ExportFormat = 'png' | 'jpg' | 'svg' | 'json' | 'figma';
 type ExportScale = 1 | 2 | 3 | 4;
 
 interface ExportOptions {
@@ -33,8 +33,13 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
   });
   const [exporting, setExporting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const canvasSettings = useCanvasStore((state) => state.canvasSettings);
+  const pages = useCanvasStore((state) => state.pages);
+  const elements = useCanvasStore((state) => state.elements);
+  const currentPageId = useCanvasStore((state) => state.currentPageId);
+  const projectName = useCanvasStore((state) => state.projectName);
   const theme = canvasSettings?.editorTheme || 'dark';
   const colors = THEME_COLORS[theme];
   const isDark = theme === 'dark';
@@ -46,9 +51,11 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
 
   // Format options
   const formats: { id: ExportFormat; label: string; icon: React.ReactNode; desc: string }[] = [
-    { id: 'png', label: 'PNG', icon: <LucideIcons.FileImage size={18} />, desc: 'Lossless, supporta trasparenza' },
-    { id: 'jpg', label: 'JPG', icon: <LucideIcons.Image size={18} />, desc: 'Compresso, file leggero' },
+    { id: 'png', label: 'PNG', icon: <LucideIcons.FileImage size={18} />, desc: 'Lossless, trasparenza' },
+    { id: 'jpg', label: 'JPG', icon: <LucideIcons.Image size={18} />, desc: 'Compresso, leggero' },
     { id: 'svg', label: 'SVG', icon: <LucideIcons.FileCode size={18} />, desc: 'Vettoriale, scalabile' },
+    { id: 'json', label: 'JSON', icon: <LucideIcons.Braces size={18} />, desc: 'Dati strutturati' },
+    { id: 'figma', label: 'Figma', icon: <LucideIcons.Figma size={18} />, desc: 'SVG + Copia clipboard' },
   ];
 
   // Scale options
@@ -83,13 +90,134 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
     }
   };
 
+  // Generate JSON export data
+  const generateJSONExport = () => {
+    const currentPage = pages[currentPageId];
+    if (!currentPage) return null;
+
+    // Recursively collect element tree
+    const collectElementTree = (elementId: string): any => {
+      const element = elements[elementId];
+      if (!element) return null;
+
+      return {
+        id: element.id,
+        type: element.type,
+        name: element.name,
+        position: element.position,
+        size: element.size,
+        styles: element.styles,
+        content: element.content,
+        src: element.src,
+        children: element.children.map(collectElementTree).filter(Boolean),
+      };
+    };
+
+    return {
+      version: '1.0',
+      exportedAt: new Date().toISOString(),
+      projectName: projectName || 'Untitled',
+      page: {
+        id: currentPage.id,
+        name: currentPage.name,
+        width: currentPage.width,
+        height: currentPage.height,
+        backgroundColor: currentPage.backgroundColor,
+      },
+      elements: collectElementTree(currentPage.rootElementId),
+    };
+  };
+
+  // Generate Figma-compatible SVG
+  const generateFigmaSVG = async (): Promise<string> => {
+    const canvasElement = document.querySelector('[data-canvas-export]') as HTMLElement;
+    if (!canvasElement) {
+      throw new Error('Canvas element not found');
+    }
+
+    // Get SVG with optimizations for Figma
+    const svgString = await toSvg(canvasElement, {
+      backgroundColor: getBackgroundColor(),
+      cacheBust: true,
+      // Figma prefers embedded fonts and inline styles
+      style: {
+        // Preserve text as text (not paths)
+      },
+    });
+
+    return svgString;
+  };
+
+  // Copy to clipboard
+  const copyToClipboard = async (text: string, type: 'text/plain' | 'image/svg+xml' = 'text/plain') => {
+    try {
+      if (type === 'image/svg+xml') {
+        // For SVG, we can copy as both text and image
+        const blob = new Blob([text], { type: 'image/svg+xml' });
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            'text/plain': new Blob([text], { type: 'text/plain' }),
+          }),
+        ]);
+      } else {
+        await navigator.clipboard.writeText(text);
+      }
+      return true;
+    } catch (err) {
+      console.error('Clipboard error:', err);
+      // Fallback for older browsers
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      textarea.style.position = 'fixed';
+      textarea.style.opacity = '0';
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+      return true;
+    }
+  };
+
   // Export function
   const handleExport = async () => {
     setExporting(true);
     setError(null);
+    setSuccessMessage(null);
 
     try {
-      // Find the canvas element
+      const timestamp = new Date().toISOString().slice(0, 10);
+      const safeName = (projectName || 'design').replace(/[^a-zA-Z0-9]/g, '-');
+
+      // Handle JSON export
+      if (options.format === 'json') {
+        const jsonData = generateJSONExport();
+        if (!jsonData) {
+          throw new Error('Failed to generate JSON export');
+        }
+        const jsonString = JSON.stringify(jsonData, null, 2);
+        const blob = new Blob([jsonString], { type: 'application/json;charset=utf-8' });
+        saveAs(blob, `${safeName}-${timestamp}.json`);
+        onClose();
+        return;
+      }
+
+      // Handle Figma export (SVG + clipboard)
+      if (options.format === 'figma') {
+        const svgString = await generateFigmaSVG();
+
+        // Save SVG file
+        const svgBlob = new Blob([svgString], { type: 'image/svg+xml;charset=utf-8' });
+        saveAs(svgBlob, `${safeName}-figma-${timestamp}.svg`);
+
+        // Copy to clipboard for direct paste into Figma
+        await copyToClipboard(svgString, 'image/svg+xml');
+
+        setSuccessMessage('SVG salvato e copiato negli appunti! Puoi incollarlo in Figma con Cmd+V');
+        setTimeout(() => onClose(), 2000);
+        return;
+      }
+
+      // Find the canvas element for image exports
       const canvasElement = document.querySelector('[data-canvas-export]') as HTMLElement;
 
       if (!canvasElement) {
@@ -128,8 +256,7 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
       }
 
       // Generate filename
-      const timestamp = new Date().toISOString().slice(0, 10);
-      const filename = `design-${timestamp}.${options.format}`;
+      const filename = `${safeName}-${timestamp}.${options.format}`;
 
       // Save file
       if (options.format === 'svg') {
@@ -282,8 +409,8 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
             </div>
           </div>
 
-          {/* Scale (not for SVG) */}
-          {options.format !== 'svg' && (
+          {/* Scale (not for SVG, JSON, or Figma) */}
+          {!['svg', 'json', 'figma'].includes(options.format) && (
             <div>
               <label style={{
                 fontSize: 11,
@@ -357,8 +484,8 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
             </div>
           )}
 
-          {/* Background (for PNG) */}
-          {options.format === 'png' && (
+          {/* Background (for PNG and Figma) */}
+          {['png', 'figma'].includes(options.format) && (
             <div>
               <label style={{
                 fontSize: 11,
@@ -448,6 +575,63 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
               {error}
             </div>
           )}
+
+          {/* Success message */}
+          {successMessage && (
+            <div style={{
+              padding: '10px 12px',
+              background: isDark ? 'rgba(16, 185, 129, 0.1)' : 'rgba(16, 185, 129, 0.1)',
+              borderRadius: 8,
+              fontSize: 12,
+              color: '#10B981',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}>
+              <LucideIcons.Check size={14} />
+              {successMessage}
+            </div>
+          )}
+
+          {/* Figma info tip */}
+          {options.format === 'figma' && !successMessage && (
+            <div style={{
+              padding: '10px 12px',
+              background: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+              borderRadius: 8,
+              fontSize: 11,
+              color: isDark ? '#A5B4FC' : '#6366F1',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+            }}>
+              <LucideIcons.Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                Esporta un SVG ottimizzato per Figma e lo copia negli appunti.
+                Puoi incollarlo direttamente in Figma con <strong>Cmd+V</strong> (Mac) o <strong>Ctrl+V</strong> (Windows).
+              </span>
+            </div>
+          )}
+
+          {/* JSON info tip */}
+          {options.format === 'json' && (
+            <div style={{
+              padding: '10px 12px',
+              background: isDark ? 'rgba(99, 102, 241, 0.1)' : 'rgba(99, 102, 241, 0.1)',
+              borderRadius: 8,
+              fontSize: 11,
+              color: isDark ? '#A5B4FC' : '#6366F1',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 8,
+            }}>
+              <LucideIcons.Info size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+              <span>
+                Esporta tutti i dati del design in formato JSON strutturato.
+                Utile per backup, versioning o integrazione con altri tool.
+              </span>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
@@ -495,6 +679,16 @@ export const ExportPlugin: React.FC<PluginComponentProps> = ({ onClose }) => {
               <>
                 <LucideIcons.Loader2 size={16} className="animate-spin" />
                 Esportando...
+              </>
+            ) : options.format === 'figma' ? (
+              <>
+                <LucideIcons.Figma size={16} />
+                Esporta per Figma
+              </>
+            ) : options.format === 'json' ? (
+              <>
+                <LucideIcons.Braces size={16} />
+                Esporta JSON
               </>
             ) : (
               <>

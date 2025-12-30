@@ -93,6 +93,7 @@ interface CanvasActions {
   resizeElement: (elementId: string, size: Size) => void;
   updateElementStyles: (elementId: string, styles: Partial<ElementStyles>) => void;
   updateElementContent: (elementId: string, content: string) => void;
+  updateElement: (elementId: string, updates: Partial<CanvasElement>) => void;
   renameElement: (elementId: string, name: string) => void;
   reparentElement: (elementId: string, newParentId: string) => void;
   reorderElement: (elementId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
@@ -958,6 +959,19 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       elements: {
         ...state.elements,
         [elementId]: { ...state.elements[elementId], content },
+      },
+    }));
+  },
+
+  // Generic update element (for 3D properties, etc.)
+  updateElement: (elementId: string, updates: Partial<CanvasElement>) => {
+    const element = get().elements[elementId];
+    if (!element) return;
+
+    set((state) => ({
+      elements: {
+        ...state.elements,
+        [elementId]: { ...state.elements[elementId], ...updates },
       },
     }));
   },

@@ -4,12 +4,12 @@
  * A Figma-style canvas where ALL pages/artboards are visible at once.
  */
 
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback, useEffect, useMemo, memo } from 'react';
 import { motion, useMotionValue, useDragControls } from 'framer-motion';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
 
-// Draggable Page Component - only header triggers drag
-function DraggablePage({
+// Draggable Page Component - direct DOM manipulation for smooth 60fps drag
+const DraggablePage = memo(function DraggablePage({
   page,
   header,
   content,
@@ -22,55 +22,86 @@ function DraggablePage({
   zoom: number;
   onDragEnd: (pageId: string, offset: { x: number; y: number }) => void;
 }) {
-  const x = useMotionValue(0);
-  const y = useMotionValue(0);
   const [isDragging, setIsDragging] = useState(false);
-  const dragControls = useDragControls();
+  const elementRef = useRef<HTMLDivElement>(null);
+  const startPosRef = useRef({ x: 0, y: 0 });
+  const offsetRef = useRef({ x: 0, y: 0 });
+  const zoomRef = useRef(zoom);
+  const pageRef = useRef(page);
+  zoomRef.current = zoom;
+  pageRef.current = page;
+
+  useEffect(() => {
+    if (!isDragging) return;
+
+    const handleMove = (e: PointerEvent) => {
+      // Direct DOM manipulation - no React re-render!
+      const dx = (e.clientX - startPosRef.current.x) / zoomRef.current;
+      const dy = (e.clientY - startPosRef.current.y) / zoomRef.current;
+      offsetRef.current = { x: dx, y: dy };
+
+      if (elementRef.current) {
+        elementRef.current.style.left = `${(pageRef.current.x || 0) + dx}px`;
+        elementRef.current.style.top = `${(pageRef.current.y || 0) + dy}px`;
+      }
+    };
+
+    const handleUp = () => {
+      onDragEnd(pageRef.current.id, offsetRef.current);
+      offsetRef.current = { x: 0, y: 0 };
+      setIsDragging(false);
+    };
+
+    window.addEventListener('pointermove', handleMove);
+    window.addEventListener('pointerup', handleUp);
+
+    return () => {
+      window.removeEventListener('pointermove', handleMove);
+      window.removeEventListener('pointerup', handleUp);
+    };
+  }, [isDragging, onDragEnd]);
+
+  const handlePointerDown = useCallback((e: React.PointerEvent) => {
+    e.stopPropagation();
+    e.preventDefault();
+    startPosRef.current = { x: e.clientX, y: e.clientY };
+    offsetRef.current = { x: 0, y: 0 };
+
+    // Set scale immediately via DOM
+    if (elementRef.current) {
+      elementRef.current.style.transform = 'scale(1.02)';
+      elementRef.current.style.zIndex = '9999';
+    }
+    setIsDragging(true);
+  }, []);
 
   return (
-    <motion.div
-      drag
-      dragControls={dragControls}
-      dragListener={false} // Disable automatic drag - only header triggers it
-      dragMomentum={false}
-      dragElastic={0}
-      onDragStart={() => setIsDragging(true)}
-      onDragEnd={(_, info) => {
-        onDragEnd(page.id, {
-          x: info.offset.x / zoom,
-          y: info.offset.y / zoom
-        });
-        x.set(0);
-        y.set(0);
-        setIsDragging(false);
-      }}
+    <div
+      ref={elementRef}
       style={{
-        x,
-        y,
         position: 'absolute',
         left: page.x || 0,
         top: page.y || 0,
-        zIndex: isDragging ? 9999 : 1,
+        zIndex: 1,
+        transformOrigin: 'top left',
+        willChange: isDragging ? 'left, top' : 'auto',
       }}
-      whileDrag={{ scale: 1.02 }}
     >
       <div style={{ position: 'relative', overflow: 'visible' }}>
-        {/* Header - ONLY this triggers page drag */}
         <div
-          onPointerDown={(e) => {
-            e.stopPropagation();
-            dragControls.start(e);
+          onPointerDown={handlePointerDown}
+          style={{
+            cursor: isDragging ? 'grabbing' : 'grab',
+            touchAction: 'none',
           }}
-          style={{ cursor: isDragging ? 'grabbing' : 'grab' }}
         >
           {header}
         </div>
-        {/* Content - does NOT trigger page drag */}
         {content}
       </div>
-    </motion.div>
+    </div>
   );
-}
+});
 import { CanvasElement, CanvasPage, Position, ElementType, THEME_COLORS } from '../../lib/canvas/types';
 import { CanvasElementRenderer } from './CanvasElementRenderer';
 import { SelectionOverlay } from './SelectionOverlay';
@@ -837,7 +868,7 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
           left: 0,
           width: pageWidth,
           height: 36,
-          background: isCurrentPage ? '#A83248' : '#27272a',
+          background: isCurrentPage ? '#A78BFA' : '#27272a',
           borderRadius: '12px 12px 0 0',
           display: 'flex',
           alignItems: 'center',
@@ -883,9 +914,9 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
               backgroundColor: rootElement.styles.backgroundColor || '#ffffff',
               borderRadius: 8,
               boxShadow: editorTheme === 'light'
-                ? (isCurrentPage ? '0 0 0 2px #A83248' : '0 1px 3px rgba(0,0,0,0.08)')
+                ? (isCurrentPage ? '0 0 0 2px #A78BFA' : '0 1px 3px rgba(0,0,0,0.08)')
                 : (isCurrentPage
-                  ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A83248'
+                  ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A78BFA'
                   : '0 25px 100px rgba(0,0,0,0.3), 0 0 0 1px rgba(255,255,255,0.1)'),
               cursor: activeTool === 'select' ? 'default' : undefined,
               // Auto Layout styles from page
@@ -1028,19 +1059,23 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
         setContextMenu({ x: e.clientX, y: e.clientY, elementId });
       }}
     >
-      {/* Grid pattern background */}
+      {/* Grid pattern background - uses CSS custom properties for performance */}
       <div
         data-canvas-background="true"
-        className="absolute inset-0"
+        className="absolute inset-0 canvas-grid"
         style={{
+          '--grid-size': `${20 * zoom}px`,
+          '--grid-offset-x': `${pan.x % (20 * zoom)}px`,
+          '--grid-offset-y': `${pan.y % (20 * zoom)}px`,
           backgroundImage: `
             linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
             linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px)
           `,
-          backgroundSize: `${20 * zoom}px ${20 * zoom}px`,
-          backgroundPosition: `${pan.x % (20 * zoom)}px ${pan.y % (20 * zoom)}px`,
+          backgroundSize: 'var(--grid-size) var(--grid-size)',
+          backgroundPosition: 'var(--grid-offset-x) var(--grid-offset-y)',
           pointerEvents: 'none',
-        }}
+          willChange: 'background-position',
+        } as React.CSSProperties}
       />
 
       {/* All pages container - centered and panned */}
@@ -1089,7 +1124,7 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
                     style={{
                       width: bp.width,
                       padding: '10px 16px',
-                      background: isActiveBreakpoint ? '#A83248' : '#27272a',
+                      background: isActiveBreakpoint ? '#A78BFA' : '#27272a',
                       borderRadius: '10px 10px 0 0',
                       display: 'flex',
                       alignItems: 'center',
@@ -1146,7 +1181,7 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
                       backgroundColor: rootElement.styles.backgroundColor || '#ffffff',
                       borderRadius: '0 0 8px 8px',
                       boxShadow: isActiveBreakpoint
-                        ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A83248'
+                        ? '0 25px 100px rgba(0,0,0,0.5), 0 0 0 2px #A78BFA'
                         : '0 25px 100px rgba(0,0,0,0.3)',
                       display: rootElement.styles.display || 'block',
                       flexDirection: rootElement.styles.flexDirection,

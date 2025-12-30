@@ -7,6 +7,7 @@
 import React, { useState, useCallback, useEffect } from 'react';
 import { CanvasElement, Position, Size } from '../../lib/canvas/types';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
+import { aiRewriteText, TextRewriteMode } from '../../lib/canvas/aiElementTools';
 
 // AI Edit API endpoint
 const AI_EDIT_API = import.meta.env.VITE_SUPABASE_URL
@@ -36,6 +37,7 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
   // Don't show floating toolbar for page elements (they have their own header)
   const isPage = element.type === 'page';
   const isImage = element.type === 'image';
+  const isTextElement = element.type === 'text' || element.type === 'button' || element.type === 'link';
   const [activeHandle, setActiveHandle] = useState<ResizeHandle | null>(null);
   const [resizeStart, setResizeStart] = useState<{
     mouseX: number;
@@ -46,6 +48,8 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
 
   // AI Edit state
   const [aiProcessing, setAiProcessing] = useState<string | null>(null); // 'remove-bg' | 'upscale' | 'inpaint' | null
+  const [textAiProcessing, setTextAiProcessing] = useState<TextRewriteMode | null>(null);
+  const [showTextAiMenu, setShowTextAiMenu] = useState(false);
 
   // Crop mode state
   const [cropMode, setCropMode] = useState(false);
@@ -252,6 +256,25 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
     }
   }, [element.id, element.src, element.size, aiProcessing, saveToHistory]);
 
+  // AI: Text Rewrite
+  const handleTextRewrite = useCallback(async (mode: TextRewriteMode) => {
+    if (!element.content || textAiProcessing) return;
+    setTextAiProcessing(mode);
+    setShowTextAiMenu(false);
+
+    try {
+      const result = await aiRewriteText(element.id, mode);
+      if (!result.success) {
+        throw new Error(result.error || 'Errore rewrite');
+      }
+    } catch (err) {
+      console.error('Text rewrite error:', err);
+      alert('Errore AI: ' + (err instanceof Error ? err.message : 'Errore'));
+    } finally {
+      setTextAiProcessing(null);
+    }
+  }, [element.id, element.content, textAiProcessing]);
+
   // Handle resize start
   const handleResizeStart = useCallback(
     (e: React.MouseEvent, handle: ResizeHandle) => {
@@ -388,7 +411,7 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
         width: HANDLE_SIZE,
         height: HANDLE_SIZE,
         backgroundColor: '#ffffff',
-        border: '1px solid #8B1E2B',
+        border: '1px solid #8B5CF6',
         borderRadius: 2,
         cursor: getCursor(handle),
         zIndex: 10,
@@ -430,7 +453,7 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
         pointerEvents: 'none',
         overflow: 'visible',
         // Selection outline - using outline instead of border so it's never clipped
-        outline: '2px solid #8B1E2B',
+        outline: '2px solid #8B5CF6',
         outlineOffset: -1,
       }}
     >
@@ -935,7 +958,7 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
             background: element.locked ? 'rgba(139, 30, 43, 0.2)' : 'transparent',
             border: 'none',
             borderRadius: 6,
-            color: element.locked ? '#A83248' : '#71717a',
+            color: element.locked ? '#A78BFA' : '#71717a',
             cursor: 'pointer',
             transition: 'all 0.15s',
           }}
@@ -1039,6 +1062,344 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
             <path d="M19 6l-1 14a2 2 0 01-2 2H8a2 2 0 01-2-2L5 6" />
           </svg>
         </button>
+
+        {/* AI Text Tools - Only for text elements */}
+        {isTextElement && element.content && (
+          <>
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: 'rgba(255, 255, 255, 0.08)', margin: '0 4px' }} />
+
+            {/* AI Label */}
+            <div
+              style={{
+                padding: '2px 6px',
+                fontSize: 9,
+                fontWeight: 700,
+                color: '#a855f7',
+                background: 'rgba(168, 85, 247, 0.15)',
+                borderRadius: 4,
+                marginRight: 4,
+              }}
+            >
+              AI
+            </div>
+
+            {/* Quick Rewrite - Shorter */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTextRewrite('shorter');
+              }}
+              disabled={textAiProcessing !== null}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: textAiProcessing === 'shorter' ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: textAiProcessing === 'shorter' ? '#a855f7' : '#71717a',
+                cursor: textAiProcessing ? 'wait' : 'pointer',
+                transition: 'all 0.15s',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!textAiProcessing) {
+                  e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)';
+                  e.currentTarget.style.color = '#a855f7';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (textAiProcessing !== 'shorter') {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#71717a';
+                }
+              }}
+              title="Rendi più corto"
+            >
+              {textAiProcessing === 'shorter' ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M21 12H3M8 7l-5 5 5 5" />
+                </svg>
+              )}
+              {textAiProcessing === 'shorter' ? '...' : 'Shorter'}
+            </button>
+
+            {/* Quick Rewrite - Longer */}
+            <button
+              onClick={(e) => {
+                e.stopPropagation();
+                handleTextRewrite('longer');
+              }}
+              disabled={textAiProcessing !== null}
+              style={{
+                height: 28,
+                padding: '0 8px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 4,
+                background: textAiProcessing === 'longer' ? 'rgba(6, 182, 212, 0.2)' : 'transparent',
+                border: 'none',
+                borderRadius: 6,
+                color: textAiProcessing === 'longer' ? '#06b6d4' : '#71717a',
+                cursor: textAiProcessing ? 'wait' : 'pointer',
+                transition: 'all 0.15s',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!textAiProcessing) {
+                  e.currentTarget.style.background = 'rgba(6, 182, 212, 0.15)';
+                  e.currentTarget.style.color = '#06b6d4';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (textAiProcessing !== 'longer') {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#71717a';
+                }
+              }}
+              title="Espandi testo"
+            >
+              {textAiProcessing === 'longer' ? (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ animation: 'spin 1s linear infinite' }}>
+                  <path d="M21 12a9 9 0 11-6.219-8.56" />
+                </svg>
+              ) : (
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M3 12h18M16 7l5 5-5 5" />
+                </svg>
+              )}
+              {textAiProcessing === 'longer' ? '...' : 'Longer'}
+            </button>
+
+            {/* More AI Options Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTextAiMenu(!showTextAiMenu);
+                }}
+                disabled={textAiProcessing !== null}
+                style={{
+                  height: 28,
+                  padding: '0 8px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: showTextAiMenu ? 'rgba(249, 115, 22, 0.2)' : 'transparent',
+                  border: 'none',
+                  borderRadius: 6,
+                  color: showTextAiMenu ? '#f97316' : '#71717a',
+                  cursor: textAiProcessing ? 'wait' : 'pointer',
+                  transition: 'all 0.15s',
+                  fontSize: 11,
+                  fontWeight: 500,
+                }}
+                onMouseEnter={(e) => {
+                  if (!textAiProcessing && !showTextAiMenu) {
+                    e.currentTarget.style.background = 'rgba(249, 115, 22, 0.15)';
+                    e.currentTarget.style.color = '#f97316';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!showTextAiMenu) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#71717a';
+                  }
+                }}
+                title="Più opzioni AI"
+              >
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <circle cx="12" cy="12" r="1" />
+                  <circle cx="19" cy="12" r="1" />
+                  <circle cx="5" cy="12" r="1" />
+                </svg>
+                More
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M6 9l6 6 6-6" />
+                </svg>
+              </button>
+
+              {/* Dropdown Menu */}
+              {showTextAiMenu && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: 0,
+                    marginTop: 4,
+                    background: 'rgba(20, 20, 20, 0.98)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.08)',
+                    borderRadius: 8,
+                    padding: 4,
+                    minWidth: 160,
+                    boxShadow: '0 8px 24px rgba(0, 0, 0, 0.4)',
+                    zIndex: 100,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  {/* Professional */}
+                  <button
+                    onClick={() => handleTextRewrite('professional')}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#e4e4e7',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>💼</span>
+                    Tono professionale
+                  </button>
+
+                  {/* Casual */}
+                  <button
+                    onClick={() => handleTextRewrite('casual')}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#e4e4e7',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>😊</span>
+                    Tono amichevole
+                  </button>
+
+                  <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.08)', margin: '4px 0' }} />
+
+                  {/* Translate EN */}
+                  <button
+                    onClick={() => handleTextRewrite('translate_en')}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#e4e4e7',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>🇬🇧</span>
+                    Traduci in inglese
+                  </button>
+
+                  {/* Translate IT */}
+                  <button
+                    onClick={() => handleTextRewrite('translate_it')}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#e4e4e7',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>🇮🇹</span>
+                    Traduci in italiano
+                  </button>
+
+                  <div style={{ height: 1, background: 'rgba(255, 255, 255, 0.08)', margin: '4px 0' }} />
+
+                  {/* Fix Grammar */}
+                  <button
+                    onClick={() => handleTextRewrite('fix_grammar')}
+                    style={{
+                      width: '100%',
+                      padding: '8px 10px',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      background: 'transparent',
+                      border: 'none',
+                      borderRadius: 6,
+                      color: '#e4e4e7',
+                      cursor: 'pointer',
+                      fontSize: 11,
+                      fontWeight: 500,
+                      textAlign: 'left',
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                    }}
+                  >
+                    <span style={{ fontSize: 14 }}>✏️</span>
+                    Correggi grammatica
+                  </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
 
         {/* AI Edit Tools - Only for images */}
         {isImage && element.src && (

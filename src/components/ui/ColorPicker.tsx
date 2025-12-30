@@ -96,7 +96,7 @@ export function hslToRgb(h: number, s: number, l: number): { r: number; g: numbe
 // Color presets
 export const COLOR_PRESETS = [
   '#ef4444', '#000000', '#f97316', '#a855f7', '#ec4899',
-  '#8B1E2B', '#A83248', '#991b1b', '#2563eb',
+  '#8B5CF6', '#A78BFA', '#991b1b', '#2563eb',
   '#22c55e', '#84cc16', '#eab308', '#f97316', '#f43f5e',
   '#e5e5e5', '#a3a3a3', '#737373', '#3b82f6', '#c4b5fd',
 ];
@@ -109,7 +109,7 @@ export const GRADIENT_PRESETS = [
   'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)',
   'linear-gradient(135deg, #fa709a 0%, #fee140 100%)',
   'linear-gradient(135deg, #a8edea 0%, #fed6e3 100%)',
-  'linear-gradient(135deg, #8B1E2B 0%, #A83248 100%)',
+  'linear-gradient(135deg, #8B5CF6 0%, #A78BFA 100%)',
   'linear-gradient(135deg, #1a1a2e 0%, #16213e 100%)',
 ];
 
@@ -138,8 +138,8 @@ export function ColorPicker({
   const [inputMode, setInputMode] = useState<'hex' | 'rgb' | 'hsl'>('hex');
   const [fillType, setFillType] = useState<'solid' | 'linear' | 'radial'>('solid');
   const [gradientAngle, setGradientAngle] = useState(135);
-  const [gradientColor1, setGradientColor1] = useState('#A83248');
-  const [gradientColor2, setGradientColor2] = useState('#8B1E2B');
+  const [gradientColor1, setGradientColor1] = useState('#A78BFA');
+  const [gradientColor2, setGradientColor2] = useState('#8B5CF6');
 
   const colorValue = value?.startsWith('#') ? value : (value || '#ffffff');
   const isGradient = value?.startsWith('linear-gradient') || value?.startsWith('radial-gradient');
@@ -391,7 +391,7 @@ export function ColorPicker({
                         width: '100%',
                         height: 24,
                         background: gradient,
-                        border: value === gradient ? '2px solid #A83248' : '1px solid rgba(255, 255, 255, 0.08)',
+                        border: value === gradient ? '2px solid #A78BFA' : '1px solid rgba(255, 255, 255, 0.08)',
                         borderRadius: 4,
                         cursor: 'pointer',
                       }}
@@ -606,7 +606,7 @@ export function ColorPicker({
                         width: '100%',
                         aspectRatio: '1',
                         background: preset,
-                        border: colorValue.toLowerCase() === preset.toLowerCase() ? '2px solid #A83248' : '1px solid rgba(255, 255, 255, 0.08)',
+                        border: colorValue.toLowerCase() === preset.toLowerCase() ? '2px solid #A78BFA' : '1px solid rgba(255, 255, 255, 0.08)',
                         borderRadius: 4,
                         cursor: 'pointer',
                         transition: 'transform 0.1s',

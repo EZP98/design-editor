@@ -3,11 +3,308 @@
  *
  * Converts AI-generated element definitions to actual canvas elements.
  * This bridges the gap between AI output and the visual canvas.
+ *
+ * SUPPORTS TWO FORMATS:
+ * 1. Legacy format: { styles: { display, flexDirection, ... } }
+ * 2. New semantic format: { sizing: {...}, layout: {...}, style: {...}, animation: {...} }
+ *
+ * INCLUDES POST-PROCESSING to fix common AI mistakes:
+ * - Header heights limited to 80px max
+ * - Button heights limited to 52px max
+ * - Sections get proper padding and auto-layout
  */
 
 import { useCanvasStore, generateId } from './canvasStore';
 import { CanvasElementData } from '../artifactParser';
 import { ElementType, ElementStyles, CanvasElement } from './types';
+
+/**
+ * New semantic format types (AI Design Studio v2 pattern)
+ */
+interface SemanticSizing {
+  width?: 'fill' | 'fit' | 'fixed';
+  height?: 'fill' | 'fit' | 'fixed';
+  fixedWidth?: number;
+  fixedHeight?: number;
+}
+
+interface SemanticLayout {
+  direction?: 'column' | 'row';
+  gap?: number;
+  padding?: number;
+  paddingTop?: number;
+  paddingRight?: number;
+  paddingBottom?: number;
+  paddingLeft?: number;
+  align?: 'center' | 'start' | 'end' | 'stretch';
+  alignSelf?: 'center' | 'flex-start' | 'flex-end' | 'stretch';
+}
+
+interface SemanticAnimation {
+  preset?: 'fadeIn' | 'slideUp' | 'slideDown' | 'slideLeft' | 'slideRight' | 'scaleIn' | 'bounce' | 'pulse';
+  delay?: number;
+  duration?: number;
+}
+
+interface SemanticElementData extends CanvasElementData {
+  sizing?: SemanticSizing;
+  layout?: SemanticLayout;
+  style?: Record<string, unknown>; // New format uses 'style' (singular)
+  animation?: SemanticAnimation;
+}
+
+// Default Unsplash images for different contexts
+const DEFAULT_IMAGES = [
+  'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=800', // abstract
+  'https://images.unsplash.com/photo-1517694712202-14dd9538aa97?w=800', // tech
+  'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=800', // work
+  'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=800', // team
+  'https://images.unsplash.com/photo-1497366216548-37526070297c?w=800', // office
+  'https://images.unsplash.com/photo-1551434678-e076c223a692?w=800', // meeting
+];
+
+let imageIndex = 0;
+function getNextDefaultImage(): string {
+  const img = DEFAULT_IMAGES[imageIndex % DEFAULT_IMAGES.length];
+  imageIndex++;
+  return img;
+}
+
+/**
+ * Convert semantic format (sizing/layout/style) to legacy format (styles)
+ * This normalizes both formats to work with the existing canvas system
+ */
+function normalizeToLegacyFormat(data: SemanticElementData): CanvasElementData {
+  const normalized: CanvasElementData = {
+    type: data.type,
+    name: data.name,
+    content: data.content || (data as any).text, // AI sometimes uses 'text' instead of 'content'
+    src: data.src,
+    href: data.href,
+    iconName: data.iconName,
+    children: data.children,
+  };
+
+  // Build styles from semantic properties
+  const styles: Record<string, unknown> = {};
+
+  // Process sizing
+  if (data.sizing) {
+    const sizing = data.sizing;
+
+    // Width sizing
+    if (sizing.width === 'fill') {
+      styles.resizeX = 'fill';
+    } else if (sizing.width === 'fit') {
+      styles.resizeX = 'hug';
+    } else if (sizing.width === 'fixed' && sizing.fixedWidth) {
+      styles.resizeX = 'fixed';
+      styles.width = sizing.fixedWidth;
+    }
+
+    // Height sizing
+    if (sizing.height === 'fill') {
+      styles.resizeY = 'fill';
+    } else if (sizing.height === 'fit') {
+      styles.resizeY = 'hug';
+    } else if (sizing.height === 'fixed' && sizing.fixedHeight) {
+      styles.resizeY = 'fixed';
+      styles.height = sizing.fixedHeight;
+    }
+  }
+
+  // Process layout (container properties)
+  if (data.layout) {
+    const layout = data.layout;
+
+    styles.display = 'flex';
+    styles.flexDirection = layout.direction || 'column';
+
+    if (layout.gap !== undefined) styles.gap = layout.gap;
+    if (layout.padding !== undefined) styles.padding = layout.padding;
+    if (layout.paddingTop !== undefined) styles.paddingTop = layout.paddingTop;
+    if (layout.paddingRight !== undefined) styles.paddingRight = layout.paddingRight;
+    if (layout.paddingBottom !== undefined) styles.paddingBottom = layout.paddingBottom;
+    if (layout.paddingLeft !== undefined) styles.paddingLeft = layout.paddingLeft;
+
+    // Align maps to alignItems
+    if (layout.align) {
+      const alignMap: Record<string, string> = {
+        center: 'center',
+        start: 'flex-start',
+        end: 'flex-end',
+        stretch: 'stretch',
+      };
+      styles.alignItems = alignMap[layout.align] || 'stretch';
+    }
+
+    // alignSelf goes directly
+    if (layout.alignSelf) {
+      styles.alignSelf = layout.alignSelf;
+    }
+  }
+
+  // Process style (visual properties)
+  if (data.style) {
+    const style = data.style;
+
+    // Map style properties
+    if (style.background) styles.backgroundColor = style.background;
+    if (style.color) styles.color = style.color;
+    if (style.fontSize) styles.fontSize = style.fontSize;
+    if (style.fontWeight) styles.fontWeight = style.fontWeight;
+    if (style.borderRadius) styles.borderRadius = style.borderRadius;
+    if (style.border) {
+      // Parse border: "1px solid #color"
+      const borderMatch = (style.border as string).match(/(\d+)px\s+(\w+)\s+(#[\w]+|rgba?\([^)]+\))/);
+      if (borderMatch) {
+        styles.borderWidth = parseInt(borderMatch[1]);
+        styles.borderStyle = borderMatch[2];
+        styles.borderColor = borderMatch[3];
+      }
+    }
+
+    // Direct mappings for other style properties
+    const directStyleProps = [
+      'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition',
+      'boxShadow', 'opacity', 'overflow', 'textAlign', 'lineHeight', 'letterSpacing',
+      'paddingX', 'paddingY', 'minHeight', 'maxWidth', 'minWidth',
+    ];
+    for (const prop of directStyleProps) {
+      if (style[prop] !== undefined) {
+        // Handle paddingX/paddingY
+        if (prop === 'paddingX') {
+          styles.paddingLeft = style[prop];
+          styles.paddingRight = style[prop];
+        } else if (prop === 'paddingY') {
+          styles.paddingTop = style[prop];
+          styles.paddingBottom = style[prop];
+        } else {
+          styles[prop] = style[prop];
+        }
+      }
+    }
+  }
+
+  // Merge with legacy styles if present
+  if (data.styles) {
+    Object.assign(styles, data.styles);
+  }
+
+  normalized.styles = styles;
+
+  // Store animation data (for future use)
+  if (data.animation) {
+    // Store in styles for now, could be used by animation system later
+    (normalized as any)._animation = data.animation;
+  }
+
+  // Recursively normalize children
+  if (data.children && data.children.length > 0) {
+    normalized.children = data.children.map(child =>
+      normalizeToLegacyFormat(child as SemanticElementData)
+    );
+  }
+
+  return normalized;
+}
+
+/**
+ * POST-PROCESSING: Fix common AI mistakes before adding to canvas
+ * AI often generates nonsensical sizes, this normalizes them
+ */
+function sanitizeElementData(data: CanvasElementData): CanvasElementData {
+  const sanitized = { ...data };
+  const styles = { ...(data.styles || {}) };
+  const nameLower = (data.name || '').toLowerCase();
+  const typeLower = (data.type || '').toLowerCase();
+
+  // IMAGE FIX: Add default src if missing
+  if (typeLower === 'image' && !data.src) {
+    console.log(`[Sanitize] Added default image for ${data.name || 'image'}`);
+    sanitized.src = getNextDefaultImage();
+  }
+
+  // HEADER FIX: Max height 80px
+  if (nameLower.includes('header') || nameLower.includes('nav') || nameLower.includes('navbar')) {
+    if (styles.height && (styles.height as number) > 80) {
+      console.log(`[Sanitize] Fixed header height: ${styles.height} -> 80`);
+      styles.height = 80;
+    }
+    if (styles.minHeight && (styles.minHeight as number) > 100) {
+      styles.minHeight = 80;
+    }
+    // Headers should have horizontal layout
+    if (!styles.display) styles.display = 'flex';
+    if (!styles.flexDirection) styles.flexDirection = 'row';
+    if (!styles.alignItems) styles.alignItems = 'center';
+    if (!styles.justifyContent) styles.justifyContent = 'space-between';
+    if (!styles.padding) styles.padding = 16;
+    if (styles.padding && (styles.padding as number) > 32) styles.padding = 24;
+  }
+
+  // BUTTON FIX: Max height 52px, reasonable padding
+  if (typeLower === 'button') {
+    if (styles.height && (styles.height as number) > 52) {
+      console.log(`[Sanitize] Fixed button height: ${styles.height} -> 48`);
+      styles.height = 48;
+    }
+    if (styles.padding && (styles.padding as number) > 20) {
+      styles.padding = 16;
+    }
+    if (styles.fontSize && (styles.fontSize as number) > 18) {
+      styles.fontSize = 16;
+    }
+  }
+
+  // SECTION FIX: Reasonable padding and minHeight
+  if (typeLower === 'section') {
+    if (styles.padding && (styles.padding as number) > 140) {
+      console.log(`[Sanitize] Fixed section padding: ${styles.padding} -> 100`);
+      styles.padding = 100;
+    }
+    if (styles.minHeight && (styles.minHeight as number) > 800) {
+      styles.minHeight = 700;
+    }
+    // Ensure flex column layout
+    if (!styles.display) styles.display = 'flex';
+    if (!styles.flexDirection) styles.flexDirection = 'column';
+    if (!styles.alignItems) styles.alignItems = 'center';
+    if (!styles.gap) styles.gap = 32;
+  }
+
+  // TEXT FIX: Reasonable font sizes
+  if (typeLower === 'text') {
+    if (styles.fontSize && (styles.fontSize as number) > 96) {
+      console.log(`[Sanitize] Fixed title fontSize: ${styles.fontSize} -> 72`);
+      styles.fontSize = 72;
+    }
+  }
+
+  // ROW/FRAME/CARD FIX: Ensure auto-layout
+  if (typeLower === 'row' || typeLower === 'frame' || typeLower === 'stack' || typeLower === 'card') {
+    if (!styles.display) styles.display = 'flex';
+    if (typeLower === 'row' && !styles.flexDirection) styles.flexDirection = 'row';
+    if ((typeLower === 'stack' || typeLower === 'card') && !styles.flexDirection) styles.flexDirection = 'column';
+    if (!styles.gap) styles.gap = 16;
+
+    // Cards get default styling if not specified
+    if (typeLower === 'card') {
+      if (!styles.backgroundColor) styles.backgroundColor = '#FFFFFF';
+      if (!styles.borderRadius) styles.borderRadius = 12;
+      if (!styles.padding) styles.padding = 16;
+    }
+  }
+
+  sanitized.styles = styles;
+
+  // Recursively sanitize children
+  if (data.children && data.children.length > 0) {
+    sanitized.children = data.children.map(child => sanitizeElementData(child));
+  }
+
+  return sanitized;
+}
 
 /**
  * Recursively add AI-generated elements to the canvas
@@ -37,7 +334,14 @@ export function addElementsFromAI(
   }
 
   for (const element of elements) {
-    const id = addSingleElement(element, parentId);
+    // 1. Normalize semantic format to legacy format (if needed)
+    const normalizedElement = normalizeToLegacyFormat(element as SemanticElementData);
+
+    // 2. POST-PROCESS: Sanitize element data to fix AI mistakes
+    const sanitizedElement = sanitizeElementData(normalizedElement);
+
+    // 3. Add to canvas
+    const id = addSingleElement(sanitizedElement, parentId);
     if (id) {
       createdIds.push(id);
     }
@@ -82,12 +386,13 @@ function addSingleElement(
       const parentStyles = parent.styles;
       parentHasAutoLayout = parentStyles.display === 'flex' || parentStyles.display === 'grid';
       parentFlexDirection = (parentStyles.flexDirection as 'row' | 'column') || 'column';
-      console.log(`[AddElementsFromAI] Parent ${parent.name} has auto-layout: ${parentHasAutoLayout}, direction: ${parentFlexDirection}`);
+      console.log(`[AddElementsFromAI] Parent "${parent.name}" (${parent.type}) display=${parentStyles.display}, hasAutoLayout=${parentHasAutoLayout}, dir=${parentFlexDirection}`);
     }
   } else {
     // If no parentId, we're adding to page root which has auto-layout
     parentHasAutoLayout = true;
     parentFlexDirection = 'column';
+    console.log('[AddElementsFromAI] No parentId, assuming page root with auto-layout');
   }
 
   // Calculate position (if no parentId, center in viewport)
@@ -106,35 +411,60 @@ function addSingleElement(
     store.renameElement(elementId, data.name);
   }
 
-  if (data.content) {
-    store.updateElementContent(elementId, data.content);
+  // Handle content - AI sometimes uses 'text' instead of 'content'
+  const textContent = data.content || (data as any).text;
+  if (textContent) {
+    store.updateElementContent(elementId, textContent);
   }
 
   if (data.styles) {
     const styles = convertStyles(data.styles);
 
-    // Smart resize defaults based on parent layout
-    if (parentHasAutoLayout && !styles.resizeX) {
-      if (parentFlexDirection === 'column') {
-        // In column layout: containers fill width
-        if (['section', 'frame', 'stack', 'container', 'row'].includes(elementType)) {
-          styles.resizeX = 'fill';
-        }
-      } else if (parentFlexDirection === 'row') {
-        // In row layout: cards/frames should fill equally
-        if (['frame', 'stack', 'container'].includes(elementType)) {
-          styles.resizeX = 'fill';
-        }
-      }
+    // Container types that should always fill width
+    const containerTypes = ['section', 'frame', 'stack', 'container', 'row', 'card'];
+    const isContainer = containerTypes.includes(elementType);
+
+    // RESPONSIVE LAYOUT RULES:
+    // 1. All containers fill width
+    // 2. In COLUMN layout, text elements fill width for proper alignment
+    // 3. In ROW layout, elements get flex properties
+
+    if (isContainer) {
+      styles.resizeX = 'fill';
+      console.log(`[AddElementsFromAI] Container ${elementType} "${data.name}" -> resizeX:fill`);
     }
 
-    // Row elements should always have flex display
+    // Text elements in column layout should fill width for proper text alignment
+    if (elementType === 'text' && parentFlexDirection === 'column') {
+      styles.resizeX = 'fill';
+      console.log(`[AddElementsFromAI] Text in column "${data.name}" -> resizeX:fill`);
+    }
+
+    // Row elements should always have flex display and fill
     if (elementType === 'row' || data.type === 'row') {
       if (!styles.display) styles.display = 'flex';
       if (!styles.flexDirection) styles.flexDirection = 'row';
+      if (!styles.alignItems) styles.alignItems = 'center';
+      if (!styles.gap) styles.gap = 16;
+      styles.resizeX = 'fill';
     }
 
+    // Sections are full-width flex containers
+    if (elementType === 'section') {
+      styles.display = 'flex';
+      styles.flexDirection = styles.flexDirection || 'column';
+      styles.alignItems = styles.alignItems || 'center';
+      styles.resizeX = 'fill';
+      if (!styles.minHeight) styles.minHeight = 500;
+      if (!styles.padding) styles.padding = 80;
+    }
+
+    console.log(`[AddElementsFromAI] Updating styles for ${elementId}:`, JSON.stringify(styles));
     store.updateElementStyles(elementId, styles);
+
+    // Verify the update worked
+    const updatedElement = store.getElement(elementId);
+    console.log(`[AddElementsFromAI] After update, resizeX = ${updatedElement?.styles?.resizeX}`);
 
     // Handle width/height separately (they go in element.size)
     const width = data.styles.width as number | undefined;
@@ -149,10 +479,31 @@ function addSingleElement(
         store.resizeElement(elementId, newSize);
       }
     }
-  } else if (parentHasAutoLayout && parentFlexDirection === 'column') {
-    // Even without styles, containers in column layout should fill width
-    if (['section', 'frame', 'stack', 'container'].includes(elementType)) {
-      store.updateElementStyles(elementId, { resizeX: 'fill' } as any);
+  } else {
+    // Even without styles, containers should fill width and have flex
+    const containerTypes = ['section', 'frame', 'stack', 'container', 'row', 'card'];
+    if (containerTypes.includes(elementType)) {
+      const defaultStyles: Record<string, unknown> = { resizeX: 'fill' };
+
+      if (elementType === 'section') {
+        defaultStyles.display = 'flex';
+        defaultStyles.flexDirection = 'column';
+        defaultStyles.minHeight = 400;
+      }
+      if (elementType === 'row') {
+        defaultStyles.display = 'flex';
+        defaultStyles.flexDirection = 'row';
+      }
+      if (elementType === 'card') {
+        defaultStyles.display = 'flex';
+        defaultStyles.flexDirection = 'column';
+        defaultStyles.backgroundColor = '#FFFFFF';
+        defaultStyles.borderRadius = 12;
+        defaultStyles.padding = 16;
+      }
+
+      store.updateElementStyles(elementId, defaultStyles as any);
+      console.log(`[AddElementsFromAI] Applied default styles to ${elementType} "${data.name}"`);
     }
   }
 
@@ -168,6 +519,7 @@ function addSingleElement(
     // CRITICAL: If parent has auto-layout, set positionType to 'relative' so element participates in flex flow
     if (parentHasAutoLayout) {
       updates.positionType = 'relative';
+      console.log(`[AddElementsFromAI] Setting positionType=relative for ${data.name} (parent has auto-layout)`);
     }
 
     // Direct element update via store
@@ -209,12 +561,14 @@ function addSingleElement(
  */
 function mapElementType(aiType: string): ElementType {
   const typeMap: Record<string, ElementType> = {
+    // Canvas native types
     frame: 'frame',
     section: 'section',
     stack: 'stack',
     grid: 'grid',
     container: 'container',
     row: 'row',
+    card: 'card',
     text: 'text',
     button: 'button',
     link: 'link',
@@ -222,80 +576,217 @@ function mapElementType(aiType: string): ElementType {
     input: 'input',
     icon: 'icon',
     video: 'video',
-    // divider maps to frame with special styling
     divider: 'frame',
+
+    // HTML-style types (AI often generates these)
+    h1: 'text',
+    h2: 'text',
+    h3: 'text',
+    h4: 'text',
+    h5: 'text',
+    h6: 'text',
+    p: 'text',
+    span: 'text',
+    heading: 'text',
+    headline: 'text',
+    subheading: 'text',
+    subheadline: 'text',
+    subtitle: 'text',
+    paragraph: 'text',
+    label: 'text',
+    caption: 'text',
+
+    // Layout types
+    div: 'frame',
+    nav: 'frame',
+    header: 'frame',
+    footer: 'frame',
+    main: 'section',
+    article: 'section',
+    aside: 'frame',
+    navigation: 'frame',
+    navbar: 'frame',
+    hero: 'section',
+
+    // Interactive
+    a: 'link',
+    anchor: 'link',
+    cta: 'button',
+
+    // Media
+    img: 'image',
+    figure: 'frame',
+    logo: 'image',
+    avatar: 'image',
   };
 
-  return typeMap[aiType] || 'frame';
+  return typeMap[aiType.toLowerCase()] || 'frame';
+}
+
+/**
+ * Parse CSS value to number (strips px, rem, em, % units)
+ * Handles compound values like "80px 20px" by taking first value
+ */
+function parseCSSValue(value: unknown): number | string | unknown {
+  if (typeof value === 'number') return value;
+  if (typeof value !== 'string') return value;
+
+  // If it's a color (starts with # or rgb), return as-is
+  if (value.startsWith('#') || value.startsWith('rgb')) return value;
+
+  // Handle compound values like "80px 20px" - take first value
+  const parts = value.trim().split(/\s+/);
+  const firstPart = parts[0];
+
+  // Try to extract numeric value with unit
+  const match = firstPart.match(/^(-?[\d.]+)(px|rem|em|%|vh|vw)?$/i);
+  if (match) {
+    const num = parseFloat(match[1]);
+    // For %, vh, vw keep as string; for px/rem/em convert to number
+    if (match[2] && ['%', 'vh', 'vw'].includes(match[2].toLowerCase())) {
+      return value; // Keep percentage/viewport units as string
+    }
+    return num;
+  }
+
+  // Return as-is if not a parseable value
+  return value;
+}
+
+/**
+ * Parse padding/margin shorthand values
+ * "80px" -> { all: 80 }
+ * "80px 20px" -> { vertical: 80, horizontal: 20 }
+ * "10px 20px 30px 40px" -> { top: 10, right: 20, bottom: 30, left: 40 }
+ */
+function parseSpacingShorthand(value: unknown): {
+  all?: number;
+  top?: number;
+  right?: number;
+  bottom?: number;
+  left?: number;
+} | null {
+  if (typeof value === 'number') return { all: value };
+  if (typeof value !== 'string') return null;
+
+  const parts = value.trim().split(/\s+/).map(p => {
+    const match = p.match(/^(-?[\d.]+)(px|rem|em)?$/i);
+    return match ? parseFloat(match[1]) : null;
+  }).filter((v): v is number => v !== null);
+
+  if (parts.length === 0) return null;
+  if (parts.length === 1) return { all: parts[0] };
+  if (parts.length === 2) return { top: parts[0], right: parts[1], bottom: parts[0], left: parts[1] };
+  if (parts.length === 4) return { top: parts[0], right: parts[1], bottom: parts[2], left: parts[3] };
+
+  return { all: parts[0] };
+}
+
+/**
+ * Convert rgba() color to hex with alpha
+ * Canvas doesn't support rgba(), convert to #rrggbbaa format
+ */
+function rgbaToHex(rgba: string): string {
+  // Check if it's already hex
+  if (rgba.startsWith('#')) return rgba;
+
+  // Parse rgba(r, g, b, a) or rgb(r, g, b)
+  const match = rgba.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)(?:,\s*([\d.]+))?\)/);
+  if (!match) return rgba; // Return as-is if not rgba
+
+  const r = parseInt(match[1]).toString(16).padStart(2, '0');
+  const g = parseInt(match[2]).toString(16).padStart(2, '0');
+  const b = parseInt(match[3]).toString(16).padStart(2, '0');
+  const a = match[4] ? Math.round(parseFloat(match[4]) * 255).toString(16).padStart(2, '0') : 'ff';
+
+  return `#${r}${g}${b}${a}`;
 }
 
 /**
  * Convert AI styles to canvas ElementStyles
+ * Handles CSS string values like "80px" -> 80
  */
 function convertStyles(aiStyles: Record<string, unknown>): Partial<ElementStyles> & { resizeX?: string; resizeY?: string } {
   const styles: Partial<ElementStyles> & { resizeX?: string; resizeY?: string } = {};
 
-  // Direct mappings (note: width/height go in element.size, not styles)
-  const directProps: (keyof ElementStyles)[] = [
-    'display',
-    'flexDirection',
-    'justifyContent',
-    'alignItems',
-    'flexWrap',
-    'gap',
-    'rowGap',
-    'columnGap',
-    'padding',
-    'paddingTop',
-    'paddingRight',
-    'paddingBottom',
-    'paddingLeft',
-    'margin',
-    'marginTop',
-    'marginRight',
-    'marginBottom',
-    'marginLeft',
-    'backgroundColor',
-    'backgroundImage',
-    'backgroundSize',
-    'backgroundPosition',
-    'color',
-    'fontSize',
-    'fontWeight',
-    'fontFamily',
-    'textAlign',
-    'lineHeight',
-    'letterSpacing',
-    'textDecoration',
-    'textTransform',
-    'borderRadius',
-    'borderTopLeftRadius',
-    'borderTopRightRadius',
-    'borderBottomLeftRadius',
-    'borderBottomRightRadius',
-    'borderWidth',
-    'borderColor',
-    'borderStyle',
-    'boxShadow',
-    'opacity',
-    'overflow',
-    'cursor',
-    'gridTemplateColumns',
-    'gridTemplateRows',
+  // Properties that should stay as strings (not converted to numbers)
+  const stringProps = [
+    'display', 'flexDirection', 'justifyContent', 'alignItems', 'flexWrap',
+    'backgroundColor', 'backgroundImage', 'backgroundSize', 'backgroundPosition',
+    'color', 'fontFamily', 'textAlign', 'textDecoration', 'textTransform',
+    'borderColor', 'borderStyle', 'boxShadow', 'overflow', 'cursor',
+    'gridTemplateColumns', 'gridTemplateRows',
   ];
 
-  for (const prop of directProps) {
+  // Properties that need numeric conversion (px values)
+  const numericProps = [
+    'gap', 'rowGap', 'columnGap',
+    'paddingTop', 'paddingRight', 'paddingBottom', 'paddingLeft',
+    'marginTop', 'marginRight', 'marginBottom', 'marginLeft',
+    'fontSize', 'fontWeight', 'lineHeight', 'letterSpacing',
+    'borderRadius', 'borderTopLeftRadius', 'borderTopRightRadius',
+    'borderBottomLeftRadius', 'borderBottomRightRadius', 'borderWidth',
+    'opacity', 'minHeight', 'maxWidth', 'minWidth',
+  ];
+
+  // Color properties that need rgba conversion
+  const colorProps = ['backgroundColor', 'color', 'borderColor'];
+
+  // Handle padding/margin shorthand (can be "80px 20px")
+  const spacingShorthandProps = ['padding', 'margin'];
+
+  // Process string props
+  for (const prop of stringProps) {
     if (aiStyles[prop] !== undefined) {
-      (styles as Record<string, unknown>)[prop] = aiStyles[prop];
+      let value = aiStyles[prop];
+      // Convert rgba to hex for color properties
+      if (colorProps.includes(prop) && typeof value === 'string') {
+        value = rgbaToHex(value);
+      }
+      (styles as Record<string, unknown>)[prop] = value;
+    }
+  }
+
+  // Process numeric props (convert "80px" to 80)
+  for (const prop of numericProps) {
+    if (aiStyles[prop] !== undefined) {
+      const parsed = parseCSSValue(aiStyles[prop]);
+      if (typeof parsed === 'number' || typeof parsed === 'string') {
+        (styles as Record<string, unknown>)[prop] = parsed;
+      }
+    }
+  }
+
+  // Process padding/margin shorthand
+  for (const prop of spacingShorthandProps) {
+    if (aiStyles[prop] !== undefined) {
+      const spacing = parseSpacingShorthand(aiStyles[prop]);
+      if (spacing) {
+        if (spacing.all !== undefined) {
+          (styles as Record<string, unknown>)[prop] = spacing.all;
+        } else {
+          // Expand shorthand to individual properties
+          if (spacing.top !== undefined) (styles as Record<string, unknown>)[`${prop}Top`] = spacing.top;
+          if (spacing.right !== undefined) (styles as Record<string, unknown>)[`${prop}Right`] = spacing.right;
+          if (spacing.bottom !== undefined) (styles as Record<string, unknown>)[`${prop}Bottom`] = spacing.bottom;
+          if (spacing.left !== undefined) (styles as Record<string, unknown>)[`${prop}Left`] = spacing.left;
+        }
+      }
     }
   }
 
   // Handle resizeX/resizeY (auto-layout sizing modes)
   if (aiStyles.resizeX !== undefined) {
-    styles.resizeX = aiStyles.resizeX as string;
+    const resizeXValue = aiStyles.resizeX as string;
+    if (resizeXValue === 'fixed' || resizeXValue === 'fill' || resizeXValue === 'hug') {
+      styles.resizeX = resizeXValue;
+    }
   }
   if (aiStyles.resizeY !== undefined) {
-    styles.resizeY = aiStyles.resizeY as string;
+    const resizeYValue = aiStyles.resizeY as string;
+    if (resizeYValue === 'fixed' || resizeYValue === 'fill' || resizeYValue === 'hug') {
+      styles.resizeY = resizeYValue;
+    }
   }
 
   return styles;

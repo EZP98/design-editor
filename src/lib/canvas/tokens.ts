@@ -70,8 +70,8 @@ export interface DesignTokens {
 
 const DEFAULT_COLORS: ColorToken[] = [
   // Brand
-  { id: 'brand-primary', name: 'Primary', value: '#8B1E2B', group: 'brand' },
-  { id: 'brand-secondary', name: 'Secondary', value: '#A83248', group: 'brand' },
+  { id: 'brand-primary', name: 'Primary', value: '#8B5CF6', group: 'brand' },
+  { id: 'brand-secondary', name: 'Secondary', value: '#A78BFA', group: 'brand' },
   { id: 'brand-accent', name: 'Accent', value: '#C94C5C', group: 'brand' },
 
   // Neutral

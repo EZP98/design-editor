@@ -52,7 +52,7 @@ const textEffects: TextEffect[] = [
     description: 'Effetto 3D lungo',
     preview: 'Aa',
     styles: {
-      textShadow: '1px 1px 0 #A83248, 2px 2px 0 #A83248, 3px 3px 0 #A83248, 4px 4px 0 #A83248, 5px 5px 0 #A83248, 6px 6px 0 #A83248',
+      textShadow: '1px 1px 0 #A78BFA, 2px 2px 0 #A78BFA, 3px 3px 0 #A78BFA, 4px 4px 0 #A78BFA, 5px 5px 0 #A78BFA, 6px 6px 0 #A78BFA',
     },
   },
   {
@@ -74,7 +74,7 @@ const textEffects: TextEffect[] = [
     description: 'Bordo sottile',
     preview: 'Aa',
     styles: {
-      WebkitTextStroke: '1px #A83248',
+      WebkitTextStroke: '1px #A78BFA',
       color: 'transparent',
     },
   },
@@ -96,7 +96,7 @@ const textEffects: TextEffect[] = [
     description: 'Testo con bordo',
     preview: 'Aa',
     styles: {
-      WebkitTextStroke: '2px #A83248',
+      WebkitTextStroke: '2px #A78BFA',
       color: '#ffffff',
     },
   },
@@ -109,7 +109,7 @@ const textEffects: TextEffect[] = [
     styles: {
       WebkitTextStroke: '4px #000000',
       color: '#ffffff',
-      textShadow: '0 0 0 4px #A83248',
+      textShadow: '0 0 0 4px #A78BFA',
     },
   },
 
@@ -175,7 +175,7 @@ const textEffects: TextEffect[] = [
     description: 'Effetto tridimensionale',
     preview: 'Aa',
     styles: {
-      textShadow: '1px 1px 0 #8B1E2B, 2px 2px 0 #8B1E2B, 3px 3px 0 #8B1E2B, 4px 4px 0 #8B1E2B, 5px 5px 0 rgba(0,0,0,0.2)',
+      textShadow: '1px 1px 0 #8B5CF6, 2px 2px 0 #8B5CF6, 3px 3px 0 #8B5CF6, 4px 4px 0 #8B5CF6, 5px 5px 0 rgba(0,0,0,0.2)',
     },
   },
   {
@@ -232,7 +232,7 @@ const textEffects: TextEffect[] = [
     description: 'Alone forte',
     preview: 'Aa',
     styles: {
-      textShadow: '0 0 5px #fff, 0 0 10px #fff, 0 0 15px #A83248, 0 0 20px #A83248, 0 0 25px #A83248',
+      textShadow: '0 0 5px #fff, 0 0 10px #fff, 0 0 15px #A78BFA, 0 0 20px #A78BFA, 0 0 25px #A78BFA',
     },
   },
 

@@ -481,7 +481,7 @@ export function StylePanel({ element, onStyleChange, onTextChange, onApplyToCode
             width: 24,
             height: 24,
             borderRadius: 4,
-            background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+            background: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -807,7 +807,7 @@ export function StylePanel({ element, onStyleChange, onTextChange, onApplyToCode
               width: '100%',
               padding: '10px 16px',
               background: hasChanges
-                ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
                 : '#333',
               border: 'none',
               borderRadius: 6,

@@ -15,10 +15,14 @@
     "@babel/generator": "^7.28.5",
     "@babel/parser": "^7.28.5",
     "@babel/types": "^7.28.5",
+    "@google/model-viewer": "^4.1.0",
     "@monaco-editor/react": "^4.7.0",
+    "@react-three/drei": "^10.7.7",
+    "@react-three/fiber": "^9.4.2",
     "@stackblitz/sdk": "^1.11.0",
     "@supabase/supabase-js": "^2.89.0",
     "@types/file-saver": "^2.0.7",
+    "@types/three": "^0.182.0",
     "@webcontainer/api": "^1.6.1",
     "ai": "^5.0.113",
     "buffer": "^6.0.3",
@@ -33,6 +37,7 @@
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
     "react-router-dom": "^7.10.1",
+    "three": "^0.182.0",
     "zustand": "^5.0.9"
   },
   "devDependencies": {

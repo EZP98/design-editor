@@ -135,7 +135,7 @@ function VariantItem({ variant, onUpdate, onDelete }: {
           cursor: 'pointer',
         }}
       >
-        <div style={{ color: '#A83248' }}>{variantIcons[variant.type]}</div>
+        <div style={{ color: '#A78BFA' }}>{variantIcons[variant.type]}</div>
         <span style={{ flex: 1, fontSize: 12, color: '#e4e4e7', fontWeight: 500 }}>{variant.name}</span>
         <span style={{ fontSize: 10, color: '#52525b', textTransform: 'capitalize' }}>{variant.type}</span>
         <button
@@ -289,7 +289,7 @@ function InteractionItem({ interaction, onUpdate, onDelete }: {
           cursor: 'pointer',
         }}
       >
-        <div style={{ color: '#A83248' }}>
+        <div style={{ color: '#A78BFA' }}>
           <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
             <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
           </svg>
@@ -401,7 +401,7 @@ function AnimationPresetSelector({ onSelect }: { onSelect: (animation: Omit<Anim
             cursor: 'pointer',
             textAlign: 'center',
           }}
-          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#A83248'}
+          onMouseEnter={(e) => e.currentTarget.style.borderColor = '#A78BFA'}
           onMouseLeave={(e) => e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)'}
         >
           {animation.name}

@@ -2,9 +2,11 @@ import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle, us
 import { useChatHistory } from '../lib/persistence/useChatHistory';
 import { ChatMessage, FileSnapshot } from '../lib/persistence/db';
 import { parseArtifacts, formatFilesForContext, ParsedArtifact } from '../lib/artifactParser';
-import { getSystemPrompt } from '../lib/prompts/system-prompt';
+import { getSystemPrompt, getDesignPromptWithIntent, getAvailableStylePresets, extractDesignIntent, getTopicColorOptions, StylePresetOption } from '../lib/prompts/system-prompt';
+import { TopicPalette } from '../lib/designSystem';
 import { addElementsFromAI, processAIDesignResponse } from '../lib/canvas/addElementsFromAI';
-import { getTemplatesForAIPrompt } from '../lib/canvas/templates/designTemplates';
+import { parseJSXToCanvas, extractJSXFromResponse } from '../lib/canvas/jsxToCanvas';
+import { generateProjectFromReactCode } from '../lib/canvas/codeGenerator';
 import { useTokensStore } from '../lib/canvas/tokens';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { useCanvasStore } from '../lib/canvas/canvasStore';
@@ -96,7 +98,7 @@ function ChatMessageItem({
   onRestore,
 }: {
   message: { id: string; role: 'user' | 'assistant'; content: string };
-  colors: typeof THEME_COLORS.dark;
+  colors: (typeof THEME_COLORS)[keyof typeof THEME_COLORS];
   isStreaming: boolean;
   onRestore: (id: string) => void;
 }) {
@@ -202,22 +204,22 @@ function ChatMessageItem({
             style={{
               background: 'rgba(255,255,255,0.05)',
               border: 'none',
-              borderRadius: 4,
+              borderRadius: 6,
               padding: '4px 8px',
               fontSize: 10,
-              color: '#71717a',
+              color: 'rgba(255,255,255,0.5)',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 4,
             }}
             onMouseEnter={e => {
-              e.currentTarget.style.background = 'rgba(168, 50, 72, 0.2)';
-              e.currentTarget.style.color = '#a78bfa';
+              e.currentTarget.style.background = 'rgba(139, 92, 246, 0.2)';
+              e.currentTarget.style.color = '#A78BFA';
             }}
             onMouseLeave={e => {
               e.currentTarget.style.background = 'rgba(255,255,255,0.05)';
-              e.currentTarget.style.color = '#71717a';
+              e.currentTarget.style.color = 'rgba(255,255,255,0.5)';
             }}
           >
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -336,13 +338,11 @@ function repairTruncatedJSON(json: string): string {
  */
 function extractSectionsFromBrokenJSON(content: string): Array<Record<string, unknown>> {
   const sections: Array<Record<string, unknown>> = [];
+  const foundHashes = new Set<string>();
 
-  // Try to find section objects by looking for "type":"section" pattern
-  const sectionPattern = /\{[^{}]*"type"\s*:\s*"section"[^{}]*(?:\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}[^{}]*)*\}/g;
-
-  // Simpler approach: find complete objects that look like sections
-  let depth = 0;
-  let start = -1;
+  // Strategy 1: Find objects that contain "type":"section" (or frame/stack) at ANY depth
+  // Use a stack to track all object start positions
+  const objectStarts: number[] = [];
   let inString = false;
   let escaped = false;
 
@@ -366,33 +366,94 @@ function extractSectionsFromBrokenJSON(content: string): Array<Record<string, un
 
     if (!inString) {
       if (char === '{') {
-        if (depth === 0) start = i;
-        depth++;
-      } else if (char === '}') {
-        depth--;
-        if (depth === 0 && start !== -1) {
-          const objStr = content.slice(start, i + 1);
-          // Check if it looks like a section
-          if (objStr.includes('"type"') && (objStr.includes('"section"') || objStr.includes('"frame"') || objStr.includes('"stack"'))) {
+        objectStarts.push(i);
+      } else if (char === '}' && objectStarts.length > 0) {
+        const start = objectStarts.pop()!;
+        const objStr = content.slice(start, i + 1);
+
+        // Check if it looks like a section/frame/stack element (but not too small)
+        if (objStr.length > 50 && objStr.includes('"type"')) {
+          const isSection = objStr.includes('"section"') || objStr.includes('"frame"') || objStr.includes('"stack"');
+          const hasStructure = objStr.includes('"name"') || objStr.includes('"children"') || objStr.includes('"styles"');
+
+          if (isSection && hasStructure) {
             try {
               const obj = JSON.parse(objStr);
+              // Verify it's a valid element
               if (obj.type && (obj.name || obj.children || obj.styles)) {
-                sections.push(obj);
+                // Deduplicate by hash
+                const hash = JSON.stringify({ name: obj.name, type: obj.type });
+                if (!foundHashes.has(hash)) {
+                  foundHashes.add(hash);
+                  sections.push(obj);
+                }
               }
             } catch {
-              // Try to repair this individual object
+              // Try to repair truncated JSON
               try {
                 const repaired = repairTruncatedJSON(objStr);
                 const obj = JSON.parse(repaired);
                 if (obj.type && (obj.name || obj.children || obj.styles)) {
-                  sections.push(obj);
+                  const hash = JSON.stringify({ name: obj.name, type: obj.type });
+                  if (!foundHashes.has(hash)) {
+                    foundHashes.add(hash);
+                    sections.push(obj);
+                  }
                 }
               } catch {
                 // Skip this object
               }
             }
           }
-          start = -1;
+        }
+      }
+    }
+  }
+
+  // Strategy 2: If no sections found, try to find the elements array and parse what we can
+  if (sections.length === 0) {
+    const elementsMatch = content.match(/"elements"\s*:\s*\[/);
+    if (elementsMatch && elementsMatch.index !== undefined) {
+      const arrayStart = elementsMatch.index + elementsMatch[0].length;
+      // Try parsing objects from the array start
+      let depth = 0;
+      let objStart = -1;
+      inString = false;
+      escaped = false;
+
+      for (let i = arrayStart; i < content.length; i++) {
+        const char = content[i];
+
+        if (escaped) { escaped = false; continue; }
+        if (char === '\\' && inString) { escaped = true; continue; }
+        if (char === '"') { inString = !inString; continue; }
+
+        if (!inString) {
+          if (char === '{') {
+            if (depth === 0) objStart = i;
+            depth++;
+          } else if (char === '}') {
+            depth--;
+            if (depth === 0 && objStart !== -1) {
+              const objStr = content.slice(objStart, i + 1);
+              try {
+                const obj = JSON.parse(objStr);
+                if (obj.type && (obj.name || obj.styles)) {
+                  const hash = JSON.stringify({ name: obj.name, type: obj.type });
+                  if (!foundHashes.has(hash)) {
+                    foundHashes.add(hash);
+                    sections.push(obj);
+                  }
+                }
+              } catch {
+                // Object incomplete, skip
+              }
+              objStart = -1;
+            }
+          } else if (char === ']' && depth === 0) {
+            // End of elements array
+            break;
+          }
         }
       }
     }
@@ -452,7 +513,7 @@ function parseDesignJSON(content: string): { elements: Array<Record<string, unkn
 }
 
 type ClaudeModel = 'claude-sonnet-4-5' | 'claude-haiku-4-5' | 'claude-opus-4-5';
-type OutputMode = 'design' | 'code';
+type OutputMode = 'design' | 'code' | 'smart';
 
 interface ClaudeModelOption {
   id: ClaudeModel;
@@ -483,6 +544,18 @@ const OUTPUT_MODES: OutputModeOption[] = [
       </svg>
     ),
     description: 'Crea elementi visivi sul canvas',
+  },
+  {
+    id: 'smart',
+    name: 'Smart',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
+      </svg>
+    ),
+    description: 'Genera React → Converti in Canvas (Best Quality)',
   },
   {
     id: 'code',
@@ -592,6 +665,11 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [outputMode, setOutputMode] = useState<OutputMode>('design');
   const [createAsNewPage, setCreateAsNewPage] = useState(false);
+  const [selectedStylePreset, setSelectedStylePreset] = useState<string>('framer-dark');
+  const [showStylePresets, setShowStylePresets] = useState(false);
+  const [detectedTopic, setDetectedTopic] = useState<string | null>(null);
+  const [selectedTopicPalette, setSelectedTopicPalette] = useState<number>(0);
+  const [showTopicPalettes, setShowTopicPalettes] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const abortControllerRef = useRef<AbortController | null>(null);
@@ -619,6 +697,20 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages]);
+
+  // Detect topic from input for palette suggestions
+  useEffect(() => {
+    if (outputMode !== 'design' || !input.trim()) {
+      setDetectedTopic(null);
+      return;
+    }
+    const intent = extractDesignIntent(input);
+    if (intent.topic !== 'general') {
+      setDetectedTopic(intent.topic);
+    } else {
+      setDetectedTopic(null);
+    }
+  }, [input, outputMode]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -662,11 +754,18 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
     // Track streamed content outside try block so it's accessible in catch
     let fullContent = '';
 
+    // STREAMING UI: Track elements added incrementally (outside try for abort handling)
+    const addedElementHashes = new Set<string>();
+    let streamingPageId: string | undefined;
+    let streamingParentId: string | undefined;
+    let totalElementsAdded = 0;
+    const addedElementNames: string[] = [];
+
     // Create abort controller and timeout outside try block
     abortControllerRef.current = new AbortController();
     const timeoutId = setTimeout(() => {
       abortControllerRef.current?.abort();
-    }, 60000); // 60 second timeout
+    }, 180000); // 180 second timeout (3 minutes for complex designs)
 
     try {
       // Build full project context for AI (only for code mode)
@@ -693,22 +792,45 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           }))
         : undefined;
 
-      // Fetch templates from Supabase for design mode
-      const templates = outputMode === 'design'
-        ? await getTemplatesForAIPrompt()
-        : undefined;
+      // Smart mode uses 'code' prompt to generate React/Tailwind
+      const promptMode = outputMode === 'smart' ? 'code' : outputMode;
 
-      const systemPrompt = getSystemPrompt({
-        mode: outputMode,
-        projectFiles: outputMode === 'code' ? projectContext : undefined,
-        designTokens: outputMode === 'design' ? {
-          colors: designTokens.colors,
-          radii: designTokens.radii,
-          spacing: designTokens.spacing,
-        } : undefined,
-        currentCanvas: currentCanvasForAI,
-        templates: templates,
-      });
+      // Use enhanced design prompt for design mode (includes style presets, components, few-shot examples)
+      // Use regular system prompt for code/smart modes
+      // In design mode: use getDesignPromptWithIntent which auto-extracts topic, colors, mood from user message
+      let systemPrompt: string;
+      if (outputMode === 'design') {
+        const intent = extractDesignIntent(messageContent);
+
+        // Get selected topic palette if available
+        let selectedPaletteObj: TopicPalette | undefined;
+        if (detectedTopic) {
+          const palettes = getTopicColorOptions(detectedTopic);
+          if (palettes.length > 0) {
+            selectedPaletteObj = palettes[selectedTopicPalette] || palettes[0];
+          }
+        }
+
+        console.log('[AIChatPanel] Design Intent Detected:', {
+          topic: intent.topic,
+          mood: intent.mood,
+          colors: selectedPaletteObj?.colors || intent.suggestedColors,
+          stylePreset: selectedStylePreset,
+          language: intent.language,
+        });
+
+        systemPrompt = getDesignPromptWithIntent(messageContent, {
+          stylePresetId: selectedStylePreset,
+          selectedPalette: selectedPaletteObj,
+        });
+      } else {
+        systemPrompt = getSystemPrompt({
+            mode: promptMode,
+            projectFiles: (outputMode === 'code' || outputMode === 'smart') ? projectContext : undefined,
+            userMessage: messageContent,
+            currentCanvas: currentCanvasForAI,
+          });
+      }
 
       // Build headers - include auth for Supabase Edge Functions
       const headers: Record<string, string> = {
@@ -732,7 +854,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
         headers,
         body: JSON.stringify({
           message: userMessage.content,
-          mode: outputMode, // Pass the mode to Edge Function
+          mode: promptMode, // Pass 'code' for smart mode, actual mode otherwise
           model: modelApiId, // Pass the selected Claude model
           systemPrompt, // Full system prompt based on mode
           projectContext: systemContext,
@@ -745,6 +867,62 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
+
+      // Helper to hash an element for deduplication
+      const hashElement = (el: Record<string, unknown>): string => {
+        return JSON.stringify({ name: el.name, type: el.type, content: el.content });
+      };
+
+      // Helper to add elements incrementally during streaming
+      const addElementsIncrementally = (elements: Record<string, unknown>[]) => {
+        if (elements.length === 0) return;
+
+        const store = useCanvasStore.getState();
+
+        // Create new page on first element if toggle is on
+        if (createAsNewPage && !streamingPageId) {
+          const pageName = (elements[0]?.name as string) || 'AI Generated';
+          streamingPageId = store.addPage();
+          if (streamingPageId) {
+            store.renamePage(streamingPageId, pageName);
+            const page = store.pages[streamingPageId];
+            if (page) {
+              store.renameElement(page.rootElementId, pageName);
+              streamingParentId = page.rootElementId;
+            }
+            store.setCurrentPage(streamingPageId);
+            console.log('[Streaming] Created new page:', pageName);
+          }
+        }
+
+        // Add only new elements (not already added)
+        for (const element of elements) {
+          const hash = hashElement(element);
+          if (!addedElementHashes.has(hash)) {
+            addedElementHashes.add(hash);
+            try {
+              const ids = addElementsFromAI([element] as any, streamingParentId);
+              if (ids.length > 0) {
+                totalElementsAdded += ids.length;
+                addedElementNames.push((element.name as string) || (element.type as string) || 'element');
+                console.log('[Streaming] Added element:', element.name || element.type, 'total:', totalElementsAdded);
+
+                // Update message to show progress
+                updateMessage(
+                  assistantMessage.id,
+                  `⏳ Generando design... ${totalElementsAdded} elementi aggiunti\n${addedElementNames.slice(-3).join(', ')}${addedElementNames.length > 3 ? '...' : ''}`
+                );
+              }
+            } catch (err) {
+              console.warn('[Streaming] Failed to add element:', err);
+            }
+          }
+        }
+      };
+
+      // Streaming loop with incremental parsing
+      let lastParseAttempt = 0;
+      const PARSE_INTERVAL = 500; // Try parsing every 500ms worth of content
 
       if (reader) {
         while (true) {
@@ -763,7 +941,36 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                 const parsed = JSON.parse(data);
                 if (parsed.text) {
                   fullContent += parsed.text;
-                  updateMessage(assistantMessage.id, fullContent);
+
+                  // In design mode, try incremental parsing periodically
+                  if (outputMode === 'design') {
+                    const now = Date.now();
+                    // Parse when we see a closing brace (likely end of element) or periodically
+                    if (parsed.text.includes('}') || now - lastParseAttempt > PARSE_INTERVAL) {
+                      lastParseAttempt = now;
+
+                      // Prepend the JSON prefix since Edge Function prefills it
+                      const contentWithPrefix = fullContent.startsWith('{')
+                        ? fullContent
+                        : '{"elements":[' + fullContent;
+
+                      // Try to extract complete sections from current content
+                      const extracted = extractSectionsFromBrokenJSON(contentWithPrefix);
+                      if (extracted.length > 0) {
+                        addElementsIncrementally(extracted);
+                      }
+                    }
+
+                    // Show clean progress message (no raw JSON)
+                    if (totalElementsAdded === 0) {
+                      // Show progress indicator based on content length
+                      const chars = fullContent.length;
+                      const dots = '.'.repeat((Math.floor(chars / 100) % 4) + 1);
+                      updateMessage(assistantMessage.id, `⏳ Generando design${dots}\n\n_${Math.round(chars / 100) * 100}+ caratteri ricevuti_`);
+                    }
+                  } else {
+                    updateMessage(assistantMessage.id, fullContent);
+                  }
                 }
               } catch (e) {
                 // Skip invalid JSON
@@ -778,15 +985,20 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
       // Handle response based on output mode
       if (outputMode === 'design') {
-        // DESIGN MODE: Parse JSON and add elements to canvas
-        console.log('[AIChatPanel] Design mode - parsing JSON response');
+        // DESIGN MODE: Final parsing for any remaining elements
+        console.log('[AIChatPanel] Design mode - final parsing, already added:', totalElementsAdded);
 
         try {
-          // Extract JSON from response (might be in ```json block or raw)
+          // The Edge Function prefills '{"elements":[' so we need to add it back
+          // if the response doesn't already start with it
           let jsonStr = fullContent.trim();
+          if (!jsonStr.startsWith('{')) {
+            jsonStr = '{"elements":[' + jsonStr;
+            console.log('[AIChatPanel] Prepended JSON prefix to response');
+          }
 
-          // Try to extract JSON from response
-          const jsonMatch = fullContent.match(/```json\s*([\s\S]*?)```/);
+          // Try to extract JSON from response (check jsonStr, not fullContent)
+          const jsonMatch = jsonStr.match(/```json\s*([\s\S]*?)```/);
           if (jsonMatch) {
             jsonStr = jsonMatch[1].trim();
           } else {
@@ -797,6 +1009,16 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               jsonStr = fullContent.slice(jsonStartIdx, jsonEndIdx + 1);
             } else if (jsonStartIdx !== -1) {
               jsonStr = fullContent.slice(jsonStartIdx);
+            } else if (totalElementsAdded > 0) {
+              // No JSON found but we already added elements during streaming - success!
+              console.log('[AIChatPanel] No final JSON but streaming added elements successfully');
+              if (createAsNewPage) setCreateAsNewPage(false);
+              const pageInfo = streamingPageId ? `\n📄 Nuova pagina creata` : '';
+              updateMessage(
+                assistantMessage.id,
+                `✅ Creati ${totalElementsAdded} elementi sul canvas:${pageInfo}\n${addedElementNames.join(', ')}`
+              );
+              return;
             } else {
               // No JSON found at all - AI returned plain text
               console.warn('[AIChatPanel] No JSON found in response, AI returned plain text');
@@ -811,7 +1033,35 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           // Use robust parser with multiple fallback strategies
           const parseResult = parseDesignJSON(jsonStr);
 
-          if (parseResult.elements.length === 0) {
+          // Add any elements not yet added during streaming
+          const newElements = parseResult.elements.filter((e: Record<string, unknown>) => {
+            const hash = hashElement(e);
+            return !addedElementHashes.has(hash) && (e.type || e.name);
+          });
+
+          if (newElements.length > 0) {
+            console.log('[AIChatPanel] Adding', newElements.length, 'remaining elements from final parse');
+
+            // If streaming didn't create a page but we need one
+            if (createAsNewPage && !streamingPageId) {
+              const pageName = (newElements[0] as Record<string, unknown>)?.name as string || 'New Page';
+              const result = processAIDesignResponse({
+                createNewPage: true,
+                pageName,
+                elements: newElements as any,
+              });
+              totalElementsAdded += result.elementIds.length;
+              newElements.forEach((e: Record<string, unknown>) => addedElementNames.push((e.name as string) || (e.type as string)));
+              streamingPageId = result.pageId;
+            } else {
+              // Add to existing page/context
+              const ids = addElementsFromAI(newElements as any, streamingParentId);
+              totalElementsAdded += ids.length;
+              newElements.forEach((e: Record<string, unknown>) => addedElementNames.push((e.name as string) || (e.type as string)));
+            }
+          }
+
+          if (totalElementsAdded === 0 && parseResult.elements.length === 0) {
             console.warn('[AIChatPanel] No valid elements extracted');
             updateMessage(
               assistantMessage.id,
@@ -820,34 +1070,30 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             return;
           }
 
-          const validElements = parseResult.elements.filter((e: Record<string, unknown>) => e && (e.type || e.name));
-          console.log('[AIChatPanel] Parsed', validElements.length, 'valid elements');
-
-          // Use createAsNewPage toggle from UI
-          const wantsNewPage = createAsNewPage;
-          const pageName = (validElements[0] as Record<string, unknown>)?.name as string || 'New Page';
-
-          const result = processAIDesignResponse({
-            createNewPage: wantsNewPage,
-            pageName,
-            elements: validElements,
-          });
-
-          console.log('[AIChatPanel] Design elements created:', result.elementIds, 'pageId:', result.pageId);
-
           // Reset the toggle after use
           if (createAsNewPage) {
             setCreateAsNewPage(false);
           }
 
           // Update message to show success
-          const elementNames = validElements.map((e: { name?: string; type: string }) => e.name || e.type).join(', ');
-          const pageInfo = result.pageId ? `\n📄 Nuova pagina: ${pageName}` : '';
+          const pageInfo = streamingPageId ? `\n📄 Nuova pagina creata` : '';
           updateMessage(
             assistantMessage.id,
-            `✅ Creati ${result.elementIds.length} elementi sul canvas:${pageInfo}\n${elementNames}`
+            `✅ Creati ${totalElementsAdded} elementi sul canvas:${pageInfo}\n${addedElementNames.join(', ')}`
           );
         } catch (parseErr) {
+          // Even on error, if we added elements during streaming, that's partial success
+          if (totalElementsAdded > 0) {
+            console.log('[AIChatPanel] Parse error but streaming added', totalElementsAdded, 'elements');
+            if (createAsNewPage) setCreateAsNewPage(false);
+            const pageInfo = streamingPageId ? `\n📄 Nuova pagina creata` : '';
+            updateMessage(
+              assistantMessage.id,
+              `⚠️ Generazione parziale: ${totalElementsAdded} elementi aggiunti${pageInfo}\n${addedElementNames.join(', ')}\n\n(La generazione potrebbe essere stata interrotta)`
+            );
+            return;
+          }
+
           console.error('[AIChatPanel] Failed to parse design JSON:', parseErr);
           console.error('[AIChatPanel] Raw response (first 1000 chars):', fullContent.substring(0, 1000));
 
@@ -856,6 +1102,109 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           updateMessage(
             assistantMessage.id,
             `⚠️ Errore parsing JSON: ${parseErr instanceof Error ? parseErr.message : 'Unknown error'}\n\n📝 Risposta AI:\n\`\`\`\n${preview}...\n\`\`\`\n\nRiprova con una richiesta più semplice.`
+          );
+        }
+      } else if (outputMode === 'smart') {
+        // SMART MODE: AI generates React/Tailwind → Live Preview + Canvas elements
+        console.log('[AIChatPanel] Smart mode - parsing React code for preview and canvas');
+
+        try {
+          // Extract JSX code blocks from response
+          const codeBlocks = extractJSXFromResponse(fullContent);
+          console.log('[AIChatPanel] Found', codeBlocks.length, 'JSX code blocks');
+
+          if (codeBlocks.length === 0) {
+            // Fallback: try to find any code block
+            const codeMatch = fullContent.match(/```(?:tsx?|jsx?)\n([\s\S]*?)```/);
+            if (codeMatch) {
+              codeBlocks.push(codeMatch[1]);
+            }
+          }
+
+          // Find the best code block (full component with export default)
+          let bestCodeBlock = codeBlocks.find(block =>
+            block.includes('export default') || block.includes('function App')
+          ) || codeBlocks[0] || '';
+
+          // If we found React code, send it to WebContainer for live preview
+          if (bestCodeBlock && onFilesUpdate) {
+            console.log('[AIChatPanel] Generating project files for WebContainer preview');
+            const projectFiles = generateProjectFromReactCode(bestCodeBlock);
+            onFilesUpdate(projectFiles);
+            console.log('[AIChatPanel] Project files sent to WebContainer:', Object.keys(projectFiles));
+          }
+
+          let allElements: any[] = [];
+          const elementNames: string[] = [];
+
+          // Parse each code block
+          for (const codeBlock of codeBlocks) {
+            const elements = parseJSXToCanvas(codeBlock);
+            console.log('[AIChatPanel] Parsed', elements.length, 'elements from code block');
+            allElements = allElements.concat(elements);
+          }
+
+          // Determine success based on what we achieved
+          const hasPreview = bestCodeBlock && onFilesUpdate;
+          const hasCanvasElements = allElements.length > 0;
+
+          if (!hasPreview && !hasCanvasElements) {
+            // Show the code as fallback
+            updateMessage(
+              assistantMessage.id,
+              `💡 Nessun elemento convertibile trovato. Ecco il codice generato:\n\n${fullContent.substring(0, 800)}${fullContent.length > 800 ? '...' : ''}`
+            );
+            return;
+          }
+
+          // Add elements to canvas (optional - preview is primary output)
+          const store = useCanvasStore.getState();
+          let pageId: string | undefined;
+          let parentId: string | undefined;
+          let canvasCount = 0;
+
+          if (hasCanvasElements) {
+            if (createAsNewPage) {
+              const pageName = (allElements[0]?.name as string) || 'AI Generated';
+              pageId = store.addPage();
+              if (pageId) {
+                store.renamePage(pageId, pageName);
+                const page = store.pages[pageId];
+                if (page) {
+                  store.renameElement(page.rootElementId, pageName);
+                  parentId = page.rootElementId;
+                }
+                store.setCurrentPage(pageId);
+              }
+              setCreateAsNewPage(false);
+            }
+
+            const ids = addElementsFromAI(allElements, parentId);
+            canvasCount = ids.length;
+            allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
+          }
+
+          // Build success message
+          const messages: string[] = [];
+          if (hasPreview) {
+            messages.push('🖥️ Live preview aggiornato');
+          }
+          if (canvasCount > 0) {
+            const pageInfo = pageId ? ' (nuova pagina)' : '';
+            messages.push(`📐 ${canvasCount} elementi canvas${pageInfo}`);
+          }
+
+          updateMessage(
+            assistantMessage.id,
+            `✅ Smart Mode:\n${messages.join('\n')}${elementNames.length > 0 ? '\n\n' + elementNames.slice(0, 5).join(', ') + (elementNames.length > 5 ? '...' : '') : ''}`
+          );
+
+        } catch (smartErr) {
+          console.error('[AIChatPanel] Smart mode error:', smartErr);
+          // Show the code as fallback
+          updateMessage(
+            assistantMessage.id,
+            `⚠️ Errore conversione: ${smartErr instanceof Error ? smartErr.message : 'Unknown'}\n\nCodice generato:\n\`\`\`tsx\n${fullContent.substring(0, 600)}...\n\`\`\``
           );
         }
       } else {
@@ -920,10 +1269,37 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
       // Don't show error if user aborted
       if (error instanceof Error && error.name === 'AbortError') {
-        // Check if it was a timeout (no content received)
-        if (fullContent.length === 0) {
+        // Check if we have partial work from streaming
+        if (totalElementsAdded > 0) {
+          // Success! We saved partial work
+          console.log('[AIChatPanel] Aborted but preserved', totalElementsAdded, 'elements');
+          if (createAsNewPage) setCreateAsNewPage(false);
+          const pageInfo = streamingPageId ? `\n📄 Nuova pagina creata` : '';
+          updateMessage(
+            assistantMessage.id,
+            `⚠️ Generazione interrotta - ${totalElementsAdded} elementi salvati${pageInfo}\n${addedElementNames.join(', ')}`
+          );
+        } else if (fullContent.length === 0) {
           updateMessage(assistantMessage.id, '⏱️ Timeout - la richiesta ha impiegato troppo tempo. Riprova.');
         } else {
+          // Try one last parse attempt to save any complete elements
+          if (outputMode === 'design') {
+            const extracted = extractSectionsFromBrokenJSON(fullContent);
+            if (extracted.length > 0) {
+              try {
+                const ids = addElementsFromAI(extracted as any);
+                if (ids.length > 0) {
+                  updateMessage(
+                    assistantMessage.id,
+                    `⚠️ Generazione interrotta - salvati ${ids.length} elementi\n${extracted.map((e: Record<string, unknown>) => e.name || e.type).join(', ')}`
+                  );
+                  return;
+                }
+              } catch (e) {
+                console.warn('[AIChatPanel] Last-ditch parse failed:', e);
+              }
+            }
+          }
           updateMessage(assistantMessage.id, fullContent + '\n\n*[Generazione interrotta]*');
         }
       } else {
@@ -1072,7 +1448,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               width: 40,
               height: 40,
               borderRadius: 10,
-              background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+              background: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -1109,11 +1485,11 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               width: 16,
               height: 16,
               border: '2px solid rgba(255, 255, 255, 0.08)',
-              borderTopColor: '#A83248',
+              borderTopColor: '#8B5CF6',
               borderRadius: '50%',
               animation: 'spin 1s linear infinite',
             }} />
-            <span style={{ color: '#71717a', fontSize: 11 }}>Thinking...</span>
+            <span style={{ color: 'rgba(255, 255, 255, 0.5)', fontSize: 11 }}>Thinking...</span>
           </div>
         )}
 
@@ -1140,7 +1516,9 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               left: 0,
               right: 0,
               marginBottom: 6,
-              background: '#1a1a1a',
+              background: 'rgba(255, 255, 255, 0.05)',
+              backdropFilter: 'blur(16px)',
+              WebkitBackdropFilter: 'blur(16px)',
               border: '1px solid rgba(255,255,255,0.1)',
               borderRadius: 12,
               overflow: 'hidden',
@@ -1167,7 +1545,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                       padding: '10px 12px',
                       cursor: 'pointer',
                       background: isSelected
-                        ? 'rgba(139, 30, 43, 0.15)'
+                        ? 'rgba(139, 92, 246, 0.15)'
                         : 'transparent',
                       borderBottom: !isLast ? '1px solid rgba(255,255,255,0.06)' : 'none',
                       transition: 'background 0.15s ease',
@@ -1188,8 +1566,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                       width: 16,
                       height: 16,
                       borderRadius: 4,
-                      border: isSelected ? 'none' : '1.5px solid #4b5563',
-                      background: isSelected ? '#8B1E2B' : 'transparent',
+                      border: isSelected ? 'none' : '1.5px solid rgba(255,255,255,0.2)',
+                      background: isSelected ? '#8B5CF6' : 'transparent',
                       display: 'flex',
                       alignItems: 'center',
                       justifyContent: 'center',
@@ -1304,10 +1682,10 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                   gap: 6,
                   padding: '5px 10px',
                   background: showModelSelector
-                    ? 'rgba(139, 30, 43, 0.2)'
+                    ? 'rgba(139, 92, 246, 0.2)'
                     : 'rgba(255,255,255,0.05)',
                   border: showModelSelector
-                    ? '1px solid rgba(139, 30, 43, 0.4)'
+                    ? '1px solid rgba(139, 92, 246, 0.4)'
                     : '1px solid rgba(255,255,255,0.08)',
                   borderRadius: 6,
                   cursor: 'pointer',
@@ -1328,11 +1706,11 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               >
                 {/* Anthropic/Claude Logo */}
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none">
-                  <path d="M17.3 3H14.1L21 21H24L17.3 3ZM6.8 3H10L13.7 13L11.4 18.6L6.8 3ZM0 21H3.2L7.7 8.4L10 14.1L6.5 21H3.3L6.8 14.1L4.5 8.4L0 21Z" fill={showModelSelector ? '#A83248' : '#9ca3af'}/>
+                  <path d="M17.3 3H14.1L21 21H24L17.3 3ZM6.8 3H10L13.7 13L11.4 18.6L6.8 3ZM0 21H3.2L7.7 8.4L10 14.1L6.5 21H3.3L6.8 14.1L4.5 8.4L0 21Z" fill={showModelSelector ? '#8B5CF6' : 'rgba(255,255,255,0.5)'}/>
                 </svg>
                 <span style={{
                   fontSize: 11,
-                  color: showModelSelector ? '#e5e5e5' : '#a1a1aa',
+                  color: showModelSelector ? 'rgba(255,255,255,0.9)' : 'rgba(255,255,255,0.6)',
                   fontWeight: 500,
                 }}>
                   {CLAUDE_MODELS.find(m => m.id === selectedModel)?.name || 'Sonnet 4.5'}
@@ -1342,7 +1720,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                   height="10"
                   viewBox="0 0 24 24"
                   fill="none"
-                  stroke={showModelSelector ? '#A83248' : '#6b7280'}
+                  stroke={showModelSelector ? '#8B5CF6' : 'rgba(255,255,255,0.4)'}
                   strokeWidth="2"
                   style={{ transform: showModelSelector ? 'rotate(180deg)' : 'none', transition: 'transform 0.15s' }}
                 >
@@ -1373,14 +1751,16 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                       padding: 6,
                       background: outputMode === mode.id
                         ? mode.id === 'design'
-                          ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                          ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
+                          : mode.id === 'smart'
+                          ? 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)'
                           : 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)'
                         : 'transparent',
                       border: 'none',
                       borderRadius: 6,
                       cursor: 'pointer',
                       transition: 'all 0.2s ease',
-                      color: outputMode === mode.id ? '#fff' : '#6b7280',
+                      color: outputMode === mode.id ? '#fff' : 'rgba(255,255,255,0.4)',
                     }}
                   >
                     {mode.icon}
@@ -1388,8 +1768,312 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                 ))}
               </div>
 
-              {/* New Page Toggle - only in design mode */}
+              {/* Style Preset Selector - only for design mode */}
               {outputMode === 'design' && (
+                <div style={{ position: 'relative' }}>
+                  {(() => {
+                    const selectedPreset = getAvailableStylePresets().find(p => p.id === selectedStylePreset);
+                    return (
+                      <button
+                        onClick={() => setShowStylePresets(!showStylePresets)}
+                        title="Seleziona stile design"
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '5px 10px',
+                          background: showStylePresets ? 'rgba(139, 92, 246, 0.15)' : 'rgba(255,255,255,0.03)',
+                          border: showStylePresets ? '1px solid rgba(139, 92, 246, 0.3)' : '1px solid rgba(255,255,255,0.08)',
+                          borderRadius: 6,
+                          cursor: 'pointer',
+                          transition: 'all 0.2s ease',
+                          color: 'rgba(255,255,255,0.8)',
+                          fontSize: 10,
+                          fontWeight: 500,
+                        }}
+                      >
+                        {/* Color dots preview */}
+                        {selectedPreset && (
+                          <div style={{ display: 'flex', gap: 2 }}>
+                            <div style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              background: selectedPreset.colors.bg,
+                              border: '1px solid rgba(255,255,255,0.2)',
+                            }} />
+                            <div style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              background: selectedPreset.colors.primary,
+                            }} />
+                          </div>
+                        )}
+                        {selectedPreset?.name || 'Style'}
+                        <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <polyline points="6 9 12 15 18 9" />
+                        </svg>
+                      </button>
+                    );
+                  })()}
+
+                  {/* Style Preset Dropdown with Color Preview */}
+                  {showStylePresets && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        bottom: '100%',
+                        left: 0,
+                        marginBottom: 4,
+                        background: '#1a1a1a',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderRadius: 10,
+                        padding: 6,
+                        minWidth: 240,
+                        maxHeight: 320,
+                        overflowY: 'auto',
+                        boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                        zIndex: 100,
+                      }}
+                    >
+                      <div style={{
+                        fontSize: 9,
+                        fontWeight: 600,
+                        color: 'rgba(255,255,255,0.4)',
+                        padding: '4px 8px',
+                        textTransform: 'uppercase',
+                        letterSpacing: 1,
+                      }}>
+                        Style Presets
+                      </div>
+                      {getAvailableStylePresets().map((preset) => (
+                        <button
+                          key={preset.id}
+                          onClick={() => {
+                            setSelectedStylePreset(preset.id);
+                            setShowStylePresets(false);
+                          }}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            width: '100%',
+                            textAlign: 'left',
+                            padding: '10px 10px',
+                            background: selectedStylePreset === preset.id
+                              ? 'rgba(139, 92, 246, 0.2)'
+                              : 'transparent',
+                            border: selectedStylePreset === preset.id
+                              ? '1px solid rgba(139, 92, 246, 0.4)'
+                              : '1px solid transparent',
+                            borderRadius: 8,
+                            cursor: 'pointer',
+                            color: selectedStylePreset === preset.id ? '#fff' : 'rgba(255,255,255,0.8)',
+                            fontSize: 11,
+                            transition: 'all 0.15s ease',
+                            marginBottom: 2,
+                          }}
+                        >
+                          {/* Color Preview Circles */}
+                          <div style={{
+                            display: 'flex',
+                            gap: 3,
+                            flexShrink: 0,
+                          }}>
+                            <div style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: '50%',
+                              background: preset.colors.bg,
+                              border: '1px solid rgba(255,255,255,0.2)',
+                            }} />
+                            <div style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: '50%',
+                              background: preset.colors.primary,
+                            }} />
+                            <div style={{
+                              width: 14,
+                              height: 14,
+                              borderRadius: '50%',
+                              background: preset.colors.accent,
+                            }} />
+                          </div>
+                          {/* Text */}
+                          <div style={{ flex: 1, minWidth: 0 }}>
+                            <div style={{ fontWeight: 600, marginBottom: 1 }}>{preset.name}</div>
+                            <div style={{
+                              fontSize: 9,
+                              opacity: 0.6,
+                              whiteSpace: 'nowrap',
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                            }}>
+                              {preset.description.slice(0, 40)}...
+                            </div>
+                          </div>
+                          {/* Selected indicator */}
+                          {selectedStylePreset === preset.id && (
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2.5">
+                              <polyline points="20 6 9 17 4 12" />
+                            </svg>
+                          )}
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* Topic Palette Selector - appears when topic is detected */}
+              {outputMode === 'design' && detectedTopic && (
+                <div style={{ position: 'relative' }}>
+                  {(() => {
+                    const palettes = getTopicColorOptions(detectedTopic);
+                    if (palettes.length === 0) return null;
+                    const selected = palettes[selectedTopicPalette] || palettes[0];
+                    return (
+                      <>
+                        <button
+                          onClick={() => setShowTopicPalettes(!showTopicPalettes)}
+                          title={`Palette ${detectedTopic}`}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 6,
+                            padding: '5px 10px',
+                            background: showTopicPalettes ? 'rgba(251, 191, 36, 0.15)' : 'rgba(251, 191, 36, 0.08)',
+                            border: '1px solid rgba(251, 191, 36, 0.3)',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            transition: 'all 0.2s ease',
+                            color: '#fbbf24',
+                            fontSize: 10,
+                            fontWeight: 500,
+                          }}
+                        >
+                          {/* Color dots */}
+                          <div style={{ display: 'flex', gap: 2 }}>
+                            <div style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              background: selected.colors.primary,
+                            }} />
+                            <div style={{
+                              width: 10,
+                              height: 10,
+                              borderRadius: '50%',
+                              background: selected.colors.secondary,
+                            }} />
+                          </div>
+                          {selected.name.split(' ')[0]}
+                          <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                            <polyline points="6 9 12 15 18 9" />
+                          </svg>
+                        </button>
+
+                        {/* Topic Palette Dropdown */}
+                        {showTopicPalettes && (
+                          <div
+                            style={{
+                              position: 'absolute',
+                              bottom: '100%',
+                              left: 0,
+                              marginBottom: 4,
+                              background: '#1a1a1a',
+                              border: '1px solid rgba(251, 191, 36, 0.2)',
+                              borderRadius: 10,
+                              padding: 6,
+                              minWidth: 200,
+                              boxShadow: '0 8px 32px rgba(0,0,0,0.6)',
+                              zIndex: 100,
+                            }}
+                          >
+                            <div style={{
+                              fontSize: 9,
+                              fontWeight: 600,
+                              color: 'rgba(251, 191, 36, 0.8)',
+                              padding: '4px 8px',
+                              textTransform: 'uppercase',
+                              letterSpacing: 1,
+                            }}>
+                              {detectedTopic} Palettes
+                            </div>
+                            {palettes.map((palette, idx) => (
+                              <button
+                                key={idx}
+                                onClick={() => {
+                                  setSelectedTopicPalette(idx);
+                                  setShowTopicPalettes(false);
+                                }}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 10,
+                                  width: '100%',
+                                  textAlign: 'left',
+                                  padding: '10px 10px',
+                                  background: selectedTopicPalette === idx
+                                    ? 'rgba(251, 191, 36, 0.15)'
+                                    : 'transparent',
+                                  border: selectedTopicPalette === idx
+                                    ? '1px solid rgba(251, 191, 36, 0.3)'
+                                    : '1px solid transparent',
+                                  borderRadius: 8,
+                                  cursor: 'pointer',
+                                  color: 'rgba(255,255,255,0.9)',
+                                  fontSize: 11,
+                                  transition: 'all 0.15s ease',
+                                  marginBottom: 2,
+                                }}
+                              >
+                                {/* Color circles */}
+                                <div style={{ display: 'flex', gap: 3 }}>
+                                  <div style={{
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: '50%',
+                                    background: palette.colors.primary,
+                                  }} />
+                                  <div style={{
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: '50%',
+                                    background: palette.colors.secondary,
+                                  }} />
+                                  <div style={{
+                                    width: 16,
+                                    height: 16,
+                                    borderRadius: '50%',
+                                    background: palette.colors.accent,
+                                  }} />
+                                </div>
+                                <div style={{ flex: 1 }}>
+                                  <div style={{ fontWeight: 600 }}>{palette.name}</div>
+                                  <div style={{ fontSize: 9, opacity: 0.6 }}>
+                                    {palette.mood.slice(0, 2).join(', ')}
+                                  </div>
+                                </div>
+                                {selectedTopicPalette === idx && (
+                                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" strokeWidth="2.5">
+                                    <polyline points="20 6 9 17 4 12" />
+                                  </svg>
+                                )}
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </>
+                    );
+                  })()}
+                </div>
+              )}
+
+              {/* New Page Toggle - for design and smart modes */}
+              {(outputMode === 'design' || outputMode === 'smart') && (
                 <button
                   onClick={() => setCreateAsNewPage(!createAsNewPage)}
                   title={createAsNewPage ? 'Crea come nuova pagina' : 'Aggiungi alla pagina corrente'}
@@ -1452,14 +2136,15 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                   borderRadius: 8,
                   border: 'none',
                   background: input.trim()
-                    ? '#8B1E2B'
+                    ? '#8B5CF6'
                     : 'rgba(255, 255, 255, 0.08)',
-                  color: input.trim() ? '#fff' : '#52525b',
+                  color: input.trim() ? '#fff' : 'rgba(255,255,255,0.3)',
                   cursor: input.trim() ? 'pointer' : 'not-allowed',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
                   transition: 'all 0.15s',
+                  boxShadow: input.trim() ? '0 0 20px rgba(139, 92, 246, 0.4)' : 'none',
                 }}
               >
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">

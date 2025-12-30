@@ -68,8 +68,8 @@ export async function fetchDesignTemplates(
 /**
  * Get templates for AI prompt based on context
  *
- * Strategy: Fetch premium templates (Hanzo) with variety of types
- * to give the AI rich examples of hero, services, pricing, footer
+ * Strategy: Select diverse templates from ALL sources (not just Hanzo)
+ * to give the AI varied, high-quality examples across different styles
  */
 export async function getTemplatesForAIPrompt(
   context?: {
@@ -83,45 +83,81 @@ export async function getTemplatesForAIPrompt(
   }
 
   try {
-    // Fetch premium templates (Hanzo series) - these are the richest examples
-    // Order by name descending to get Hanzo templates first (they start with "Hanzo")
     const { data: allTemplates, error } = await supabase
       .from('design_templates')
-      .select('*')
-      .order('name', { ascending: true });
+      .select('*');
 
-    if (error || !allTemplates) {
+    if (error || !allTemplates || allTemplates.length === 0) {
       console.error('[DesignTemplates] Fetch error:', error);
       return [];
     }
 
-    // Prioritize Hanzo templates (premium/rich) and get variety of types
-    const hanzoTemplates = allTemplates.filter(t => t.name.startsWith('Hanzo'));
-    const otherTemplates = allTemplates.filter(t => !t.name.startsWith('Hanzo'));
+    // Shuffle array for randomness (Fisher-Yates)
+    const shuffled = [...allTemplates];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
 
-    // Get one of each type from Hanzo, then fill with others
-    const selectedTypes = new Set<string>();
+    // If preferred style is specified, prioritize matching templates
+    let candidates = shuffled;
+    if (context?.preferredStyle) {
+      const styleMatches = shuffled.filter(t =>
+        t.style === context.preferredStyle ||
+        t.tags?.includes(context.preferredStyle)
+      );
+      const others = shuffled.filter(t =>
+        t.style !== context.preferredStyle &&
+        !t.tags?.includes(context.preferredStyle)
+      );
+      // Put matching styles first, but still include variety
+      candidates = [...styleMatches, ...others];
+    }
+
+    // Select templates ensuring variety of types and sources
     const result: DesignTemplate[] = [];
+    const selectedTypes = new Set<string>();
+    const selectedSources = new Set<string>(); // Track source (Hanzo, Adele, Ezio, etc.)
 
-    // First, add all Hanzo templates (they cover hero, services, pricing, footer)
-    for (const t of hanzoTemplates) {
-      if (!selectedTypes.has(t.type)) {
+    // Helper to get source from template name
+    const getSource = (name: string): string => {
+      if (name.startsWith('Hanzo')) return 'Hanzo';
+      if (name.startsWith('Adele') || name.startsWith('ALF')) return 'Adele';
+      if (name.includes('Ezio') || name.includes('Portfolio Split')) return 'Ezio';
+      if (name.includes('Artemis')) return 'Artemis';
+      if (name.includes('Dark Portfolio')) return 'Dark';
+      if (name.includes('Cocktail')) return 'Cocktail';
+      return 'Other';
+    };
+
+    // First pass: get diverse types AND sources
+    for (const t of candidates) {
+      if (result.length >= 6) break;
+      const source = getSource(t.name);
+
+      // Prefer templates that add new type OR new source
+      if (!selectedTypes.has(t.type) || !selectedSources.has(source)) {
+        // But don't over-represent any single source (max 2 per source)
+        const sourceCount = result.filter(r => getSource(r.name) === source).length;
+        if (sourceCount < 2) {
+          result.push(t);
+          selectedTypes.add(t.type);
+          selectedSources.add(source);
+        }
+      }
+    }
+
+    // Second pass: fill up to 6 with any remaining variety
+    for (const t of candidates) {
+      if (result.length >= 6) break;
+      if (!result.includes(t) && !selectedTypes.has(t.type)) {
         result.push(t);
         selectedTypes.add(t.type);
       }
     }
 
-    // Fill up to 5 templates with variety from others
-    for (const t of otherTemplates) {
-      if (result.length >= 5) break;
-      if (!selectedTypes.has(t.type)) {
-        result.push(t);
-        selectedTypes.add(t.type);
-      }
-    }
-
-    console.log(`[DesignTemplates] Selected ${result.length} templates for AI:`,
-      result.map(t => `${t.name} (${t.type})`));
+    console.log(`[DesignTemplates] Selected ${result.length} templates from ${selectedSources.size} sources:`,
+      result.map(t => `${t.name} (${t.type}, ${t.style})`));
 
     return result;
   } catch (err) {

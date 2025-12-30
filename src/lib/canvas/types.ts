@@ -23,7 +23,10 @@ export type ElementType =
   // Layout elements
   | 'section'
   | 'container'
-  | 'row';
+  | 'row'
+  | 'card'
+  // 3D elements
+  | 'model3d';
 
 export interface Position {
   x: number;
@@ -215,6 +218,23 @@ export interface CanvasElement {
   muted?: boolean;
   controls?: boolean;
 
+  // For 3D models
+  modelSrc?: string;           // URL to GLB/GLTF file
+  modelPoster?: string;        // Poster image while loading
+  cameraOrbit?: string;        // e.g., "45deg 55deg 2m"
+  cameraTarget?: string;       // e.g., "0m 0m 0m"
+  autoRotate?: boolean;        // Auto-rotate model
+  autoRotateDelay?: number;    // Delay before auto-rotate starts (ms)
+  environmentImage?: string;   // Environment lighting (neutral, legacy, etc.)
+  shadowIntensity?: number;    // Shadow intensity 0-1
+  exposure?: number;           // Exposure 0-2
+  modelScale?: string;         // Scale override
+
+  // 3D Canvas positioning (used in 3D editor mode)
+  position3d?: [number, number, number];  // X, Y, Z position in 3D space
+  rotation3d?: [number, number, number];  // X, Y, Z rotation in radians
+  scale3d?: [number, number, number];     // X, Y, Z scale
+
   // For icons
   iconName?: string;
   iconSize?: number;
@@ -281,7 +301,7 @@ export interface CanvasSettings {
 
 export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
   canvasBackground: '#0a0808',
-  selectionColor: '#8B1E2B',
+  selectionColor: '#8B5CF6',
   showGrid: true,
   gridSize: 20,
   editorTheme: 'dark',
@@ -290,30 +310,35 @@ export const DEFAULT_CANVAS_SETTINGS: CanvasSettings = {
 // Theme color definitions
 export const THEME_COLORS = {
   dark: {
-    // Editor UI
-    editorBg: '#0a0808',
-    sidebarBg: '#141414',
-    panelBg: '#1a1a1a',
+    // Editor UI - ReactBits Dark Glassmorphism
+    editorBg: '#09090b',
+    sidebarBg: 'rgba(255, 255, 255, 0.02)',
+    panelBg: 'rgba(255, 255, 255, 0.03)',
     borderColor: 'rgba(255, 255, 255, 0.08)',
     borderColorStrong: 'rgba(255, 255, 255, 0.12)',
     textPrimary: '#ffffff',
-    textSecondary: '#a1a1aa',
-    textMuted: '#71717a',
-    textDimmed: '#52525b',
+    textSecondary: 'rgba(255, 255, 255, 0.7)',
+    textMuted: 'rgba(255, 255, 255, 0.5)',
+    textDimmed: 'rgba(255, 255, 255, 0.3)',
     // Canvas
-    canvasBg: '#0a0808',
-    canvasGrid: 'rgba(255, 255, 255, 0.04)',
-    // Accent
-    accent: '#8B1E2B',
-    accentLight: 'rgba(139, 30, 43, 0.15)',
-    accentMedium: 'rgba(139, 30, 43, 0.3)',
-    // Interactive
-    hoverBg: 'rgba(255, 255, 255, 0.06)',
-    activeBg: 'rgba(255, 255, 255, 0.1)',
-    inputBg: 'rgba(0, 0, 0, 0.3)',
+    canvasBg: '#09090b',
+    canvasGrid: 'rgba(255, 255, 255, 0.03)',
+    // Accent - Purple (ReactBits style)
+    accent: '#8B5CF6',
+    accentLight: 'rgba(139, 92, 246, 0.15)',
+    accentMedium: 'rgba(139, 92, 246, 0.3)',
+    accentHover: '#7C3AED',
+    // Interactive - Glassmorphism
+    hoverBg: 'rgba(255, 255, 255, 0.05)',
+    activeBg: 'rgba(255, 255, 255, 0.08)',
+    inputBg: 'rgba(255, 255, 255, 0.05)',
     // Toolbar
-    toolbarBg: 'rgba(20, 20, 20, 0.98)',
-    toolbarBorder: 'rgba(255, 255, 255, 0.1)',
+    toolbarBg: 'rgba(9, 9, 11, 0.95)',
+    toolbarBorder: 'rgba(255, 255, 255, 0.08)',
+    // Glass effects
+    glassBg: 'rgba(255, 255, 255, 0.05)',
+    glassHover: 'rgba(255, 255, 255, 0.08)',
+    glassBorder: 'rgba(255, 255, 255, 0.1)',
   },
   light: {
     // Editor UI
@@ -329,10 +354,11 @@ export const THEME_COLORS = {
     // Canvas
     canvasBg: '#f5f5f5',
     canvasGrid: 'rgba(0, 0, 0, 0.04)',
-    // Accent
-    accent: '#8B1E2B',
-    accentLight: 'rgba(139, 30, 43, 0.08)',
-    accentMedium: 'rgba(139, 30, 43, 0.15)',
+    // Accent - Purple
+    accent: '#8B5CF6',
+    accentLight: 'rgba(139, 92, 246, 0.08)',
+    accentMedium: 'rgba(139, 92, 246, 0.15)',
+    accentHover: '#7C3AED',
     // Interactive
     hoverBg: 'rgba(0, 0, 0, 0.03)',
     activeBg: 'rgba(0, 0, 0, 0.06)',
@@ -340,6 +366,10 @@ export const THEME_COLORS = {
     // Toolbar
     toolbarBg: 'rgba(255, 255, 255, 0.98)',
     toolbarBorder: 'rgba(0, 0, 0, 0.08)',
+    // Glass effects (subtle for light theme)
+    glassBg: 'rgba(0, 0, 0, 0.02)',
+    glassHover: 'rgba(0, 0, 0, 0.04)',
+    glassBorder: 'rgba(0, 0, 0, 0.08)',
   },
 } as const;
 
@@ -430,7 +460,7 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
     size: { width: 120, height: 44 },
     content: 'Button',
     styles: {
-      backgroundColor: '#8B1E2B',
+      backgroundColor: '#8B5CF6',
       color: '#ffffff',
       fontSize: 14,
       fontWeight: 500,
@@ -469,7 +499,7 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
     href: '#',
     target: '_self',
     styles: {
-      color: '#8B1E2B',
+      color: '#8B5CF6',
       fontSize: 14,
       textDecoration: 'underline',
       cursor: 'pointer',
@@ -482,7 +512,7 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
     iconName: 'star',
     iconSize: 24,
     styles: {
-      color: '#8B1E2B',
+      color: '#8B5CF6',
     },
   },
   video: {
@@ -529,6 +559,36 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
       alignItems: 'center',
       gap: 16,
       padding: 16,
+    },
+  },
+  card: {
+    size: { width: 300, height: 200 },
+    styles: {
+      display: 'flex',
+      flexDirection: 'column',
+      padding: 16,
+      gap: 12,
+      backgroundColor: '#ffffff',
+      borderRadius: 12,
+      borderWidth: 1,
+      borderColor: '#e5e7eb',
+      borderStyle: 'solid',
+    },
+  },
+  // 3D Model element
+  model3d: {
+    size: { width: 400, height: 300 },
+    modelSrc: '',
+    autoRotate: true,
+    autoRotateDelay: 3000,
+    environmentImage: 'neutral',
+    shadowIntensity: 1,
+    exposure: 1,
+    cameraOrbit: '0deg 75deg 105%',
+    styles: {
+      borderRadius: 12,
+      overflow: 'hidden',
+      backgroundColor: '#18181b',
     },
   },
 };

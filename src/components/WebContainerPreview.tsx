@@ -306,7 +306,7 @@ const StatusDisplay: React.FC<StatusDisplayProps> = ({
           borderRadius: 16,
           background: isError
             ? 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)'
-            : 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+            : 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',

@@ -182,7 +182,7 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
           max={max}
           value={value}
           onChange={(e) => handleStyleChange(property, `${e.target.value}${unit}`)}
-          style={{ flex: 1, accentColor: '#A83248' }}
+          style={{ flex: 1, accentColor: '#A78BFA' }}
         />
         <input
           type="number"
@@ -360,7 +360,7 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
               padding: '10px',
               background: activeSection === tab ? 'rgba(168, 50, 72, 0.1)' : 'transparent',
               border: 'none',
-              borderBottom: activeSection === tab ? '2px solid #A83248' : '2px solid transparent',
+              borderBottom: activeSection === tab ? '2px solid #A78BFA' : '2px solid transparent',
               color: activeSection === tab ? '#a78bfa' : '#71717a',
               fontSize: 11,
               fontWeight: 500,
@@ -620,7 +620,7 @@ const VisualPropsPanel: React.FC<VisualPropsPanelProps> = ({
             style={{
               width: '100%',
               padding: '12px',
-              background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+              background: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
               border: 'none',
               borderRadius: 8,
               color: '#fff',

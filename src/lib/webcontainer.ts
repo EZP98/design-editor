@@ -492,7 +492,7 @@ export function Editable({ id, component: Component, props, displayName, childre
     style: {
       position: 'relative',
       cursor: 'pointer',
-      outline: isSelected ? '2px solid #8B1E2B' : isHovered ? '2px solid #93c5fd' : 'none',
+      outline: isSelected ? '2px solid #8B5CF6' : isHovered ? '2px solid #93c5fd' : 'none',
       outlineOffset: '2px',
     },
   }, [
@@ -503,7 +503,7 @@ export function Editable({ id, component: Component, props, displayName, childre
         position: 'absolute',
         top: -24,
         left: 0,
-        background: '#8B1E2B',
+        background: '#8B5CF6',
         color: 'white',
         padding: '2px 8px',
         fontSize: 11,

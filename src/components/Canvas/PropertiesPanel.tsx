@@ -317,8 +317,8 @@ function rgbToHsl(r: number, g: number, b: number): { h: number; s: number; l: n
 
 // Preset color swatches
 const COLOR_PRESETS = [
-  '#000000', '#ffffff', '#f43f5e', '#ec4899', '#a855f7', '#A83248',
-  '#8B1E2B', '#8B1E2B', '#0ea5e9', '#14b8a6', '#22c55e', '#84cc16',
+  '#000000', '#ffffff', '#f43f5e', '#ec4899', '#a855f7', '#8B5CF6',
+  '#7C3AED', '#A78BFA', '#0ea5e9', '#14b8a6', '#22c55e', '#84cc16',
   '#eab308', '#f97316', '#ef4444', '#78716c', '#64748b', '#6b7280',
 ];
 
@@ -494,7 +494,7 @@ const ColorInput = memo(function ColorInput({ value, onChange, showOpacity = fal
               {[
                 { label: 'R', value: rgb.r, color: '#ef4444' },
                 { label: 'G', value: rgb.g, color: '#22c55e' },
-                { label: 'B', value: rgb.b, color: '#8B1E2B' },
+                { label: 'B', value: rgb.b, color: '#8B5CF6' },
               ].map(({ label, value: v, color }) => (
                 <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                   <span style={{ width: 14, fontSize: 10, color: colors.textDimmed, fontWeight: 600 }}>{label}</span>
@@ -644,7 +644,7 @@ const ColorInput = memo(function ColorInput({ value, onChange, showOpacity = fal
                     width: '100%',
                     aspectRatio: '1',
                     background: preset,
-                    border: colorValue.toLowerCase() === preset.toLowerCase() ? '2px solid #A83248' : '1px solid rgba(255, 255, 255, 0.08)',
+                    border: colorValue.toLowerCase() === preset.toLowerCase() ? '2px solid #A78BFA' : '1px solid rgba(255, 255, 255, 0.08)',
                     borderRadius: 4,
                     cursor: 'pointer',
                     transition: 'transform 0.1s',
@@ -1045,7 +1045,7 @@ export function PropertiesPanel() {
             marginBottom: 8,
           }}
         >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A83248" strokeWidth="2">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="2">
             {activeBreakpointId === 'tablet' ? (
               <>
                 <rect x="4" y="2" width="16" height="20" rx="2" />
@@ -1059,7 +1059,7 @@ export function PropertiesPanel() {
             )}
           </svg>
           <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#A83248', textTransform: 'capitalize' }}>
+            <div style={{ fontSize: 11, fontWeight: 600, color: '#A78BFA', textTransform: 'capitalize' }}>
               {activeBreakpointId} override
             </div>
             <div style={{ fontSize: 10, color: '#71717a' }}>
@@ -1404,7 +1404,7 @@ export function PropertiesPanel() {
       </Section>
 
       {/* Auto Layout (Figma-style) */}
-      {(selectedElement.type === 'frame' || selectedElement.type === 'stack' || selectedElement.type === 'grid' || selectedElement.type === 'page' || selectedElement.type === 'container' || selectedElement.type === 'section' || selectedElement.type === 'row') && (() => {
+      {(selectedElement.type === 'frame' || selectedElement.type === 'stack' || selectedElement.type === 'grid' || selectedElement.type === 'page' || selectedElement.type === 'container' || selectedElement.type === 'section' || selectedElement.type === 'row' || selectedElement.type === 'card') && (() => {
         const isAutoLayoutEnabled = styles.display === 'flex' || styles.display === 'grid';
         const isVertical = styles.flexDirection === 'column' || styles.flexDirection === 'column-reverse';
         const isGrid = styles.display === 'grid';
@@ -1820,8 +1820,8 @@ export function PropertiesPanel() {
                 value={(styles as any).gradientAngle || 90}
                 onChange={(v) => {
                   const angle = parseInt(v) || 90;
-                  const color1 = (styles as any).gradientColor1 || '#A83248';
-                  const color2 = (styles as any).gradientColor2 || '#8B1E2B';
+                  const color1 = (styles as any).gradientColor1 || '#A78BFA';
+                  const color2 = (styles as any).gradientColor2 || '#8B5CF6';
                   updateStyle('backgroundImage', `linear-gradient(${angle}deg, ${color1}, ${color2})`);
                   updateStyle('gradientAngle' as any, angle);
                 }}
@@ -1835,10 +1835,10 @@ export function PropertiesPanel() {
                   <div style={{ fontSize: 10, color: '#52525b', marginBottom: 4 }}>Start</div>
                   <input
                     type="color"
-                    value={(styles as any).gradientColor1 || '#A83248'}
+                    value={(styles as any).gradientColor1 || '#A78BFA'}
                     onChange={(e) => {
                       const color1 = e.target.value;
-                      const color2 = (styles as any).gradientColor2 || '#8B1E2B';
+                      const color2 = (styles as any).gradientColor2 || '#8B5CF6';
                       const angle = (styles as any).gradientAngle || 90;
                       updateStyle('backgroundImage', `linear-gradient(${angle}deg, ${color1}, ${color2})`);
                       updateStyle('gradientColor1' as any, color1);
@@ -1850,9 +1850,9 @@ export function PropertiesPanel() {
                   <div style={{ fontSize: 10, color: '#52525b', marginBottom: 4 }}>End</div>
                   <input
                     type="color"
-                    value={(styles as any).gradientColor2 || '#8B1E2B'}
+                    value={(styles as any).gradientColor2 || '#8B5CF6'}
                     onChange={(e) => {
-                      const color1 = (styles as any).gradientColor1 || '#A83248';
+                      const color1 = (styles as any).gradientColor1 || '#A78BFA';
                       const color2 = e.target.value;
                       const angle = (styles as any).gradientAngle || 90;
                       updateStyle('backgroundImage', `linear-gradient(${angle}deg, ${color1}, ${color2})`);
@@ -1867,7 +1867,7 @@ export function PropertiesPanel() {
                 style={{
                   height: 24,
                   borderRadius: 6,
-                  background: `linear-gradient(${(styles as any).gradientAngle || 90}deg, ${(styles as any).gradientColor1 || '#A83248'}, ${(styles as any).gradientColor2 || '#8B1E2B'})`,
+                  background: `linear-gradient(${(styles as any).gradientAngle || 90}deg, ${(styles as any).gradientColor1 || '#A78BFA'}, ${(styles as any).gradientColor2 || '#8B5CF6'})`,
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                 }}
               />
@@ -1886,8 +1886,8 @@ export function PropertiesPanel() {
                 ]}
                 onChange={(v) => {
                   const shape = v;
-                  const color1 = (styles as any).gradientColor1 || '#A83248';
-                  const color2 = (styles as any).gradientColor2 || '#8B1E2B';
+                  const color1 = (styles as any).gradientColor1 || '#A78BFA';
+                  const color2 = (styles as any).gradientColor2 || '#8B5CF6';
                   updateStyle('backgroundImage', `radial-gradient(${shape}, ${color1}, ${color2})`);
                   updateStyle('gradientShape' as any, shape);
                 }}
@@ -1897,10 +1897,10 @@ export function PropertiesPanel() {
                   <div style={{ fontSize: 10, color: '#52525b', marginBottom: 4 }}>Center</div>
                   <input
                     type="color"
-                    value={(styles as any).gradientColor1 || '#A83248'}
+                    value={(styles as any).gradientColor1 || '#A78BFA'}
                     onChange={(e) => {
                       const color1 = e.target.value;
-                      const color2 = (styles as any).gradientColor2 || '#8B1E2B';
+                      const color2 = (styles as any).gradientColor2 || '#8B5CF6';
                       const shape = (styles as any).gradientShape || 'circle';
                       updateStyle('backgroundImage', `radial-gradient(${shape}, ${color1}, ${color2})`);
                       updateStyle('gradientColor1' as any, color1);
@@ -1912,9 +1912,9 @@ export function PropertiesPanel() {
                   <div style={{ fontSize: 10, color: '#52525b', marginBottom: 4 }}>Edge</div>
                   <input
                     type="color"
-                    value={(styles as any).gradientColor2 || '#8B1E2B'}
+                    value={(styles as any).gradientColor2 || '#8B5CF6'}
                     onChange={(e) => {
-                      const color1 = (styles as any).gradientColor1 || '#A83248';
+                      const color1 = (styles as any).gradientColor1 || '#A78BFA';
                       const color2 = e.target.value;
                       const shape = (styles as any).gradientShape || 'circle';
                       updateStyle('backgroundImage', `radial-gradient(${shape}, ${color1}, ${color2})`);
@@ -1929,7 +1929,7 @@ export function PropertiesPanel() {
                 style={{
                   height: 40,
                   borderRadius: 6,
-                  background: `radial-gradient(${(styles as any).gradientShape || 'circle'}, ${(styles as any).gradientColor1 || '#A83248'}, ${(styles as any).gradientColor2 || '#8B1E2B'})`,
+                  background: `radial-gradient(${(styles as any).gradientShape || 'circle'}, ${(styles as any).gradientColor1 || '#A78BFA'}, ${(styles as any).gradientColor2 || '#8B5CF6'})`,
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                 }}
               />
@@ -1944,8 +1944,8 @@ export function PropertiesPanel() {
                 value={(styles as any).gradientAngle || 0}
                 onChange={(v) => {
                   const angle = parseInt(v) || 0;
-                  const color1 = (styles as any).gradientColor1 || '#A83248';
-                  const color2 = (styles as any).gradientColor2 || '#8B1E2B';
+                  const color1 = (styles as any).gradientColor1 || '#A78BFA';
+                  const color2 = (styles as any).gradientColor2 || '#8B5CF6';
                   updateStyle('backgroundImage', `conic-gradient(from ${angle}deg, ${color1}, ${color2}, ${color1})`);
                   updateStyle('gradientAngle' as any, angle);
                 }}
@@ -1959,10 +1959,10 @@ export function PropertiesPanel() {
                   <div style={{ fontSize: 10, color: '#52525b', marginBottom: 4 }}>Color 1</div>
                   <input
                     type="color"
-                    value={(styles as any).gradientColor1 || '#A83248'}
+                    value={(styles as any).gradientColor1 || '#A78BFA'}
                     onChange={(e) => {
                       const color1 = e.target.value;
-                      const color2 = (styles as any).gradientColor2 || '#8B1E2B';
+                      const color2 = (styles as any).gradientColor2 || '#8B5CF6';
                       const angle = (styles as any).gradientAngle || 0;
                       updateStyle('backgroundImage', `conic-gradient(from ${angle}deg, ${color1}, ${color2}, ${color1})`);
                       updateStyle('gradientColor1' as any, color1);
@@ -1974,9 +1974,9 @@ export function PropertiesPanel() {
                   <div style={{ fontSize: 10, color: '#52525b', marginBottom: 4 }}>Color 2</div>
                   <input
                     type="color"
-                    value={(styles as any).gradientColor2 || '#8B1E2B'}
+                    value={(styles as any).gradientColor2 || '#8B5CF6'}
                     onChange={(e) => {
-                      const color1 = (styles as any).gradientColor1 || '#A83248';
+                      const color1 = (styles as any).gradientColor1 || '#A78BFA';
                       const color2 = e.target.value;
                       const angle = (styles as any).gradientAngle || 0;
                       updateStyle('backgroundImage', `conic-gradient(from ${angle}deg, ${color1}, ${color2}, ${color1})`);
@@ -1991,7 +1991,7 @@ export function PropertiesPanel() {
                 style={{
                   height: 40,
                   borderRadius: 6,
-                  background: `conic-gradient(from ${(styles as any).gradientAngle || 0}deg, ${(styles as any).gradientColor1 || '#A83248'}, ${(styles as any).gradientColor2 || '#8B1E2B'}, ${(styles as any).gradientColor1 || '#A83248'})`,
+                  background: `conic-gradient(from ${(styles as any).gradientAngle || 0}deg, ${(styles as any).gradientColor1 || '#A78BFA'}, ${(styles as any).gradientColor2 || '#8B5CF6'}, ${(styles as any).gradientColor1 || '#A78BFA'})`,
                   border: '1px solid rgba(255, 255, 255, 0.08)',
                 }}
               />
@@ -2798,7 +2798,7 @@ export function PropertiesPanel() {
                   style={{
                     flex: 1,
                     padding: '6px 8px',
-                    background: (styles as any).transform?.includes('scaleX(-1)') ? '#8B1E2B' : '#27272a',
+                    background: (styles as any).transform?.includes('scaleX(-1)') ? '#8B5CF6' : '#27272a',
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: 4,
                     color: '#e4e4e7',
@@ -2828,7 +2828,7 @@ export function PropertiesPanel() {
                   style={{
                     flex: 1,
                     padding: '6px 8px',
-                    background: (styles as any).transform?.includes('scaleY(-1)') ? '#8B1E2B' : '#27272a',
+                    background: (styles as any).transform?.includes('scaleY(-1)') ? '#8B5CF6' : '#27272a',
                     border: '1px solid rgba(255,255,255,0.1)',
                     borderRadius: 4,
                     color: '#e4e4e7',

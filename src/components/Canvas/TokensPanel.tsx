@@ -87,7 +87,7 @@ function ColorTokenItem({ token, onEdit, onDelete }: {
           compact
         />
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={handleSave} style={{ flex: 1, padding: '6px 12px', background: '#8B1E2B', border: 'none', borderRadius: 4, fontSize: 11, color: '#fff', cursor: 'pointer' }}>Save</button>
+          <button onClick={handleSave} style={{ flex: 1, padding: '6px 12px', background: '#8B5CF6', border: 'none', borderRadius: 4, fontSize: 11, color: '#fff', cursor: 'pointer' }}>Save</button>
           <button onClick={() => setIsEditing(false)} style={{ flex: 1, padding: '6px 12px', background: 'rgba(255, 255, 255, 0.08)', border: 'none', borderRadius: 4, fontSize: 11, color: '#a1a1aa', cursor: 'pointer' }}>Cancel</button>
         </div>
       </div>
@@ -184,7 +184,7 @@ function TypographyTokenItem({ token, onEdit, onDelete }: {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button onClick={handleSave} style={{ flex: 1, padding: '6px 12px', background: '#8B1E2B', border: 'none', borderRadius: 4, fontSize: 11, color: '#fff', cursor: 'pointer' }}>Save</button>
+          <button onClick={handleSave} style={{ flex: 1, padding: '6px 12px', background: '#8B5CF6', border: 'none', borderRadius: 4, fontSize: 11, color: '#fff', cursor: 'pointer' }}>Save</button>
           <button onClick={() => setIsEditing(false)} style={{ flex: 1, padding: '6px 12px', background: 'rgba(255, 255, 255, 0.08)', border: 'none', borderRadius: 4, fontSize: 11, color: '#a1a1aa', cursor: 'pointer' }}>Cancel</button>
         </div>
       </div>
@@ -246,7 +246,7 @@ function SpacingTokenItem({ token, onEdit, onDelete }: {
       onMouseEnter={(e) => e.currentTarget.style.background = 'rgba(255,255,255,0.03)'}
       onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
     >
-      <div style={{ width: Math.min(token.value, 40), height: 8, background: '#A83248', borderRadius: 2, flexShrink: 0 }} />
+      <div style={{ width: Math.min(token.value, 40), height: 8, background: '#A78BFA', borderRadius: 2, flexShrink: 0 }} />
       <div style={{ flex: 1 }}>
         <div style={{ fontSize: 12, color: '#e4e4e7' }}>{token.name}</div>
       </div>
@@ -313,7 +313,7 @@ function RadiusTokenItem({ token }: { token: RadiusToken }) {
         style={{
           width: 24,
           height: 24,
-          background: '#A83248',
+          background: '#A78BFA',
           borderRadius: Math.min(token.value, 12),
         }}
       />
@@ -395,7 +395,7 @@ export function TokensPanel() {
             {/* Add color button */}
             <div style={{ padding: '8px 12px' }}>
               <button
-                onClick={() => addColor({ name: 'New Color', value: '#8B1E2B', group: 'custom' })}
+                onClick={() => addColor({ name: 'New Color', value: '#8B5CF6', group: 'custom' })}
                 style={{
                   width: '100%',
                   padding: '8px 12px',

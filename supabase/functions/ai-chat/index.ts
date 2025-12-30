@@ -74,6 +74,24 @@ serve(async (req: Request) => {
       content: message,
     });
 
+    // DESIGN MODE: Only force JSON if user wants to CREATE or MODIFY elements
+    // Otherwise allow normal chat responses
+    const createKeywords = ['crea', 'create', 'genera', 'generate', 'aggiungi', 'add', 'fai', 'make', 'disegna', 'draw', 'costruisci', 'build'];
+    const modifyKeywords = ['modifica', 'modify', 'cambia', 'change', 'edit', 'aggiorna', 'update', 'sposta', 'move', 'ridimensiona', 'resize'];
+    const messageLower = message.toLowerCase();
+
+    const isCreateRequest = createKeywords.some(kw => messageLower.includes(kw));
+    const isModifyRequest = modifyKeywords.some(kw => messageLower.includes(kw));
+    const shouldGenerateJSON = mode === "design" && (isCreateRequest || isModifyRequest);
+
+    // Only prefill JSON when user wants to create/modify design elements
+    if (shouldGenerateJSON) {
+      messages.push({
+        role: "assistant",
+        content: '{"elements":[',
+      });
+    }
+
     // Use provided systemPrompt or default based on mode
     const finalSystemPrompt = systemPrompt || getDefaultPrompt(mode);
 
@@ -177,19 +195,29 @@ serve(async (req: Request) => {
 // Default prompts based on mode
 function getDefaultPrompt(mode: "design" | "code"): string {
   if (mode === "design") {
-    return `OUTPUT ONLY JSON. NO TEXT.
+    return `You are a professional web designer assistant. You can:
 
-FORMAT: {"elements":[...]}
+1. CREATE/MODIFY DESIGN ELEMENTS - When the user asks to create, add, modify, or change design elements:
+   - Output ONLY raw JSON: {"elements":[...]}
+   - NO text before or after, PURE JSON
+   - Use proper auto layout: display:"flex", flexDirection, gap
+   - Headers: max 80px height
+   - Sections: padding 80-120, proper spacing
 
-TYPES: section, frame, stack, row, text, button, image
+2. CHAT & ADVISE - When the user asks questions, wants advice, or just wants to chat:
+   - Respond normally in text
+   - Give design advice, color suggestions, layout tips
+   - Be helpful and conversational
 
-EXAMPLE:
-{"elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":24,"backgroundColor":"#0a0a0a","minHeight":600},"children":[{"type":"text","content":"Welcome","styles":{"fontSize":64,"fontWeight":700,"color":"#ffffff"}},{"type":"text","content":"Build something amazing","styles":{"fontSize":20,"color":"rgba(255,255,255,0.6)"}},{"type":"button","content":"Get Started","styles":{"backgroundColor":"#ffffff","color":"#000000","padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":50}}]}]}
+ELEMENT TYPES: section, frame, stack, row, text, button, image, icon
 
-RULES:
-- Output RAW JSON only
-- Start with { end with }
-- NO markdown, NO text`;
+STYLE RULES (when generating JSON):
+- Use numbers for sizes: padding: 80 (not "80px")
+- Auto layout: display:"flex", flexDirection:"column", gap:24
+- Headers: height 64-80 MAX
+- Buttons: padding 12-16 vertical, borderRadius 8-50
+
+Detect what the user wants and respond appropriately.`;
   }
 
   // Code mode prompt

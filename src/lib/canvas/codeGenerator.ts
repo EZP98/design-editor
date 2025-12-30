@@ -7,6 +7,7 @@
 
 import { CanvasElement, ElementType, ElementStyles } from './types';
 import { DesignChange, ChangeType } from '../design-to-code/DesignToCodeEngine';
+import { EDITABLE_RUNTIME_SCRIPT } from '../preview/editableRuntime';
 
 // ============================================================================
 // Tailwind Color Mappings (full palette)
@@ -162,8 +163,8 @@ const TAILWIND_COLORS: Record<string, string> = {
   '#4c1d95': 'violet-900',
 
   // Brand colors (OBJECTS theme)
-  '#8B1E2B': 'rose-800',
-  '#A83248': 'rose-700',
+  '#8B5CF6': 'rose-800',
+  '#A78BFA': 'rose-700',
 
   // Purple
   '#faf5ff': 'purple-50',
@@ -989,6 +990,226 @@ export default defineConfig({
 export default {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: { extend: {} },
+  plugins: [],
+}
+`,
+    'postcss.config.js': `export default {
+  plugins: {
+    tailwindcss: {},
+    autoprefixer: {},
+  },
+}
+`,
+  };
+}
+
+// ============================================================================
+// Smart Mode: Generate project from raw React code
+// ============================================================================
+
+/**
+ * Generate project files from raw React/JSX code (Smart Mode)
+ * Takes AI-generated React code and wraps it in a complete Vite project
+ */
+export function generateProjectFromReactCode(
+  reactCode: string,
+  options?: {
+    includeGSAP?: boolean;
+    includeFramerMotion?: boolean;
+    customCSS?: string;
+  }
+): Record<string, string> {
+  const { includeGSAP = false, includeFramerMotion = false, customCSS = '' } = options || {};
+
+  // Check if the code already has imports
+  const hasReactImport = reactCode.includes('import React') || reactCode.includes("from 'react'");
+
+  // Wrap the code in a proper App component if needed
+  let appCode = reactCode;
+
+  // If the code doesn't export a default component, wrap it
+  if (!reactCode.includes('export default')) {
+    // Check if it's JSX without a function wrapper
+    if (reactCode.trim().startsWith('<') || reactCode.includes('return (')) {
+      appCode = `import React from 'react';
+
+function App() {
+  return (
+    ${reactCode}
+  );
+}
+
+export default App;
+`;
+    } else if (!hasReactImport) {
+      // Add React import at the top
+      appCode = `import React from 'react';
+
+${reactCode}
+`;
+    }
+  } else if (!hasReactImport) {
+    // Add React import at the top if missing
+    appCode = `import React from 'react';\n\n${reactCode}`;
+  }
+
+  // Build dependencies
+  const dependencies: Record<string, string> = {
+    'react': '^18.2.0',
+    'react-dom': '^18.2.0',
+  };
+
+  // Add optional dependencies based on code analysis
+  if (includeGSAP || reactCode.includes('gsap') || reactCode.includes('useGSAP')) {
+    dependencies['gsap'] = '^3.12.5';
+    dependencies['@gsap/react'] = '^2.1.0';
+  }
+
+  if (includeFramerMotion || reactCode.includes('framer-motion') || reactCode.includes('motion.')) {
+    dependencies['framer-motion'] = '^11.0.0';
+  }
+
+  // Check for lucide icons
+  if (reactCode.includes('lucide-react') || reactCode.includes('from "lucide-react"')) {
+    dependencies['lucide-react'] = '^0.344.0';
+  }
+
+  // Check for shadcn/ui components
+  if (reactCode.includes('@/components/ui') || reactCode.includes('from "@/components/ui')) {
+    dependencies['class-variance-authority'] = '^0.7.0';
+    dependencies['clsx'] = '^2.1.0';
+    dependencies['tailwind-merge'] = '^2.2.0';
+  }
+
+  return {
+    'src/App.jsx': appCode,
+    'src/main.jsx': `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);
+`,
+    'src/index.css': `@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.1);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+${customCSS}
+`,
+    'index.html': `<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <link rel="icon" type="image/svg+xml" href="/vite.svg" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>OBJECTS - Preview</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+    <!-- Editable Runtime for visual editing -->
+    <script>${EDITABLE_RUNTIME_SCRIPT}</script>
+  </body>
+</html>
+`,
+    'package.json': JSON.stringify({
+      name: 'objects-preview',
+      private: true,
+      version: '0.0.0',
+      type: 'module',
+      scripts: {
+        dev: 'vite',
+        build: 'vite build',
+        preview: 'vite preview',
+      },
+      dependencies,
+      devDependencies: {
+        '@vitejs/plugin-react': '^4.2.1',
+        autoprefixer: '^10.4.18',
+        postcss: '^8.4.35',
+        tailwindcss: '^3.4.1',
+        vite: '^5.1.4',
+      },
+    }, null, 2),
+    'vite.config.js': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
+
+export default defineConfig({
+  plugins: [react()],
+  server: { host: true },
+  resolve: {
+    alias: {
+      '@': path.resolve(__dirname, './src'),
+    },
+  },
+});
+`,
+    'tailwind.config.js': `/** @type {import('tailwindcss').Config} */
+export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: {
+    extend: {
+      animation: {
+        'fade-in': 'fadeIn 0.5s ease-in-out',
+        'slide-up': 'slideUp 0.5s ease-out',
+        'slide-down': 'slideDown 0.5s ease-out',
+      },
+      keyframes: {
+        fadeIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' },
+        },
+        slideUp: {
+          '0%': { transform: 'translateY(20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+        slideDown: {
+          '0%': { transform: 'translateY(-20px)', opacity: '0' },
+          '100%': { transform: 'translateY(0)', opacity: '1' },
+        },
+      },
+    },
+  },
   plugins: [],
 }
 `,

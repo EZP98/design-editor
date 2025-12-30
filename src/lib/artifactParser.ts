@@ -10,7 +10,7 @@
  */
 
 export interface CanvasElementData {
-  type: 'frame' | 'text' | 'button' | 'image' | 'input' | 'link' | 'icon' | 'stack' | 'grid' | 'section' | 'container';
+  type: 'frame' | 'text' | 'button' | 'image' | 'input' | 'link' | 'icon' | 'stack' | 'grid' | 'section' | 'container' | 'row' | 'page' | 'video' | 'model3d' | 'card';
   name?: string;
   content?: string;
   src?: string;

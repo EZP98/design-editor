@@ -223,7 +223,7 @@ export function AuthModal({ isOpen, onClose, theme = 'dark' }: AuthModalProps) {
                     padding: '12px',
                     borderRadius: 10,
                     border: 'none',
-                    background: '#A83248',
+                    background: '#A78BFA',
                     color: '#fff',
                     fontSize: 14,
                     fontWeight: 600,
@@ -261,7 +261,7 @@ export function AuthModal({ isOpen, onClose, theme = 'dark' }: AuthModalProps) {
                       style={{
                         background: 'none',
                         border: 'none',
-                        color: '#A83248',
+                        color: '#A78BFA',
                         fontSize: 13,
                         cursor: 'pointer',
                       }}
@@ -288,7 +288,7 @@ export function AuthModal({ isOpen, onClose, theme = 'dark' }: AuthModalProps) {
                     style={{
                       background: 'none',
                       border: 'none',
-                      color: '#A83248',
+                      color: '#A78BFA',
                       fontSize: 13,
                       cursor: 'pointer',
                     }}

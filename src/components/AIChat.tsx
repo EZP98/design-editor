@@ -141,7 +141,7 @@ const AIChat: React.FC<AIChatProps> = ({
             width: 32,
             height: 32,
             borderRadius: 8,
-            background: 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)',
+            background: 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -195,7 +195,7 @@ const AIChat: React.FC<AIChatProps> = ({
               padding: '10px 14px',
               borderRadius: 12,
               background: message.role === 'user'
-                ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
                 : 'rgba(255,255,255,0.08)',
               color: '#fff',
               fontSize: 13,
@@ -222,7 +222,7 @@ const AIChat: React.FC<AIChatProps> = ({
                 width: 8,
                 height: 8,
                 borderRadius: '50%',
-                background: '#A83248',
+                background: '#A78BFA',
                 animation: 'pulse 1s infinite',
               }} />
               Sto pensando...
@@ -273,7 +273,7 @@ const AIChat: React.FC<AIChatProps> = ({
               borderRadius: 10,
               border: 'none',
               background: input.trim() && !isLoading
-                ? 'linear-gradient(135deg, #A83248 0%, #8B1E2B 100%)'
+                ? 'linear-gradient(135deg, #A78BFA 0%, #8B5CF6 100%)'
                 : 'rgba(255,255,255,0.1)',
               color: '#fff',
               cursor: input.trim() && !isLoading ? 'pointer' : 'not-allowed',
@@ -294,7 +294,7 @@ const AIChat: React.FC<AIChatProps> = ({
             fontSize: 11,
             color: '#666',
           }}>
-            File attivo: <span style={{ color: '#A83248' }}>{currentFile}</span>
+            File attivo: <span style={{ color: '#A78BFA' }}>{currentFile}</span>
           </div>
         )}
       </div>

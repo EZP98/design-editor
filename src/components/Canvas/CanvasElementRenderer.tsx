@@ -5,12 +5,15 @@
  * Supports dragging like Figma/Framer.
  */
 
-import React, { useRef, useCallback, useState, useEffect, useMemo, memo } from 'react';
+import React, { useRef, useCallback, useState, useEffect, useMemo, memo, lazy, Suspense } from 'react';
 import { motion } from 'framer-motion';
 import { CanvasElement, ElementStyles } from '../../lib/canvas/types';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
 import { useResponsiveStore, getStylesForBreakpoint } from '../../lib/canvas/responsive';
 import { renderLucideIcon } from './IconPicker';
+
+// Lazy load Model3DViewer for performance
+const Model3DViewer = lazy(() => import('./Model3DViewer'));
 
 // Container element types that can accept children
 const CONTAINER_TYPES = ['frame', 'stack', 'grid', 'section', 'container', 'row', 'page', 'box'];
@@ -395,7 +398,6 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
       const siblings = parent.children.filter(id => id !== element.id);
       const isVertical = (parent.styles.flexDirection || 'column') === 'column' || parent.styles.flexDirection === 'column-reverse';
 
-      // Find which sibling we're closest to
       let closestSibling: { id: string; position: 'before' | 'after' } | null = null;
       let minDistance = Infinity;
 
@@ -441,7 +443,6 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
   const handleDragEnd = useCallback(() => {
     if (hasDraggedRef.current) {
       if (parentHasAutoLayout && dragReorderTargetRef.current) {
-        // Reorder in auto-layout
         reorderElement(element.id, dragReorderTargetRef.current.id, dragReorderTargetRef.current.position);
       } else if (!parentHasAutoLayout) {
         saveToHistory('Move element');
@@ -451,6 +452,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
     dragStartPositionsRef.current = {};
     dragReorderTargetRef.current = null;
   }, [saveToHistory, parentHasAutoLayout, element.id, reorderElement]);
+
 
   // Convert styles to CSS - memoized to prevent recalculations
   const computedStyles = useMemo((): React.CSSProperties => {
@@ -474,7 +476,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
     let selectionOutline: string | undefined;
     let selectionOutlineOffset: number | undefined;
     if (isSelected && !isPageElement) {
-      selectionOutline = '2px solid #8B1E2B';
+      selectionOutline = '2px solid #8B5CF6';
       selectionOutlineOffset = -1;
     } else if (isHovered && !isSelected) {
       selectionOutline = '1px solid rgba(139, 30, 43, 0.5)';
@@ -674,7 +676,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 whiteSpace: 'pre-wrap',
                 wordBreak: 'break-word',
                 cursor: 'text',
-                caretColor: '#8B1E2B',
+                caretColor: '#8B5CF6',
                 background: 'rgba(139, 30, 43, 0.05)',
                 borderRadius: 2,
                 // Typography styles are on the container div via computedStyles
@@ -713,7 +715,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 minWidth: '2em',
                 whiteSpace: 'nowrap',
                 cursor: 'text',
-                caretColor: '#8B1E2B',
+                caretColor: '#8B5CF6',
               }}
             />
           );
@@ -767,7 +769,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 minWidth: '2em',
                 textDecoration: 'underline',
                 cursor: 'text',
-                caretColor: '#8B1E2B',
+                caretColor: '#8B5CF6',
               }}
             />
           );
@@ -864,6 +866,38 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
           </div>
         );
 
+      case 'model3d':
+        return (
+          <Suspense fallback={
+            <div style={{
+              width: '100%',
+              height: '100%',
+              backgroundColor: '#18181b',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#71717a',
+              fontSize: 12,
+            }}>
+              Caricamento 3D...
+            </div>
+          }>
+            <Model3DViewer
+              src={element.modelSrc}
+              poster={element.modelPoster}
+              alt={element.name}
+              autoRotate={element.autoRotate}
+              autoRotateDelay={element.autoRotateDelay}
+              cameraOrbit={element.cameraOrbit}
+              cameraTarget={element.cameraTarget}
+              environmentImage={element.environmentImage}
+              shadowIntensity={element.shadowIntensity}
+              exposure={element.exposure}
+              interactive={false}
+            />
+          </Suspense>
+        );
+
       case 'frame':
       case 'stack':
       case 'grid':
@@ -871,6 +905,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
       case 'box':
       case 'container':
       case 'row':
+      case 'card':
       case 'page':
         // Check if this element has auto layout enabled
         // Pages always have auto-layout by default (column direction, stretch)
@@ -995,7 +1030,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
           <div style={{
             fontSize: 10,
             fontWeight: 600,
-            color: '#8B1E2B',
+            color: '#8B5CF6',
             marginBottom: 6,
             textTransform: 'uppercase',
             letterSpacing: '0.05em',
@@ -1086,7 +1121,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 fontSize: 9,
                 fontWeight: 600,
                 color: '#fff',
-                background: '#8B1E2B',
+                background: '#8B5CF6',
                 padding: '2px 6px',
                 borderRadius: 3,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
@@ -1118,7 +1153,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 fontSize: 9,
                 fontWeight: 600,
                 color: '#fff',
-                background: '#8B1E2B',
+                background: '#8B5CF6',
                 padding: '2px 6px',
                 borderRadius: 3,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
@@ -1150,7 +1185,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 fontSize: 9,
                 fontWeight: 600,
                 color: '#fff',
-                background: '#8B1E2B',
+                background: '#8B5CF6',
                 padding: '2px 6px',
                 borderRadius: 3,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
@@ -1183,7 +1218,7 @@ export const CanvasElementRenderer = memo(function CanvasElementRenderer({
                 fontSize: 9,
                 fontWeight: 600,
                 color: '#fff',
-                background: '#8B1E2B',
+                background: '#8B5CF6',
                 padding: '2px 6px',
                 borderRadius: 3,
                 boxShadow: '0 1px 3px rgba(0,0,0,0.3)',

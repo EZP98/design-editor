@@ -1,11 +1,19 @@
-import React, { useState, useRef, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useCallback, useEffect, useMemo, Suspense, lazy } from 'react';
 import { createPortal } from 'react-dom';
 import { useParams, useNavigate } from 'react-router-dom';
 import './DesignEditor.css';
-import CodePanel from './components/CodePanel';
+
+// Lazy load heavy components for better initial load performance
+const CodePanel = lazy(() => import('./components/CodePanel'));
+const AIChatPanel = lazy(() => import('./components/AIChatPanel').then(m => ({ default: m.default })));
+const WebContainerPreview = lazy(() => import('./components/WebContainerPreview').then(m => ({ default: m.default })));
+const AIImagePlugin = lazy(() => import('./components/Canvas/plugins/AIImagePlugin').then(m => ({ default: m.AIImagePlugin })));
+const Canvas3D = lazy(() => import('./components/Canvas3D'));
+
+// Regular imports for lightweight components
 import FileExplorer, { FileNode } from './components/FileExplorer';
-import AIChatPanel, { AIChatPanelRef } from './components/AIChatPanel';
-import WebContainerPreview, { WebContainerPreviewRef } from './components/WebContainerPreview';
+import type { AIChatPanelRef } from './components/AIChatPanel';
+import type { WebContainerPreviewRef } from './components/WebContainerPreview';
 import VisualPropsPanel, { SelectedElement } from './components/VisualPropsPanel';
 import { PreviewManager } from './components/EditablePreview';
 import type { PreviewManagerRef, SelectedElement as EditableSelectedElement } from './components/EditablePreview/PreviewManager';
@@ -23,8 +31,14 @@ import { useGit } from './lib/hooks/useGit';
 import { getWebContainer, createEditableViteProject } from './lib/webcontainer';
 import { useAgenticErrors, buildErrorContext } from './lib/hooks/useAgenticErrors';
 import { Canvas, CanvasSidebar, ComponentLibrary, PropertiesPanel, CanvasPreview } from './components/Canvas';
-import { AIImagePlugin } from './components/Canvas/plugins';
 import { useCanvasStore, setCurrentProjectId, saveProjectToRecents, loadProjectCanvasState, saveProjectCanvasState, generateCanvasThumbnail } from './lib/canvas/canvasStore';
+
+// Loading fallback for lazy components
+const LazyLoadingFallback = () => (
+  <div className="flex items-center justify-center h-full bg-zinc-900/50">
+    <div className="animate-pulse text-zinc-500 text-sm">Caricamento...</div>
+  </div>
+);
 import { generateProjectFiles } from './lib/canvas/codeGenerator';
 import type { ElementType } from './lib/canvas/types';
 import { THEME_COLORS } from './lib/canvas/types';
@@ -1052,6 +1066,7 @@ const DesignEditor: React.FC = () => {
   const [showDeviceDropdown, setShowDeviceDropdown] = useState(false);
   const [projectUrl, setProjectUrl] = useState<string>('');
   const isCanvasMode = !useWebContainer && !projectUrl;
+  const [canvasViewMode, setCanvasViewMode] = useState<'2d' | '3d'>('2d');
   const [iframeLoading, setIframeLoading] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
@@ -2925,61 +2940,63 @@ const DesignEditor: React.FC = () => {
               </svg>
             </div>
             {!chatCollapsed && (
-            <AIChatPanel
-              ref={chatPanelRef}
-              currentFile={selectedFile}
-              currentCode={selectedFile ? fileContents[selectedFile.replace(/^\//, '')] : undefined}
-              projectName={githubRepo?.name || 'Nuovo Progetto'}
-              currentFiles={fileContents}
-              onFilesUpdate={(updatedFiles) => {
-                // Apply file updates from AI artifacts
-                setFileContents(prev => ({ ...prev, ...updatedFiles }));
-                // Update WebContainer files for live preview (always, not just for GitHub projects)
-                setWebcontainerFiles(prev => ({ ...prev, ...updatedFiles }));
-                console.log('[DesignEditor] Files updated from AI:', Object.keys(updatedFiles));
-              }}
-              onRestoreSnapshot={(files) => {
-                setFileContents(files);
-                // Refresh the preview (always, not just for GitHub projects)
-                setWebcontainerFiles(files);
-              }}
-              onApplyCode={(code, filePath) => {
-                if (filePath) {
-                  setFileContents(prev => ({
-                    ...prev,
-                    [filePath.replace(/^\//, '')]: code
-                  }));
-                }
-                if (!githubRepo) {
-                  const projectFiles: Record<string, string> = {
-                    'package.json': JSON.stringify({
-                      name: 'ai-generated-project',
-                      private: true,
-                      version: '0.0.0',
-                      type: 'module',
-                      scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
-                      dependencies: { 'react': '^18.2.0', 'react-dom': '^18.2.0' },
-                      devDependencies: {
-                        '@vitejs/plugin-react': '^4.2.0',
-                        'vite': '^5.0.0',
-                        'autoprefixer': '^10.4.16',
-                        'postcss': '^8.4.32',
-                        'tailwindcss': '^3.4.0'
-                      }
-                    }, null, 2),
-                    'vite.config.js': `import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({\n  plugins: [react()],\n  server: { host: true }\n});`,
-                    'tailwind.config.js': `/** @type {import('tailwindcss').Config} */\nexport default {\n  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],\n  theme: { extend: {} },\n  plugins: [],\n}`,
-                    'postcss.config.js': `export default {\n  plugins: {\n    tailwindcss: {},\n    autoprefixer: {},\n  },\n}`,
-                    'index.html': `<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Preview</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.jsx"></script>\n  </body>\n</html>`,
-                    'src/main.jsx': `import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nimport './index.css';\n\nReactDOM.createRoot(document.getElementById('root')).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);`,
-                    'src/index.css': `@tailwind base;\n@tailwind components;\n@tailwind utilities;`,
-                    'src/App.jsx': code,
-                  };
-                  setWebcontainerFiles(projectFiles);
-                  setUseWebContainer(true);
-                }
-              }}
-            />
+            <Suspense fallback={<LazyLoadingFallback />}>
+              <AIChatPanel
+                ref={chatPanelRef}
+                currentFile={selectedFile}
+                currentCode={selectedFile ? fileContents[selectedFile.replace(/^\//, '')] : undefined}
+                projectName={githubRepo?.name || 'Nuovo Progetto'}
+                currentFiles={fileContents}
+                onFilesUpdate={(updatedFiles) => {
+                  // Apply file updates from AI artifacts
+                  setFileContents(prev => ({ ...prev, ...updatedFiles }));
+                  // Update WebContainer files for live preview (always, not just for GitHub projects)
+                  setWebcontainerFiles(prev => ({ ...prev, ...updatedFiles }));
+                  console.log('[DesignEditor] Files updated from AI:', Object.keys(updatedFiles));
+                }}
+                onRestoreSnapshot={(files) => {
+                  setFileContents(files);
+                  // Refresh the preview (always, not just for GitHub projects)
+                  setWebcontainerFiles(files);
+                }}
+                onApplyCode={(code, filePath) => {
+                  if (filePath) {
+                    setFileContents(prev => ({
+                      ...prev,
+                      [filePath.replace(/^\//, '')]: code
+                    }));
+                  }
+                  if (!githubRepo) {
+                    const projectFiles: Record<string, string> = {
+                      'package.json': JSON.stringify({
+                        name: 'ai-generated-project',
+                        private: true,
+                        version: '0.0.0',
+                        type: 'module',
+                        scripts: { dev: 'vite', build: 'vite build', preview: 'vite preview' },
+                        dependencies: { 'react': '^18.2.0', 'react-dom': '^18.2.0' },
+                        devDependencies: {
+                          '@vitejs/plugin-react': '^4.2.0',
+                          'vite': '^5.0.0',
+                          'autoprefixer': '^10.4.16',
+                          'postcss': '^8.4.32',
+                          'tailwindcss': '^3.4.0'
+                        }
+                      }, null, 2),
+                      'vite.config.js': `import { defineConfig } from 'vite';\nimport react from '@vitejs/plugin-react';\n\nexport default defineConfig({\n  plugins: [react()],\n  server: { host: true }\n});`,
+                      'tailwind.config.js': `/** @type {import('tailwindcss').Config} */\nexport default {\n  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],\n  theme: { extend: {} },\n  plugins: [],\n}`,
+                      'postcss.config.js': `export default {\n  plugins: {\n    tailwindcss: {},\n    autoprefixer: {},\n  },\n}`,
+                      'index.html': `<!DOCTYPE html>\n<html lang="en">\n  <head>\n    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Preview</title>\n  </head>\n  <body>\n    <div id="root"></div>\n    <script type="module" src="/src/main.jsx"></script>\n  </body>\n</html>`,
+                      'src/main.jsx': `import React from 'react';\nimport ReactDOM from 'react-dom/client';\nimport App from './App';\nimport './index.css';\n\nReactDOM.createRoot(document.getElementById('root')).render(\n  <React.StrictMode>\n    <App />\n  </React.StrictMode>\n);`,
+                      'src/index.css': `@tailwind base;\n@tailwind components;\n@tailwind utilities;`,
+                      'src/App.jsx': code,
+                    };
+                    setWebcontainerFiles(projectFiles);
+                    setUseWebContainer(true);
+                  }
+                }}
+              />
+            </Suspense>
             )}
           </div>
           </>
@@ -3104,21 +3121,23 @@ const DesignEditor: React.FC = () => {
               </div>
               {/* Code Editor */}
               <div style={{ flex: 1, background: '#0a0a0a' }}>
-                <CodePanel
-                  elements={[]}
-                  showPanel={true}
-                  onClose={() => setViewMode('design')}
-                  selectedFile={selectedFile}
-                  fileContent={selectedFile ? fileContents[selectedFile.replace(/^\//, '')] : undefined}
-                  onFileContentChange={(content) => {
-                    if (selectedFile) {
-                      setFileContents(prev => ({
-                        ...prev,
-                        [selectedFile.replace(/^\//, '')]: content
-                      }));
-                    }
-                  }}
-                />
+                <Suspense fallback={<LazyLoadingFallback />}>
+                  <CodePanel
+                    elements={[]}
+                    showPanel={true}
+                    onClose={() => setViewMode('design')}
+                    selectedFile={selectedFile}
+                    fileContent={selectedFile ? fileContents[selectedFile.replace(/^\//, '')] : undefined}
+                    onFileContentChange={(content) => {
+                      if (selectedFile) {
+                        setFileContents(prev => ({
+                          ...prev,
+                          [selectedFile.replace(/^\//, '')]: content
+                        }));
+                      }
+                    }}
+                  />
+                </Suspense>
               </div>
             </div>
           ) : (
@@ -3207,12 +3226,69 @@ const DesignEditor: React.FC = () => {
               {/* Canvas */}
               {isCanvasMode ? (
                 /* Canvas Mode - Visual Editor like Figma */
-                <Canvas
-                  zoom={zoom}
-                  pan={pan}
-                  onZoomChange={setZoom}
-                  onPanChange={setPan}
-                />
+                <>
+                  {/* 2D/3D Toggle */}
+                  <div style={{
+                    position: 'absolute',
+                    top: 16,
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    display: 'flex',
+                    gap: 2,
+                    padding: 4,
+                    background: 'rgba(20,20,20,0.95)',
+                    borderRadius: 10,
+                    border: '1px solid rgba(255,255,255,0.1)',
+                    zIndex: 1000,
+                  }}>
+                    <button
+                      onClick={() => setCanvasViewMode('2d')}
+                      style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        borderRadius: 8,
+                        background: canvasViewMode === '2d' ? '#8B5CF6' : 'transparent',
+                        color: canvasViewMode === '2d' ? 'white' : '#888',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      2D Canvas
+                    </button>
+                    <button
+                      onClick={() => setCanvasViewMode('3d')}
+                      style={{
+                        padding: '8px 16px',
+                        border: 'none',
+                        borderRadius: 8,
+                        background: canvasViewMode === '3d' ? '#8B5CF6' : 'transparent',
+                        color: canvasViewMode === '3d' ? 'white' : '#888',
+                        cursor: 'pointer',
+                        fontSize: 12,
+                        fontWeight: 600,
+                        transition: 'all 0.15s ease',
+                      }}
+                    >
+                      3D Canvas
+                    </button>
+                  </div>
+
+                  {/* Render 2D or 3D Canvas based on mode */}
+                  {canvasViewMode === '2d' ? (
+                    <Canvas
+                      zoom={zoom}
+                      pan={pan}
+                      onZoomChange={setZoom}
+                      onPanChange={setPan}
+                    />
+                  ) : (
+                    <Suspense fallback={<LazyLoadingFallback />}>
+                      <Canvas3D onBack={() => setCanvasViewMode('2d')} />
+                    </Suspense>
+                  )}
+                </>
               ) : (
               <div
                 className="de-canvas-area"
@@ -3681,21 +3757,23 @@ const DesignEditor: React.FC = () => {
                       background: '#fff',
                     }}
                   >
-                    <WebContainerPreview
-                      ref={webContainerPreviewRef}
-                      files={webcontainerFiles}
-                      autoStart={true}
-                      onStatusChange={(status) => {
-                        setWebcontainerReady(status === 'ready');
-                      }}
-                      onUrlReady={(url) => {
-                        setWebcontainerUrl(url);
-                      }}
-                      currentPath={currentPreviewPath}
-                      onPathChange={setCurrentPreviewPath}
-                      width="100%"
-                      height={visualEditMode ? '100vh' : '100%'}
-                    />
+                    <Suspense fallback={<LazyLoadingFallback />}>
+                      <WebContainerPreview
+                        ref={webContainerPreviewRef}
+                        files={webcontainerFiles}
+                        autoStart={true}
+                        onStatusChange={(status) => {
+                          setWebcontainerReady(status === 'ready');
+                        }}
+                        onUrlReady={(url) => {
+                          setWebcontainerUrl(url);
+                        }}
+                        currentPath={currentPreviewPath}
+                        onPathChange={setCurrentPreviewPath}
+                        width="100%"
+                        height={visualEditMode ? '100vh' : '100%'}
+                      />
+                    </Suspense>
                   </div>
                   {/* Visual Edit Overlay - using PreviewManager from EditablePreview */}
                   {webcontainerReady && (
@@ -3747,7 +3825,7 @@ const DesignEditor: React.FC = () => {
                     width: 64,
                     height: 64,
                     borderRadius: 16,
-                    background: 'linear-gradient(135deg, #8B1E2B 0%, #C94C5C 100%)',
+                    background: 'linear-gradient(135deg, #8B5CF6 0%, #C94C5C 100%)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',
@@ -3772,7 +3850,7 @@ const DesignEditor: React.FC = () => {
                         padding: '12px 24px',
                         borderRadius: 10,
                         border: 'none',
-                        background: 'linear-gradient(135deg, #8B1E2B 0%, #C94C5C 100%)',
+                        background: 'linear-gradient(135deg, #8B5CF6 0%, #C94C5C 100%)',
                         color: '#fff',
                         fontSize: 14,
                         fontWeight: 500,
@@ -3989,7 +4067,7 @@ const DesignEditor: React.FC = () => {
                         alignItems: 'center',
                         justifyContent: 'center',
                       }}>
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B1E2B" strokeWidth="2">
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#8B5CF6" strokeWidth="2">
                           <path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/>
                         </svg>
                       </div>
@@ -4044,7 +4122,7 @@ const DesignEditor: React.FC = () => {
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}>
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={currentCanvasPage?.notes ? '#8B1E2B' : '#52525b'} strokeWidth="1.5">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke={currentCanvasPage?.notes ? '#8B5CF6' : '#52525b'} strokeWidth="1.5">
                             <rect x="3" y="3" width="18" height="18" rx="2"/>
                           </svg>
                         </div>
@@ -4054,7 +4132,7 @@ const DesignEditor: React.FC = () => {
                           </div>
                         </div>
                         {currentCanvasPage?.notes && (
-                          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#8B1E2B' }} />
+                          <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#8B5CF6' }} />
                         )}
                       </div>
                     </div>
@@ -4212,7 +4290,9 @@ Auth: Bearer
                     }}
                   >
                     {activeRightPanel === 'ai-image' ? (
-                      <AIImagePlugin onClose={() => setActiveRightPanel('properties')} />
+                      <Suspense fallback={<LazyLoadingFallback />}>
+                        <AIImagePlugin onClose={() => setActiveRightPanel('properties')} />
+                      </Suspense>
                     ) : (
                       <PropertiesPanel />
                     )}
@@ -4614,14 +4694,16 @@ Find the component in the codebase and update the styles. If using Tailwind, con
               {/* Code Panel in Design Mode - Hide when GitHub project is loaded */}
               {showCodePanel && !githubRepo && (
                 <div className="de-code-panel">
-                  <CodePanel
-                    elements={codeElements}
-                    showPanel={showCodePanel}
-                    onClose={() => setShowCodePanel(false)}
-                    componentName="Design"
-                    fileContent={selectedFile ? fileContents[selectedFile] : undefined}
-                    fileName={selectedFile?.split('/').pop()}
-                  />
+                  <Suspense fallback={<LazyLoadingFallback />}>
+                    <CodePanel
+                      elements={codeElements}
+                      showPanel={showCodePanel}
+                      onClose={() => setShowCodePanel(false)}
+                      componentName="Design"
+                      fileContent={selectedFile ? fileContents[selectedFile] : undefined}
+                      fileName={selectedFile?.split('/').pop()}
+                    />
+                  </Suspense>
                 </div>
               )}
             </div>
