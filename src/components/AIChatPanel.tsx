@@ -949,8 +949,10 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                     if (parsed.text.includes('}') || now - lastParseAttempt > PARSE_INTERVAL) {
                       lastParseAttempt = now;
 
-                      // Prepend the JSON prefix since Edge Function prefills it
-                      const contentWithPrefix = fullContent.startsWith('{')
+                      // Prepend the JSON prefix since Edge Function prefills '{"elements":['
+                      // The AI response starts with first element: {"name":"Hero",...
+                      // NOT with {"elements":[...
+                      const contentWithPrefix = fullContent.startsWith('{"elements"')
                         ? fullContent
                         : '{"elements":[' + fullContent;
 
@@ -990,9 +992,9 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
         try {
           // The Edge Function prefills '{"elements":[' so we need to add it back
-          // if the response doesn't already start with it
+          // The AI response starts with first element: {"name":"Hero",...
           let jsonStr = fullContent.trim();
-          if (!jsonStr.startsWith('{')) {
+          if (!jsonStr.startsWith('{"elements"')) {
             jsonStr = '{"elements":[' + jsonStr;
             console.log('[AIChatPanel] Prepended JSON prefix to response');
           }
