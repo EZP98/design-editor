@@ -3092,6 +3092,13 @@ export default defineConfig({ plugins: [react()] });`,
                     setUseWebContainer(true);
                   }
                 }}
+                onDesignCreated={() => {
+                  // Switch to 2D canvas mode to show created elements
+                  console.log('[DesignEditor] Switching to 2D canvas after AI design creation');
+                  setCanvasViewMode('2d');
+                  setUseWebContainer(false);
+                  setProjectUrl(''); // Clear project URL to enable canvas mode
+                }}
               />
             </Suspense>
             )}
@@ -3644,64 +3651,26 @@ export default defineConfig({ plugins: [react()] });`,
             </div>
           ) : useWebContainer ? (
             /* WebContainer Preview - for AI-generated code */
-            (() => {
-              // Calculate scale to fit device in container with padding
-              const padding = 80; // padding around device frame
-              const availableWidth = containerDimensions.width - padding;
-              const availableHeight = containerDimensions.height - padding;
-
-              const scaleX = availableWidth / selectedDevice.width;
-              const scaleY = availableHeight / selectedDevice.height;
-              const autoScale = Math.min(scaleX, scaleY, 1); // Don't scale up, only down
-
-              // Final scale combines auto-scale with user zoom
-              const finalScale = visualEditMode ? 1 : autoScale * zoom;
-
-              return (
-                <div
-                  style={{
-                    width: visualEditMode ? '100%' : selectedDevice.width,
-                    maxWidth: visualEditMode ? 1200 : undefined,
-                    height: visualEditMode ? 'auto' : selectedDevice.height,
-                    minHeight: visualEditMode ? 'calc(100vh - 200px)' : undefined,
-                    transform: visualEditMode ? 'none' : `scale(${finalScale})`,
-                    transformOrigin: 'top center',
-                    borderRadius: visualEditMode ? 8 : selectedDevice.category === 'phone' ? 44 : selectedDevice.category === 'tablet' ? 24 : 12,
-                    overflow: 'hidden',
-                    boxShadow: selectedDevice.category !== 'desktop'
-                      ? '0 25px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(255,255,255,0.1)'
-                      : '0 8px 32px rgba(0,0,0,0.4)',
-                    border: visualEditMode ? '2px solid #8b5cf6' : selectedDevice.category !== 'desktop' ? '12px solid #1a1a1a' : 'none',
-                    transition: 'all 0.3s ease',
-                    position: 'relative',
-                    background: selectedDevice.category !== 'desktop' ? '#000' : '#fff',
-                  }}
-                >
-                  {/* Phone notch for mobile view (Dynamic Island style) - hide in edit mode */}
-                  {selectedDevice.category === 'phone' && !visualEditMode && (
-                    <div style={{
-                      position: 'absolute',
-                      top: 12,
-                      left: '50%',
-                      transform: 'translateX(-50%)',
-                      width: 120,
-                      height: 34,
-                      background: '#000',
-                      borderRadius: 20,
-                      zIndex: 10,
-                      boxShadow: 'inset 0 0 0 1px rgba(255,255,255,0.1)',
-                    }} />
-                  )}
-                  {/* Inner content area with rounded corners */}
-                  <div
-                    style={{
-                      width: '100%',
-                      height: '100%',
-                      overflow: 'hidden',
-                      borderRadius: selectedDevice.category === 'phone' ? 32 : selectedDevice.category === 'tablet' ? 12 : 0,
-                      background: '#fff',
-                    }}
-                  >
+            <div
+              style={{
+                width: '100%',
+                maxWidth: 1200,
+                height: '100%',
+                minHeight: 'calc(100vh - 200px)',
+                borderRadius: 12,
+                overflow: 'hidden',
+                boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+                background: '#fff',
+              }}
+            >
+              <div
+                style={{
+                  width: '100%',
+                  height: '100%',
+                  overflow: 'hidden',
+                  background: '#fff',
+                }}
+              >
                     <Suspense fallback={<LazyLoadingFallback />}>
                       <WebContainerPreview
                         ref={webContainerPreviewRef}
@@ -3716,7 +3685,7 @@ export default defineConfig({ plugins: [react()] });`,
                         currentPath={currentPreviewPath}
                         onPathChange={setCurrentPreviewPath}
                         width="100%"
-                        height={visualEditMode ? '100vh' : '100%'}
+                        height="100%"
                       />
                     </Suspense>
                   </div>
@@ -3735,9 +3704,7 @@ export default defineConfig({ plugins: [react()] });`,
                       }}
                     />
                   )}
-                </div>
-              );
-            })()
+            </div>
           ) : (
             /* Design Mode - Canvas with elements */
             <div
@@ -3843,24 +3810,6 @@ export default defineConfig({ plugins: [react()] });`,
 
           {/* Bottom Toolbar */}
           <div className="de-bottom-toolbar">
-            <div className="de-breakpoint-selector">
-              {BREAKPOINTS.map(bp => (
-                <button
-                  key={bp.id}
-                  className={`de-tool-btn ${currentBreakpoint === bp.id ? 'active' : ''}`}
-                  onClick={() => {
-                    setCurrentBreakpoint(bp.id);
-                    const defaultDevice = DEVICE_PRESETS.find(d => d.category === bp.icon);
-                    if (defaultDevice) setSelectedDevice(defaultDevice);
-                  }}
-                  title={`${bp.name} (${bp.width}px)`}
-                >
-                  {Icons[bp.icon]}
-                </button>
-              ))}
-            </div>
-
-            <div className="de-toolbar-divider" />
 
             {/* Inspect Toggle - only in live mode */}
             {liveMode && (
@@ -4707,35 +4656,8 @@ Find the component in the codebase and update the styles. If using Tailwind, con
           >
             <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
               <span style={{ color: '#4ade80', fontWeight: 500, fontSize: 13 }}>Preview Mode</span>
-              <span style={{ color: '#5a5a5a', fontSize: 12 }}>{selectedDevice.name} • {selectedDevice.width} × {selectedDevice.height}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {BREAKPOINTS.map(bp => (
-                <button
-                  key={bp.id}
-                  onClick={() => {
-                    setCurrentBreakpoint(bp.id);
-                    const defaultDevice = DEVICE_PRESETS.find(d => d.category === bp.icon);
-                    if (defaultDevice) setSelectedDevice(defaultDevice);
-                  }}
-                  style={{
-                    padding: '6px 10px',
-                    background: currentBreakpoint === bp.id ? 'rgba(255,255,255,0.1)' : 'transparent',
-                    border: 'none',
-                    borderRadius: 6,
-                    color: currentBreakpoint === bp.id ? '#fff' : '#6b6b6b',
-                    fontSize: 12,
-                    cursor: 'pointer',
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 6,
-                  }}
-                >
-                  {Icons[bp.icon]}
-                  {bp.name}
-                </button>
-              ))}
-              <div style={{ width: 1, height: 20, background: 'rgba(255,255,255,0.1)', margin: '0 8px' }} />
               <button
                 onClick={() => setShowPreview(false)}
                 style={{

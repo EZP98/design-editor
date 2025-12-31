@@ -664,6 +664,7 @@ interface AIChatPanelProps {
   onApplyCode?: (code: string, filePath: string) => void;
   onFilesUpdate?: (files: Record<string, string>) => void;
   onArtifactsApplied?: (artifacts: ParsedArtifact[]) => void;
+  onDesignCreated?: () => void; // Called when AI creates canvas elements
   currentFile?: string;
   currentCode?: string;
   projectName?: string;
@@ -680,6 +681,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
   onApplyCode,
   onFilesUpdate,
   onArtifactsApplied,
+  onDesignCreated,
   currentFile,
   currentCode,
   projectName = 'default',
@@ -1105,6 +1107,12 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           })));
 
           allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
+
+          // Switch to 2D canvas mode to show the created elements
+          if (onDesignCreated && ids.length > 0) {
+            console.log('[AIChatPanel] Calling onDesignCreated to switch to 2D canvas');
+            onDesignCreated();
+          }
 
           // Also update WebContainer preview with React code
           if (onFilesUpdate) {
