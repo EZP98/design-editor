@@ -997,9 +997,19 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
         try {
           // Try boltArtifact format first (new approach)
           const { artifacts, explanation } = parseArtifacts(fullContent);
-          const canvasArtifacts = artifacts.filter(a => a.type === 'canvas' && a.canvasElements);
+          // Fix: Check for non-empty array, not just truthy value
+          const canvasArtifacts = artifacts.filter(a =>
+            a.type === 'canvas' &&
+            Array.isArray(a.canvasElements) &&
+            a.canvasElements.length > 0
+          );
 
           console.log('[AIChatPanel] Found', artifacts.length, 'total artifacts,', canvasArtifacts.length, 'canvas artifacts');
+          console.log('[AIChatPanel] Artifacts details:', artifacts.map(a => ({
+            type: a.type,
+            hasCanvasElements: !!a.canvasElements,
+            canvasElementsLength: a.canvasElements?.length || 0
+          })));
 
           let allElements: any[] = [];
           const elementNames: string[] = [];
@@ -1059,7 +1069,29 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           }
           setCreateAsNewPage(false);
 
+          console.log('[AIChatPanel] Adding elements to canvas:', allElements.length, 'elements, parentId:', parentId);
+          console.log('[AIChatPanel] Elements to add:', allElements.map(e => ({
+            type: e.type,
+            name: e.name,
+            hasChildren: !!(e.children?.length),
+            childrenCount: e.children?.length || 0
+          })));
+
           const ids = addElementsFromAI(allElements, parentId);
+
+          console.log('[AIChatPanel] Created element IDs:', ids);
+          // Log created elements details
+          const createdElements = ids.map(id => store.getElement(id)).filter(Boolean);
+          console.log('[AIChatPanel] Created elements details:', createdElements.map(e => ({
+            id: e?.id,
+            type: e?.type,
+            name: e?.name,
+            visible: e?.visible,
+            size: e?.size,
+            position: e?.position,
+            childrenCount: e?.children?.length || 0
+          })));
+
           allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
 
           // Update message with success

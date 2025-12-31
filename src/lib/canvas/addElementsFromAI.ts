@@ -553,6 +553,24 @@ function addSingleElement(
     console.log(`[AddElementsFromAI] No children for ${data.name || data.type} (type: ${data.type})`);
   }
 
+  // CRITICAL: Ensure element has minimum visible dimensions
+  const finalElement = useCanvasStore.getState().getElement(elementId);
+  if (finalElement) {
+    const MIN_WIDTH = 100;
+    const MIN_HEIGHT = 40;
+    const needsResize = finalElement.size.width < MIN_WIDTH || finalElement.size.height < MIN_HEIGHT;
+
+    if (needsResize) {
+      console.log(`[AddElementsFromAI] Fixing small dimensions for ${data.name}: ${finalElement.size.width}x${finalElement.size.height} -> ${Math.max(finalElement.size.width, MIN_WIDTH)}x${Math.max(finalElement.size.height, MIN_HEIGHT)}`);
+      useCanvasStore.getState().resizeElement(elementId, {
+        width: Math.max(finalElement.size.width, MIN_WIDTH),
+        height: Math.max(finalElement.size.height, MIN_HEIGHT),
+      });
+    }
+
+    console.log(`[AddElementsFromAI] Created element "${data.name}" (${elementType}): size=${finalElement.size.width}x${finalElement.size.height}, visible=${finalElement.visible}, children=${finalElement.children.length}`);
+  }
+
   return elementId;
 }
 
