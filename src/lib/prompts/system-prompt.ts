@@ -1680,39 +1680,41 @@ export function getDesignPromptWithIntent(userMessage: string, options?: { style
   const colors = intent.suggestedColors;
   const lang = intent.language === 'it' ? 'Italian' : 'English';
 
-  return `You are a world-class designer. Generate React + Tailwind code.
+  return `You are a world-class designer. Generate designs using boltArtifact format with nested JSON elements.
 
 TOPIC: ${intent.topic.toUpperCase()}
 LANGUAGE: ${lang} - ALL text content must be in ${lang}
 
-COLORS:
+COLORS to use:
 - Background: ${colors.background}
-- Primary: ${colors.primary}
+- Primary/Text: ${colors.primary}
 - Accent: ${colors.accent}
-- Text: ${colors.text}
 
-OUTPUT FORMAT - Return ONLY a code block:
-\`\`\`tsx
-export default function Component() {
-  return (
-    // Your JSX here with Tailwind classes
-  );
-}
-\`\`\`
+<critical_rules>
+1. WRAP output in <boltArtifact> tags
+2. Children must be FULL OBJECTS with type, name, content, styles - NOT string references
+3. Use numeric values for spacing (padding: 64, not "64px")
+4. Use the colors above in HEX format
+5. Content must be specific to "${intent.topic}" in ${lang}
+</critical_rules>
 
-RULES:
-1. Use Tailwind CSS - NO inline styles
-2. Use the colors above with bg-[${colors.background}], text-[${colors.text}], etc.
-3. Content must be in ${lang} and specific to "${intent.topic}"
-4. Create beautiful, production-ready UI
-5. NO generic text like "Welcome", "Get Started", "Lorem ipsum"
+<element_types>
+- section: Full-width container (for hero, features)
+- frame: Generic flex container
+- row: Horizontal flex container
+- text: Text content (requires "content" property)
+- button: Clickable button (requires "content" property)
+</element_types>
 
-${intent.topic === 'wine' ? 'Wine examples: "Scopri i Nostri Vini Pregiati", "Tradizione dal 1920"' : ''}
-${intent.topic === 'restaurant' ? 'Restaurant examples: "Un Viaggio nei Sapori", "Cucina Autentica"' : ''}
-${intent.topic === 'fitness' ? 'Fitness examples: "Trasforma il Tuo Corpo", "Allenati con Noi"' : ''}
-${intent.topic === 'tech' ? 'Tech examples: "Soluzioni Innovative", "Automatizza il Business"' : ''}
+<example>
+<boltArtifact id="hero" title="Hero">
+<boltAction type="canvas">
+{"elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","padding":80,"gap":32,"minHeight":600,"backgroundColor":"${colors.background}"},"children":[{"type":"text","name":"Headline","content":"Titolo Principale","styles":{"fontSize":56,"fontWeight":700,"color":"${colors.primary}","textAlign":"center"}},{"type":"text","name":"Subtitle","content":"Sottotitolo descrittivo","styles":{"fontSize":18,"color":"${colors.text}"}},{"type":"button","name":"CTA","content":"Scopri di Più","styles":{"backgroundColor":"${colors.accent}","color":"#ffffff","padding":16,"borderRadius":8}}]}]}
+</boltAction>
+</boltArtifact>
+</example>
 
-Generate a complete, beautiful React component.`;
+Generate designs with NESTED children objects. Never use string references.`;
 }
 
 // Export types for external use
