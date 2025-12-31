@@ -100,9 +100,20 @@ serve(async (req: Request) => {
     });
 
     if (!response.ok) {
-      const error = await response.text();
-      console.error("[AI Chat] Claude API error:", error);
-      throw new Error(`Claude API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error("[AI Chat] Claude API error:", response.status, errorText);
+      // Return detailed error to client for debugging
+      return new Response(
+        JSON.stringify({
+          error: `Claude API error: ${response.status}`,
+          details: errorText,
+          model: selectedModel,
+        }),
+        {
+          status: 500,
+          headers: { ...corsHeaders, "Content-Type": "application/json" },
+        }
+      );
     }
 
     // Stream the response back to client
@@ -167,8 +178,13 @@ serve(async (req: Request) => {
     });
   } catch (error) {
     console.error("[AI Chat] Error:", error);
+    console.error("[AI Chat] Error stack:", error.stack);
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({
+        error: error.message,
+        stack: error.stack,
+        type: error.name
+      }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

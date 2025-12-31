@@ -2702,7 +2702,13 @@ const DesignEditor: React.FC = () => {
               flex: 1,
               overflow: 'hidden',
             }}>
-              <CanvasSidebar />
+              <CanvasSidebar onPageChange={() => {
+                // Small delay to ensure page change is complete before resetting viewport
+                requestAnimationFrame(() => {
+                  setZoom(1);
+                  setPan({ x: 0, y: 0 });
+                });
+              }} />
             </div>
           </div>
           ) : (

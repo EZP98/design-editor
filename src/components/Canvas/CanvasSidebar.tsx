@@ -720,7 +720,11 @@ function LayerList({ rootElement }: { rootElement: CanvasElement }) {
   );
 }
 
-export function CanvasSidebar() {
+interface CanvasSidebarProps {
+  onPageChange?: () => void;
+}
+
+export function CanvasSidebar({ onPageChange }: CanvasSidebarProps) {
   const [activeTab, setActiveTab] = useState<'chat' | 'pages' | 'layers'>('pages');
   const {
     pages,
@@ -966,7 +970,10 @@ export function CanvasSidebar() {
                         ? `1px solid ${colors.accentMedium}`
                         : `1px solid transparent`,
                     }}
-                    onClick={() => setCurrentPage(page.id)}
+                    onClick={() => {
+                      setCurrentPage(page.id);
+                      onPageChange?.();
+                    }}
                     onDoubleClick={() => {
                       setEditingPageId(page.id);
                       setNewPageName(page.name);
