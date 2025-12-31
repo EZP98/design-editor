@@ -965,6 +965,97 @@ const DesignEditor: React.FC = () => {
   const [resizeHandle, setResizeHandle] = useState<string | null>(null);
   const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(0.45); // Default 45% zoom like Figma
+
+  // WebContainer files for preview mode
+  const [webContainerFiles, setWebContainerFiles] = useState<Record<string, string>>({
+    'src/App.tsx': `export default function App() {
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+      <div className="text-center text-white">
+        <h1 className="text-5xl font-bold mb-4">Welcome</h1>
+        <p className="text-xl opacity-80">Ask AI to generate something!</p>
+      </div>
+    </div>
+  );
+}`,
+    'src/index.css': `@tailwind base;
+@tailwind components;
+@tailwind utilities;`,
+    'src/main.tsx': `import React from 'react';
+import ReactDOM from 'react-dom/client';
+import App from './App';
+import './index.css';
+
+ReactDOM.createRoot(document.getElementById('root')!).render(
+  <React.StrictMode>
+    <App />
+  </React.StrictMode>
+);`,
+    'index.html': `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AI App</title>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module" src="/src/main.tsx"></script>
+</body>
+</html>`,
+    'package.json': `{
+  "name": "ai-app",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build"
+  },
+  "dependencies": {
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@types/react": "^18.2.0",
+    "@types/react-dom": "^18.2.0",
+    "@vitejs/plugin-react": "^4.0.0",
+    "autoprefixer": "^10.4.14",
+    "postcss": "^8.4.24",
+    "tailwindcss": "^3.3.2",
+    "typescript": "^5.0.0",
+    "vite": "^4.4.0"
+  }
+}`,
+    'vite.config.ts': `import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+export default defineConfig({ plugins: [react()] });`,
+    'tailwind.config.js': `export default {
+  content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
+  theme: { extend: {} },
+  plugins: [],
+};`,
+    'postcss.config.js': `export default {
+  plugins: { tailwindcss: {}, autoprefixer: {} },
+};`,
+    'tsconfig.json': `{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "module": "ESNext",
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "resolveJsonModule": true,
+    "isolatedModules": true,
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true
+  },
+  "include": ["src"]
+}`
+  });
   const [pan, setPan] = useState({ x: 0, y: 0 });
   const [showTimeline, setShowTimeline] = useState(false);
   const [showCodePanel, setShowCodePanel] = useState(false);
@@ -1066,7 +1157,7 @@ const DesignEditor: React.FC = () => {
   const [showDeviceDropdown, setShowDeviceDropdown] = useState(false);
   const [projectUrl, setProjectUrl] = useState<string>('');
   const isCanvasMode = !useWebContainer && !projectUrl;
-  const [canvasViewMode, setCanvasViewMode] = useState<'2d' | '3d'>('2d');
+  const [canvasViewMode, setCanvasViewMode] = useState<'2d' | '3d' | 'preview'>('preview');
   const [iframeLoading, setIframeLoading] = useState(false);
   const [showUrlInput, setShowUrlInput] = useState(false);
   const [liveMode, setLiveMode] = useState(false);
@@ -3264,25 +3355,34 @@ const DesignEditor: React.FC = () => {
                       2D Canvas
                     </button>
                     <button
-                      onClick={() => setCanvasViewMode('3d')}
+                      onClick={() => setCanvasViewMode('preview')}
                       style={{
                         padding: '8px 16px',
                         border: 'none',
                         borderRadius: 8,
-                        background: canvasViewMode === '3d' ? '#8B5CF6' : 'transparent',
-                        color: canvasViewMode === '3d' ? 'white' : '#888',
+                        background: canvasViewMode === 'preview' ? '#8B5CF6' : 'transparent',
+                        color: canvasViewMode === 'preview' ? 'white' : '#888',
                         cursor: 'pointer',
                         fontSize: 12,
                         fontWeight: 600,
                         transition: 'all 0.15s ease',
                       }}
                     >
-                      3D Canvas
+                      Preview
                     </button>
                   </div>
 
-                  {/* Render 2D or 3D Canvas based on mode */}
-                  {canvasViewMode === '2d' ? (
+                  {/* Render based on mode */}
+                  {canvasViewMode === 'preview' ? (
+                    <div className="flex-1 w-full h-full bg-white rounded-lg overflow-hidden">
+                      <Suspense fallback={<LazyLoadingFallback />}>
+                        <WebContainerPreview
+                          files={webContainerFiles}
+                          height="100%"
+                        />
+                      </Suspense>
+                    </div>
+                  ) : canvasViewMode === '2d' ? (
                     <Canvas
                       zoom={zoom}
                       pan={pan}
