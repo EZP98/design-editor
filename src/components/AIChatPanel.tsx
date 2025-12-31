@@ -244,6 +244,66 @@ const AI_ENDPOINT = SUPABASE_URL
   : 'https://design-editor-api.eziopappalardo98.workers.dev/api/ai/chat/stream';
 
 /**
+ * Convert canvas elements to React/Tailwind code
+ */
+function elementsToReactCode(elements: any[]): string {
+  const renderElement = (el: any, indent = 2): string => {
+    const spaces = ' '.repeat(indent);
+    const styles = el.styles || {};
+
+    // Convert styles to Tailwind classes
+    const classes: string[] = [];
+    if (styles.backgroundColor) classes.push(`bg-[${styles.backgroundColor}]`);
+    if (styles.color) classes.push(`text-[${styles.color}]`);
+    if (styles.fontSize) classes.push(`text-[${styles.fontSize}px]`);
+    if (styles.fontWeight === 700 || styles.fontWeight === 'bold') classes.push('font-bold');
+    if (styles.padding) classes.push(`p-[${styles.padding}px]`);
+    if (styles.gap) classes.push(`gap-[${styles.gap}px]`);
+    if (styles.borderRadius) classes.push(`rounded-[${styles.borderRadius}px]`);
+    if (styles.display === 'flex') classes.push('flex');
+    if (styles.flexDirection === 'column') classes.push('flex-col');
+    if (styles.alignItems === 'center') classes.push('items-center');
+    if (styles.justifyContent === 'center') classes.push('justify-center');
+    if (styles.minHeight) classes.push(`min-h-[${styles.minHeight}px]`);
+    if (styles.textAlign === 'center') classes.push('text-center');
+
+    const className = classes.length > 0 ? ` className="${classes.join(' ')}"` : '';
+
+    if (el.type === 'text') {
+      return `${spaces}<p${className}>${el.content || el.name || ''}</p>`;
+    }
+
+    if (el.type === 'button') {
+      return `${spaces}<button${className}>${el.content || el.name || 'Button'}</button>`;
+    }
+
+    if (el.type === 'image' && el.src) {
+      return `${spaces}<img src="${el.src}" alt="${el.name || ''}" className="w-full h-auto" />`;
+    }
+
+    // Container types (section, frame, row)
+    const children = el.children || [];
+    const childrenCode = children.map((child: any) => renderElement(child, indent + 2)).join('\n');
+
+    if (children.length > 0) {
+      return `${spaces}<div${className}>\n${childrenCode}\n${spaces}</div>`;
+    }
+
+    return `${spaces}<div${className} />`;
+  };
+
+  const sectionsCode = elements.map(el => renderElement(el, 6)).join('\n');
+
+  return `export default function App() {
+  return (
+    <div className="min-h-screen">
+${sectionsCode}
+    </div>
+  );
+}`;
+}
+
+/**
  * Repair truncated JSON by closing unclosed brackets/braces
  * and removing incomplete elements
  */
@@ -1045,6 +1105,24 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           })));
 
           allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
+
+          // Also update WebContainer preview with React code
+          if (onFilesUpdate) {
+            // Extract React code from response
+            const codeMatch = fullContent.match(/```(?:tsx?|jsx?)\n([\s\S]*?)```/);
+            if (codeMatch) {
+              const reactCode = codeMatch[1];
+              console.log('[AIChatPanel] Sending React code to WebContainer preview');
+              const projectFiles = generateProjectFromReactCode(reactCode);
+              onFilesUpdate(projectFiles);
+            } else {
+              // Generate React from canvas elements
+              console.log('[AIChatPanel] Generating React from canvas elements for preview');
+              const reactCode = elementsToReactCode(allElements);
+              const projectFiles = generateProjectFromReactCode(reactCode);
+              onFilesUpdate(projectFiles);
+            }
+          }
 
           // Update message with success
           const pageInfo = pageId ? ' (nuova pagina)' : '';
