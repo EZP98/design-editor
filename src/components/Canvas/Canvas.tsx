@@ -988,23 +988,10 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
 
           {/* Render elements */}
           {(() => {
-            // pageHasAutoLayout already defined above
             const pageFlexDirection = rootElement.styles.flexDirection || 'column';
-            console.log(`[Canvas] Rendering page "${page.name}" (${page.id}), rootElement children:`, rootElement.children.length);
-            if (rootElement.children.length === 0) {
-              console.log('[Canvas] WARNING: rootElement has no children!');
-            }
             return rootElement.children.map((childId) => {
               const child = elements[childId];
-              if (!child) {
-                console.log(`[Canvas] Child ${childId} not found in elements!`);
-                return null;
-              }
-              if (!child.visible) {
-                console.log(`[Canvas] Child ${childId} (${child.name}) is not visible`);
-                return null;
-              }
-              console.log(`[Canvas] Rendering child: ${child.name} (${child.type}), size: ${child.size.width}x${child.size.height}`);
+              if (!child || !child.visible) return null;
               return (
                 <CanvasElementRenderer
                   key={childId}
