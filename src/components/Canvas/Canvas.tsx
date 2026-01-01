@@ -178,6 +178,31 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
     saveInitialState();
   }, []);
 
+  // Initial centering: center on first page when canvas loads
+  const hasInitialCentered = useRef(false);
+  useEffect(() => {
+    const pageList = Object.values(pages);
+    if (!hasInitialCentered.current && pageList.length > 0 && canvasRef.current) {
+      const firstPage = pageList[0];
+      const rootEl = elements[firstPage.rootElementId];
+      if (rootEl) {
+        hasInitialCentered.current = true;
+
+        const pageX = firstPage.x || 0;
+        const pageY = firstPage.y || 0;
+        const pageWidth = rootEl.size?.width || 1440;
+        const pageHeight = rootEl.size?.height || 900;
+
+        // Center on the first page
+        const centerX = pageX + pageWidth / 2;
+        const centerY = pageY + pageHeight / 2;
+
+        onPanChange({ x: -centerX, y: -centerY });
+        onZoomChange(0.5); // Start at 50% zoom to see the whole page
+      }
+    }
+  }, [pages, elements, onPanChange, onZoomChange]);
+
   // Handle canvas click (deselect) - only if not marquee selecting
   const handleCanvasClick = useCallback(
     (e: React.MouseEvent) => {

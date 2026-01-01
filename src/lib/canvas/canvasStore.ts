@@ -2238,13 +2238,29 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
         return persistedState;
       },
       onRehydrateStorage: () => (state) => {
-        console.log('Canvas state rehydrated from localStorage');
-        // Ensure all pages have x, y (fallback for any edge cases)
-        if (state?.pages) {
-          for (const pageId of Object.keys(state.pages)) {
-            if (state.pages[pageId].x === undefined) state.pages[pageId].x = 0;
-            if (state.pages[pageId].y === undefined) state.pages[pageId].y = 0;
+        if (!state?.pages) return;
+
+        const pageList = Object.values(state.pages);
+        if (pageList.length === 0) return;
+
+        // Find minimum X and Y positions
+        const minX = Math.min(...pageList.map((p: any) => p.x || 0));
+        const minY = Math.min(...pageList.map((p: any) => p.y || 0));
+
+        // Normalize if pages are far from origin (accumulated positions)
+        for (const pageId of Object.keys(state.pages)) {
+          const page = state.pages[pageId];
+          // Normalize X if accumulated
+          if (minX > 100) {
+            page.x = (page.x || 0) - minX;
           }
+          // Normalize Y if accumulated
+          if (minY > 100) {
+            page.y = (page.y || 0) - minY;
+          }
+          // Ensure x, y exist
+          if (page.x === undefined) page.x = 0;
+          if (page.y === undefined) page.y = 0;
         }
       },
     }
