@@ -33,6 +33,37 @@ type ResizeHandle =
 
 const HANDLE_SIZE = 8;
 
+// Quick Text Effects - One-click Kittl-style presets
+interface QuickTextEffect {
+  id: string;
+  name: string;
+  icon: string;
+  styles: Record<string, string | number>;
+}
+
+const QUICK_TEXT_EFFECTS: QuickTextEffect[] = [
+  // Reset
+  { id: 'reset', name: 'Reset', icon: '✕', styles: { textShadow: 'none', WebkitTextStroke: '0', color: 'inherit', background: 'none', WebkitBackgroundClip: 'unset', WebkitTextFillColor: 'unset' } },
+  // Neon
+  { id: 'neon-pink', name: 'Neon', icon: '💗', styles: { color: '#fff', textShadow: '0 0 5px #fff, 0 0 10px #fff, 0 0 20px #ff00de, 0 0 30px #ff00de, 0 0 40px #ff00de' } },
+  { id: 'neon-blue', name: 'Neon Blu', icon: '💙', styles: { color: '#fff', textShadow: '0 0 5px #fff, 0 0 10px #fff, 0 0 20px #00f3ff, 0 0 30px #00f3ff, 0 0 40px #00f3ff' } },
+  // 3D
+  { id: '3d-retro', name: '3D Retro', icon: '🎮', styles: { color: '#ff00ff', textShadow: '2px 2px 0 #00ffff, 4px 4px 0 #ff00ff, 6px 6px 0 #00ffff' } },
+  { id: '3d-classic', name: '3D Classic', icon: '📦', styles: { textShadow: '1px 1px 0 #8B5CF6, 2px 2px 0 #8B5CF6, 3px 3px 0 #8B5CF6, 4px 4px 0 #8B5CF6, 5px 5px 0 rgba(0,0,0,0.2)' } },
+  // Outline
+  { id: 'outline', name: 'Outline', icon: '⬜', styles: { WebkitTextStroke: '2px #A78BFA', color: 'transparent' } },
+  { id: 'outline-fill', name: 'Outline Fill', icon: '🔲', styles: { WebkitTextStroke: '2px #000', color: '#fff' } },
+  // Gradient
+  { id: 'gradient-sunset', name: 'Sunset', icon: '🌅', styles: { background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' } },
+  { id: 'gradient-ocean', name: 'Ocean', icon: '🌊', styles: { background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' } },
+  { id: 'gradient-gold', name: 'Gold', icon: '✨', styles: { background: 'linear-gradient(135deg, #f5af19 0%, #f12711 100%)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent', backgroundClip: 'text' } },
+  // Shadows
+  { id: 'shadow-soft', name: 'Soft Shadow', icon: '🌑', styles: { textShadow: '0 4px 12px rgba(0, 0, 0, 0.4)' } },
+  { id: 'shadow-hard', name: 'Hard Shadow', icon: '⬛', styles: { textShadow: '4px 4px 0 rgba(0, 0, 0, 0.8)' } },
+  // Glow
+  { id: 'glow', name: 'Glow', icon: '💡', styles: { textShadow: '0 0 10px rgba(168, 85, 247, 0.8), 0 0 20px rgba(168, 85, 247, 0.5), 0 0 30px rgba(168, 85, 247, 0.3)' } },
+];
+
 export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 } }: SelectionOverlayProps) {
   // Don't show floating toolbar for page elements (they have their own header)
   const isPage = element.type === 'page';
@@ -56,7 +87,16 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
   const [cropStart, setCropStart] = useState<{ x: number; y: number } | null>(null);
   const [cropBox, setCropBox] = useState<{ x: number; y: number; width: number; height: number } | null>(null);
 
+  // Notes popover state
+  const [showNotesPopover, setShowNotesPopover] = useState(false);
+  const [notesValue, setNotesValue] = useState(element.notes || '');
+
+  // Quick Text Effects state
+  const [showTextEffects, setShowTextEffects] = useState(false);
+
   const resizeElement = useCanvasStore((state) => state.resizeElement);
+  const updateElementNotes = useCanvasStore((state) => state.updateElementNotes);
+  const updateElementStyles = useCanvasStore((state) => state.updateElementStyles);
   const moveElement = useCanvasStore((state) => state.moveElement);
   const saveToHistory = useCanvasStore((state) => state.saveToHistory);
   const reorderElement = useCanvasStore((state) => state.reorderElement);
@@ -383,6 +423,24 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
       };
     }
   }, [activeHandle, handleResizeMove, handleResizeEnd]);
+
+  // Sync notes value when element changes
+  useEffect(() => {
+    setNotesValue(element.notes || '');
+  }, [element.id, element.notes]);
+
+  // Handle saving notes
+  const handleSaveNotes = useCallback(() => {
+    updateElementNotes(element.id, notesValue);
+    setShowNotesPopover(false);
+  }, [element.id, notesValue, updateElementNotes]);
+
+  // Handle applying quick text effect
+  const handleApplyTextEffect = useCallback((effect: QuickTextEffect) => {
+    updateElementStyles(element.id, effect.styles);
+    saveToHistory(`Apply text effect: ${effect.name}`);
+    setShowTextEffects(false);
+  }, [element.id, updateElementStyles, saveToHistory]);
 
   // Cursor for each handle
   const getCursor = (handle: ResizeHandle): string => {
@@ -819,6 +877,149 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
           }}
         >
           {element.name}
+        </div>
+
+        {/* Notes button - for AI context */}
+        <div style={{ position: 'relative' }}>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              setShowNotesPopover(!showNotesPopover);
+            }}
+            style={{
+              width: 28,
+              height: 28,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: showNotesPopover || element.notes ? 'rgba(59, 130, 246, 0.15)' : 'transparent',
+              border: 'none',
+              borderRadius: 6,
+              color: element.notes ? '#3b82f6' : '#71717a',
+              cursor: 'pointer',
+              transition: 'all 0.15s',
+              position: 'relative',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.background = 'rgba(59, 130, 246, 0.15)';
+              e.currentTarget.style.color = '#3b82f6';
+            }}
+            onMouseLeave={(e) => {
+              if (!showNotesPopover && !element.notes) {
+                e.currentTarget.style.background = 'transparent';
+                e.currentTarget.style.color = '#71717a';
+              }
+            }}
+            title="Notes (for AI context)"
+          >
+            {/* Note icon */}
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+            </svg>
+            {/* Indicator dot when has notes */}
+            {element.notes && (
+              <span style={{
+                position: 'absolute',
+                top: 4,
+                right: 4,
+                width: 6,
+                height: 6,
+                background: '#3b82f6',
+                borderRadius: '50%',
+              }} />
+            )}
+          </button>
+
+          {/* Notes Popover */}
+          {showNotesPopover && (
+            <div
+              style={{
+                position: 'absolute',
+                top: '100%',
+                left: '50%',
+                transform: 'translateX(-50%)',
+                marginTop: 8,
+                padding: 12,
+                background: 'rgba(20, 20, 20, 0.98)',
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(255, 255, 255, 0.1)',
+                borderRadius: 10,
+                boxShadow: '0 4px 24px rgba(0, 0, 0, 0.5)',
+                minWidth: 240,
+                zIndex: 100,
+              }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div style={{ fontSize: 11, fontWeight: 600, color: '#a1a1aa', marginBottom: 8, display: 'flex', alignItems: 'center', gap: 4 }}>
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                  <polyline points="14 2 14 8 20 8" />
+                </svg>
+                Notes (visible to AI)
+              </div>
+              <textarea
+                value={notesValue}
+                onChange={(e) => setNotesValue(e.target.value)}
+                placeholder="Add notes about this element for the AI to understand your intentions..."
+                style={{
+                  width: '100%',
+                  minHeight: 80,
+                  padding: 8,
+                  background: 'rgba(255, 255, 255, 0.05)',
+                  border: '1px solid rgba(255, 255, 255, 0.1)',
+                  borderRadius: 6,
+                  color: '#fff',
+                  fontSize: 12,
+                  resize: 'vertical',
+                  outline: 'none',
+                  fontFamily: 'inherit',
+                }}
+                onFocus={(e) => {
+                  e.currentTarget.style.borderColor = '#3b82f6';
+                }}
+                onBlur={(e) => {
+                  e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.1)';
+                }}
+              />
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    setNotesValue(element.notes || '');
+                    setShowNotesPopover(false);
+                  }}
+                  style={{
+                    padding: '4px 10px',
+                    background: 'transparent',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: 4,
+                    color: '#71717a',
+                    fontSize: 11,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={handleSaveNotes}
+                  style={{
+                    padding: '4px 10px',
+                    background: '#3b82f6',
+                    border: 'none',
+                    borderRadius: 4,
+                    color: '#fff',
+                    fontSize: 11,
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Save
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Reorder buttons - only shown in auto-layout */}
@@ -1395,6 +1596,118 @@ export function SelectionOverlay({ element, zoom, displayOffset = { x: 0, y: 0 }
                     <span style={{ fontSize: 14 }}>✏️</span>
                     Correggi grammatica
                   </button>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Quick Text Effects - One-click Kittl-style */}
+        {isTextElement && (
+          <>
+            {/* Divider */}
+            <div style={{ width: 1, height: 20, background: 'rgba(255, 255, 255, 0.08)', margin: '0 4px' }} />
+
+            {/* Effects Button with Dropdown */}
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowTextEffects(!showTextEffects);
+                }}
+                style={{
+                  height: 28,
+                  padding: '0 10px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  background: showTextEffects ? 'rgba(168, 85, 247, 0.2)' : 'transparent',
+                  border: 'none',
+                  borderRadius: 6,
+                  color: showTextEffects ? '#a855f7' : '#71717a',
+                  cursor: 'pointer',
+                  transition: 'all 0.15s',
+                  fontSize: 11,
+                  fontWeight: 600,
+                }}
+                onMouseEnter={(e) => {
+                  if (!showTextEffects) {
+                    e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)';
+                    e.currentTarget.style.color = '#a855f7';
+                  }
+                }}
+                onMouseLeave={(e) => {
+                  if (!showTextEffects) {
+                    e.currentTarget.style.background = 'transparent';
+                    e.currentTarget.style.color = '#71717a';
+                  }
+                }}
+                title="Quick Text Effects"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M12 3v18M3 12h18M6.3 17.7l11.4-11.4M17.7 17.7L6.3 6.3" />
+                </svg>
+                Effects
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" style={{ marginLeft: 2 }}>
+                  <polyline points="6 9 12 15 18 9" />
+                </svg>
+              </button>
+
+              {/* Effects Dropdown */}
+              {showTextEffects && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    top: '100%',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    marginTop: 8,
+                    padding: 8,
+                    background: 'rgba(20, 20, 20, 0.98)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    borderRadius: 12,
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.5)',
+                    minWidth: 280,
+                    zIndex: 100,
+                  }}
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <div style={{ fontSize: 10, fontWeight: 600, color: '#a1a1aa', marginBottom: 8, padding: '0 4px', display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M12 3v18M3 12h18" />
+                    </svg>
+                    One-Click Text Effects
+                  </div>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 4 }}>
+                    {QUICK_TEXT_EFFECTS.map((effect) => (
+                      <button
+                        key={effect.id}
+                        onClick={() => handleApplyTextEffect(effect)}
+                        style={{
+                          padding: '8px 4px',
+                          borderRadius: 8,
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          background: 'rgba(255, 255, 255, 0.03)',
+                          cursor: 'pointer',
+                          textAlign: 'center',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.background = 'rgba(168, 85, 247, 0.15)';
+                          e.currentTarget.style.borderColor = 'rgba(168, 85, 247, 0.3)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.03)';
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                        }}
+                        title={effect.name}
+                      >
+                        <div style={{ fontSize: 18, marginBottom: 2 }}>{effect.icon}</div>
+                        <div style={{ fontSize: 9, color: '#a1a1aa', fontWeight: 500 }}>{effect.name}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
               )}
             </div>

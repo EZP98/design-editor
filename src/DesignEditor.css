@@ -33,6 +33,18 @@
   --accent-green: #22c55e;
   --accent-orange: #F97316;
   --accent-red: #EF4444;
+
+  /* Shadow System */
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.15);
+  --shadow-md: 0 4px 16px rgba(0, 0, 0, 0.2);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.25);
+  --shadow-glow: 0 0 20px rgba(139, 92, 246, 0.3);
+  --shadow-glow-sm: 0 0 12px rgba(139, 92, 246, 0.2);
+
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-base: 200ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 300ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 /* Light Theme Overrides */
@@ -239,16 +251,25 @@
 .de-btn-ghost {
   background: transparent;
   color: var(--text-secondary);
+  transition: var(--transition-base);
 }
 
 .de-btn-ghost:hover {
-  background: var(--bg-hover);
+  background: rgba(139, 92, 246, 0.12);
   color: var(--text-primary);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-sm);
+}
+
+.de-btn-ghost:active {
+  transform: translateY(0);
+  box-shadow: none;
 }
 
 .de-btn-ghost.active {
-  background: var(--bg-active);
-  color: var(--text-primary);
+  background: rgba(139, 92, 246, 0.15);
+  color: var(--accent-light);
+  box-shadow: var(--shadow-glow-sm);
 }
 
 .de-btn-outline {
@@ -264,12 +285,20 @@
 }
 
 .de-btn-primary {
-  background: var(--text-primary);
-  color: var(--bg-canvas);
+  background: var(--accent-primary);
+  color: #ffffff;
+  transition: var(--transition-base);
 }
 
 .de-btn-primary:hover {
-  opacity: 0.9;
+  background: var(--accent-dark);
+  transform: translateY(-1px);
+  box-shadow: var(--shadow-glow);
+}
+
+.de-btn-primary:active {
+  transform: translateY(0);
+  box-shadow: var(--shadow-glow-sm);
 }
 
 /* =====================

@@ -16,8 +16,21 @@ export interface CanvasElementData {
   src?: string;
   href?: string;
   iconName?: string;
+  imagePrompt?: string; // AI image generation prompt - when set, will auto-generate image
   styles?: Record<string, unknown>;
   children?: CanvasElementData[];
+}
+
+/**
+ * Modification to existing element (for Smart AI Context)
+ */
+export interface CanvasElementModification {
+  id: string;
+  styles?: Record<string, unknown>;
+  content?: string;
+  name?: string;
+  src?: string;
+  href?: string;
 }
 
 export interface ParsedArtifact {
@@ -26,6 +39,7 @@ export interface ParsedArtifact {
   content: string;
   language?: string;
   canvasElements?: CanvasElementData[];
+  canvasModifications?: CanvasElementModification[]; // Modifications to existing elements
 }
 
 export interface ParseResult {
@@ -151,11 +165,30 @@ export function parseArtifacts(response: string): ParseResult {
           try {
             const trimmedContent = content.trim();
             const canvasData = JSON.parse(trimmedContent);
-            artifacts.push({
+
+            // Build artifact with elements and/or modifications
+            const artifact: ParsedArtifact = {
               type: 'canvas',
               content: trimmedContent,
-              canvasElements: canvasData.elements || (Array.isArray(canvasData) ? canvasData : [canvasData]),
-            });
+            };
+
+            // Extract new elements
+            if (canvasData.elements) {
+              artifact.canvasElements = canvasData.elements;
+            } else if (Array.isArray(canvasData)) {
+              artifact.canvasElements = canvasData;
+            } else if (!canvasData.modifications) {
+              // Single element without modifications key
+              artifact.canvasElements = [canvasData];
+            }
+
+            // Extract modifications to existing elements
+            if (canvasData.modifications && Array.isArray(canvasData.modifications)) {
+              artifact.canvasModifications = canvasData.modifications;
+              console.log('[ArtifactParser] Found', canvasData.modifications.length, 'element modifications');
+            }
+
+            artifacts.push(artifact);
           } catch (e) {
             console.warn('[ArtifactParser] Failed to parse canvas JSON:', e);
           }

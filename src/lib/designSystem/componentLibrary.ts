@@ -322,6 +322,194 @@ export const HERO_SPLIT_IMAGE: ComponentBlock = {
   },
 };
 
+export const HERO_LEFT_ALIGNED: ComponentBlock = {
+  id: 'hero-left-aligned',
+  name: 'Hero Left Aligned',
+  category: 'hero',
+  description: 'Left-aligned hero with asymmetric layout',
+  tags: ['hero', 'dark', 'left-aligned', 'asymmetric'],
+  element: {
+    type: 'container',
+    name: 'Hero Section',
+    sizing: { width: 'fill', height: 'fit' },
+    layout: { direction: 'column', gap: 0, align: 'stretch', justify: 'start' },
+    styles: {
+      backgroundColor: '#0A0A0A',
+      paddingTop: 140,
+      paddingBottom: 140,
+      paddingLeft: 80,
+      paddingRight: 80,
+    },
+    children: [
+      {
+        type: 'container',
+        name: 'Hero Content',
+        sizing: { width: 'fixed', height: 'fit', fixedWidth: 680 },
+        layout: { direction: 'column', gap: 28, align: 'start', justify: 'start' },
+        children: [
+          {
+            type: 'container',
+            name: 'Eyebrow Badge',
+            sizing: { width: 'fit', height: 'fit' },
+            layout: { direction: 'row', gap: 8, align: 'center', justify: 'start' },
+            styles: {
+              backgroundColor: 'rgba(34, 197, 94, 0.1)',
+              borderRadius: 6,
+              paddingTop: 6,
+              paddingBottom: 6,
+              paddingLeft: 12,
+              paddingRight: 12,
+            },
+            children: [
+              {
+                type: 'text',
+                name: 'Eyebrow Text',
+                content: 'New Release',
+                sizing: { width: 'fit', height: 'fit' },
+                styles: {
+                  color: '#22C55E',
+                  fontSize: 13,
+                  fontWeight: 600,
+                  letterSpacing: 0.3,
+                },
+              },
+            ],
+          },
+          {
+            type: 'text',
+            name: 'Headline',
+            content: 'Ship products that\npeople actually love',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: {
+              color: '#FFFFFF',
+              fontSize: 72,
+              fontWeight: 700,
+              lineHeight: 1.05,
+              letterSpacing: -3,
+            },
+          },
+          {
+            type: 'text',
+            name: 'Description',
+            content: 'A complete toolkit for building modern web applications. From design to deployment, everything you need in one place.',
+            sizing: { width: 'fixed', height: 'fit', fixedWidth: 520 },
+            styles: {
+              color: 'rgba(255, 255, 255, 0.55)',
+              fontSize: 19,
+              fontWeight: 400,
+              lineHeight: 1.65,
+            },
+          },
+          {
+            type: 'container',
+            name: 'CTA Row',
+            sizing: { width: 'fit', height: 'fit' },
+            layout: { direction: 'row', gap: 16, align: 'center', justify: 'start' },
+            styles: { marginTop: 8 },
+            children: [
+              {
+                type: 'button',
+                name: 'Primary CTA',
+                content: 'Start Building',
+                sizing: { width: 'fit', height: 'fit' },
+                styles: {
+                  backgroundColor: '#FFFFFF',
+                  color: '#0A0A0A',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  paddingTop: 14,
+                  paddingBottom: 14,
+                  paddingLeft: 28,
+                  paddingRight: 28,
+                  borderRadius: 8,
+                },
+              },
+              {
+                type: 'button',
+                name: 'Secondary CTA',
+                content: 'View Docs',
+                sizing: { width: 'fit', height: 'fit' },
+                styles: {
+                  backgroundColor: 'transparent',
+                  color: 'rgba(255, 255, 255, 0.8)',
+                  fontSize: 15,
+                  fontWeight: 500,
+                  paddingTop: 14,
+                  paddingBottom: 14,
+                  paddingLeft: 20,
+                  paddingRight: 20,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const HERO_MINIMAL: ComponentBlock = {
+  id: 'hero-minimal',
+  name: 'Hero Minimal',
+  category: 'hero',
+  description: 'Ultra-minimal hero with only text, no badge or decorations',
+  tags: ['hero', 'dark', 'minimal', 'clean', 'simple'],
+  element: {
+    type: 'container',
+    name: 'Hero Section',
+    sizing: { width: 'fill', height: 'fit' },
+    layout: { direction: 'column', gap: 0, align: 'center', justify: 'center' },
+    styles: {
+      backgroundColor: '#000000',
+      paddingTop: 160,
+      paddingBottom: 160,
+      paddingLeft: 24,
+      paddingRight: 24,
+    },
+    children: [
+      {
+        type: 'container',
+        name: 'Content',
+        sizing: { width: 'fixed', height: 'fit', fixedWidth: 900 },
+        layout: { direction: 'column', gap: 40, align: 'center', justify: 'start' },
+        children: [
+          {
+            type: 'text',
+            name: 'Headline',
+            content: 'Design is not just what it looks like. Design is how it works.',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: {
+              color: '#FFFFFF',
+              fontSize: 56,
+              fontWeight: 500,
+              lineHeight: 1.2,
+              letterSpacing: -1.5,
+              textAlign: 'center',
+            },
+          },
+          {
+            type: 'button',
+            name: 'CTA',
+            content: 'Get Started',
+            sizing: { width: 'fit', height: 'fit' },
+            styles: {
+              backgroundColor: '#FFFFFF',
+              color: '#000000',
+              fontSize: 16,
+              fontWeight: 600,
+              paddingTop: 16,
+              paddingBottom: 16,
+              paddingLeft: 40,
+              paddingRight: 40,
+              borderRadius: 100,
+            },
+          },
+        ],
+      },
+    ],
+  },
+};
+
 // ============================================
 // FEATURE COMPONENTS
 // ============================================
@@ -565,6 +753,287 @@ export const FEATURES_GRID_3COL: ComponentBlock = {
                   fontSize: 15,
                   fontWeight: 400,
                   lineHeight: 1.55,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const FEATURES_GRID_2COL: ComponentBlock = {
+  id: 'features-grid-2col',
+  name: 'Features Grid 2 Columns',
+  category: 'features',
+  description: 'Two-column feature grid with larger cards',
+  tags: ['features', 'grid', '2-column', 'cards'],
+  element: {
+    type: 'container',
+    name: 'Features Section',
+    sizing: { width: 'fill', height: 'fit' },
+    layout: { direction: 'column', gap: 56, align: 'center', justify: 'start' },
+    styles: {
+      backgroundColor: '#0A0A0A',
+      paddingTop: 100,
+      paddingBottom: 100,
+      paddingLeft: 80,
+      paddingRight: 80,
+    },
+    children: [
+      {
+        type: 'container',
+        name: 'Section Header',
+        sizing: { width: 'fixed', height: 'fit', fixedWidth: 600 },
+        layout: { direction: 'column', gap: 16, align: 'center', justify: 'start' },
+        children: [
+          {
+            type: 'text',
+            name: 'Section Title',
+            content: 'Why choose us',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: {
+              color: '#FFFFFF',
+              fontSize: 44,
+              fontWeight: 700,
+              lineHeight: 1.15,
+              textAlign: 'center',
+              letterSpacing: -1.5,
+            },
+          },
+          {
+            type: 'text',
+            name: 'Section Description',
+            content: 'Built for scale, designed for simplicity.',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: {
+              color: 'rgba(255, 255, 255, 0.5)',
+              fontSize: 18,
+              fontWeight: 400,
+              lineHeight: 1.5,
+              textAlign: 'center',
+            },
+          },
+        ],
+      },
+      {
+        type: 'container',
+        name: 'Features Grid',
+        sizing: { width: 'fill', height: 'fit' },
+        layout: { direction: 'row', gap: 24, align: 'stretch', justify: 'center' },
+        children: [
+          {
+            type: 'container',
+            name: 'Feature 1',
+            sizing: { width: 'fill', height: 'fit' },
+            layout: { direction: 'column', gap: 20, align: 'start', justify: 'start' },
+            styles: {
+              backgroundColor: '#141414',
+              borderRadius: 20,
+              paddingTop: 40,
+              paddingBottom: 40,
+              paddingLeft: 36,
+              paddingRight: 36,
+            },
+            children: [
+              {
+                type: 'container',
+                name: 'Icon',
+                sizing: { width: 'fixed', height: 'fixed', fixedWidth: 56, fixedHeight: 56 },
+                layout: { direction: 'row', gap: 0, align: 'center', justify: 'center' },
+                styles: {
+                  backgroundColor: 'rgba(99, 102, 241, 0.12)',
+                  borderRadius: 14,
+                },
+                children: [
+                  { type: 'text', name: 'Icon', content: '⚡', sizing: { width: 'fit', height: 'fit' }, styles: { fontSize: 28 } },
+                ],
+              },
+              {
+                type: 'text',
+                name: 'Title',
+                content: 'Blazing Fast Performance',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: '#FFFFFF', fontSize: 22, fontWeight: 600, lineHeight: 1.3 },
+              },
+              {
+                type: 'text',
+                name: 'Description',
+                content: 'Optimized for speed at every level. From initial load to real-time updates, experience the difference.',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: 'rgba(255, 255, 255, 0.5)', fontSize: 16, fontWeight: 400, lineHeight: 1.6 },
+              },
+            ],
+          },
+          {
+            type: 'container',
+            name: 'Feature 2',
+            sizing: { width: 'fill', height: 'fit' },
+            layout: { direction: 'column', gap: 20, align: 'start', justify: 'start' },
+            styles: {
+              backgroundColor: '#141414',
+              borderRadius: 20,
+              paddingTop: 40,
+              paddingBottom: 40,
+              paddingLeft: 36,
+              paddingRight: 36,
+            },
+            children: [
+              {
+                type: 'container',
+                name: 'Icon',
+                sizing: { width: 'fixed', height: 'fixed', fixedWidth: 56, fixedHeight: 56 },
+                layout: { direction: 'row', gap: 0, align: 'center', justify: 'center' },
+                styles: {
+                  backgroundColor: 'rgba(34, 197, 94, 0.12)',
+                  borderRadius: 14,
+                },
+                children: [
+                  { type: 'text', name: 'Icon', content: '🛡️', sizing: { width: 'fit', height: 'fit' }, styles: { fontSize: 28 } },
+                ],
+              },
+              {
+                type: 'text',
+                name: 'Title',
+                content: 'Enterprise Security',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: '#FFFFFF', fontSize: 22, fontWeight: 600, lineHeight: 1.3 },
+              },
+              {
+                type: 'text',
+                name: 'Description',
+                content: 'Bank-level encryption, SOC 2 compliance, and regular security audits keep your data protected.',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: 'rgba(255, 255, 255, 0.5)', fontSize: 16, fontWeight: 400, lineHeight: 1.6 },
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  },
+};
+
+export const FEATURES_ALTERNATING: ComponentBlock = {
+  id: 'features-alternating',
+  name: 'Features Alternating',
+  category: 'features',
+  description: 'Zigzag layout with image and text alternating sides',
+  tags: ['features', 'alternating', 'zigzag', 'image'],
+  element: {
+    type: 'container',
+    name: 'Features Section',
+    sizing: { width: 'fill', height: 'fit' },
+    layout: { direction: 'column', gap: 80, align: 'stretch', justify: 'start' },
+    styles: {
+      backgroundColor: '#0D0D0D',
+      paddingTop: 100,
+      paddingBottom: 100,
+      paddingLeft: 80,
+      paddingRight: 80,
+    },
+    children: [
+      {
+        type: 'container',
+        name: 'Feature Row 1',
+        sizing: { width: 'fill', height: 'fit' },
+        layout: { direction: 'row', gap: 64, align: 'center', justify: 'space-between' },
+        children: [
+          {
+            type: 'container',
+            name: 'Text Content',
+            sizing: { width: 'fill', height: 'fit' },
+            layout: { direction: 'column', gap: 20, align: 'start', justify: 'start' },
+            children: [
+              {
+                type: 'text',
+                name: 'Title',
+                content: 'Intuitive Interface',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: '#FFFFFF', fontSize: 36, fontWeight: 700, lineHeight: 1.2, letterSpacing: -1 },
+              },
+              {
+                type: 'text',
+                name: 'Description',
+                content: 'Designed with simplicity in mind. Our clean interface lets you focus on what matters most - creating amazing experiences for your users.',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: 'rgba(255, 255, 255, 0.55)', fontSize: 17, fontWeight: 400, lineHeight: 1.65 },
+              },
+              {
+                type: 'button',
+                name: 'Learn More',
+                content: 'Learn more',
+                sizing: { width: 'fit', height: 'fit' },
+                styles: {
+                  backgroundColor: 'transparent',
+                  color: '#6366F1',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  paddingTop: 8,
+                  paddingBottom: 8,
+                  paddingLeft: 0,
+                  paddingRight: 0,
+                },
+              },
+            ],
+          },
+          {
+            type: 'image',
+            name: 'Feature Image',
+            src: 'https://images.unsplash.com/photo-1551650975-87deedd944c3?w=600&h=400&fit=crop',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: { borderRadius: 16, objectFit: 'cover' },
+          },
+        ],
+      },
+      {
+        type: 'container',
+        name: 'Feature Row 2',
+        sizing: { width: 'fill', height: 'fit' },
+        layout: { direction: 'row', gap: 64, align: 'center', justify: 'space-between' },
+        children: [
+          {
+            type: 'image',
+            name: 'Feature Image',
+            src: 'https://images.unsplash.com/photo-1460925895917-afdab827c52f?w=600&h=400&fit=crop',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: { borderRadius: 16, objectFit: 'cover' },
+          },
+          {
+            type: 'container',
+            name: 'Text Content',
+            sizing: { width: 'fill', height: 'fit' },
+            layout: { direction: 'column', gap: 20, align: 'start', justify: 'start' },
+            children: [
+              {
+                type: 'text',
+                name: 'Title',
+                content: 'Powerful Analytics',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: '#FFFFFF', fontSize: 36, fontWeight: 700, lineHeight: 1.2, letterSpacing: -1 },
+              },
+              {
+                type: 'text',
+                name: 'Description',
+                content: 'Get deep insights into your performance with real-time analytics. Track metrics that matter and make data-driven decisions.',
+                sizing: { width: 'fill', height: 'fit' },
+                styles: { color: 'rgba(255, 255, 255, 0.55)', fontSize: 17, fontWeight: 400, lineHeight: 1.65 },
+              },
+              {
+                type: 'button',
+                name: 'Learn More',
+                content: 'Explore analytics',
+                sizing: { width: 'fit', height: 'fit' },
+                styles: {
+                  backgroundColor: 'transparent',
+                  color: '#6366F1',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  paddingTop: 8,
+                  paddingBottom: 8,
+                  paddingLeft: 0,
+                  paddingRight: 0,
                 },
               },
             ],
@@ -943,6 +1412,124 @@ export const CTA_GRADIENT: ComponentBlock = {
             },
           },
         ],
+      },
+    ],
+  },
+};
+
+export const CTA_SPLIT: ComponentBlock = {
+  id: 'cta-split',
+  name: 'CTA Split',
+  category: 'cta',
+  description: 'Call-to-action with image on one side',
+  tags: ['cta', 'split', 'image', 'call-to-action'],
+  element: {
+    type: 'container',
+    name: 'CTA Section',
+    sizing: { width: 'fill', height: 'fit' },
+    layout: { direction: 'row', gap: 0, align: 'stretch', justify: 'stretch' },
+    styles: {
+      backgroundColor: '#0D0D0D',
+      borderRadius: 24,
+      overflow: 'hidden',
+    },
+    children: [
+      {
+        type: 'container',
+        name: 'Content Side',
+        sizing: { width: 'fill', height: 'fit' },
+        layout: { direction: 'column', gap: 28, align: 'start', justify: 'center' },
+        styles: {
+          backgroundColor: '#111111',
+          paddingTop: 64,
+          paddingBottom: 64,
+          paddingLeft: 56,
+          paddingRight: 56,
+        },
+        children: [
+          {
+            type: 'text',
+            name: 'Headline',
+            content: 'Start your free trial today',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: {
+              color: '#FFFFFF',
+              fontSize: 36,
+              fontWeight: 700,
+              lineHeight: 1.2,
+              letterSpacing: -1,
+            },
+          },
+          {
+            type: 'text',
+            name: 'Description',
+            content: 'Join over 10,000 companies already growing with our platform. No credit card required.',
+            sizing: { width: 'fill', height: 'fit' },
+            styles: {
+              color: 'rgba(255, 255, 255, 0.6)',
+              fontSize: 17,
+              fontWeight: 400,
+              lineHeight: 1.6,
+            },
+          },
+          {
+            type: 'container',
+            name: 'Form Row',
+            sizing: { width: 'fill', height: 'fit' },
+            layout: { direction: 'row', gap: 12, align: 'center', justify: 'start' },
+            children: [
+              {
+                type: 'container',
+                name: 'Email Input',
+                sizing: { width: 'fixed', height: 'fit', fixedWidth: 280 },
+                layout: { direction: 'row', gap: 0, align: 'center', justify: 'start' },
+                styles: {
+                  backgroundColor: 'rgba(255, 255, 255, 0.06)',
+                  borderRadius: 10,
+                  paddingTop: 14,
+                  paddingBottom: 14,
+                  paddingLeft: 20,
+                  paddingRight: 20,
+                  borderWidth: 1,
+                  borderColor: 'rgba(255, 255, 255, 0.1)',
+                },
+                children: [
+                  {
+                    type: 'text',
+                    name: 'Placeholder',
+                    content: 'Enter your email',
+                    sizing: { width: 'fill', height: 'fit' },
+                    styles: { color: 'rgba(255, 255, 255, 0.4)', fontSize: 15, fontWeight: 400 },
+                  },
+                ],
+              },
+              {
+                type: 'button',
+                name: 'Submit Button',
+                content: 'Get Started',
+                sizing: { width: 'fit', height: 'fit' },
+                styles: {
+                  backgroundColor: '#6366F1',
+                  color: '#FFFFFF',
+                  fontSize: 15,
+                  fontWeight: 600,
+                  paddingTop: 14,
+                  paddingBottom: 14,
+                  paddingLeft: 28,
+                  paddingRight: 28,
+                  borderRadius: 10,
+                },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        type: 'image',
+        name: 'CTA Image',
+        src: 'https://images.unsplash.com/photo-1522202176988-66273c2fd55f?w=600&h=500&fit=crop',
+        sizing: { width: 'fill', height: 'fit' },
+        styles: { objectFit: 'cover' },
       },
     ],
   },
@@ -1426,17 +2013,22 @@ export const STATS_ROW: ComponentBlock = {
 // ============================================
 
 export const COMPONENT_LIBRARY: ComponentBlock[] = [
-  // Heroes
+  // Heroes (4 varianti)
   HERO_CENTERED_DARK,
   HERO_SPLIT_IMAGE,
-  // Features
+  HERO_LEFT_ALIGNED,
+  HERO_MINIMAL,
+  // Features (3 varianti)
   FEATURES_GRID_3COL,
+  FEATURES_GRID_2COL,
+  FEATURES_ALTERNATING,
   // Testimonials
   TESTIMONIAL_CARD,
   // Pricing
   PRICING_CARD_HIGHLIGHTED,
-  // CTAs
+  // CTAs (2 varianti)
   CTA_GRADIENT,
+  CTA_SPLIT,
   // Footers
   FOOTER_SIMPLE,
   // Navbars

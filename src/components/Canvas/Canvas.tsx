@@ -179,28 +179,43 @@ export function Canvas({ zoom, pan, onZoomChange, onPanChange }: CanvasProps) {
   }, []);
 
   // Initial centering: center on first page when canvas loads
+  // Track page IDs to detect when a new project is loaded
   const hasInitialCentered = useRef(false);
+  const lastPageIds = useRef<string>('');
+
   useEffect(() => {
     const pageList = Object.values(pages);
-    if (!hasInitialCentered.current && pageList.length > 0 && canvasRef.current) {
-      const firstPage = pageList[0];
-      const rootEl = elements[firstPage.rootElementId];
-      if (rootEl) {
-        hasInitialCentered.current = true;
+    if (pageList.length === 0 || !canvasRef.current) return;
 
-        const pageX = firstPage.x || 0;
-        const pageY = firstPage.y || 0;
-        const pageWidth = rootEl.size?.width || 1440;
-        const pageHeight = rootEl.size?.height || 900;
-
-        // Center on the first page
-        const centerX = pageX + pageWidth / 2;
-        const centerY = pageY + pageHeight / 2;
-
-        onPanChange({ x: -centerX, y: -centerY });
-        onZoomChange(0.5); // Start at 50% zoom to see the whole page
-      }
+    // Check if pages changed (new project loaded)
+    const currentPageIds = Object.keys(pages).sort().join(',');
+    if (currentPageIds !== lastPageIds.current) {
+      hasInitialCentered.current = false;
+      lastPageIds.current = currentPageIds;
     }
+
+    if (hasInitialCentered.current) return;
+
+    const firstPage = pageList[0];
+    const rootEl = elements[firstPage.rootElementId];
+    if (!rootEl) return;
+
+    hasInitialCentered.current = true;
+
+    const pageX = firstPage.x || 0;
+    const pageY = firstPage.y || 0;
+    const pageWidth = rootEl.size?.width || 1440;
+    const pageHeight = rootEl.size?.height || 900;
+
+    // Center on the first page
+    const centerX = pageX + pageWidth / 2;
+    const centerY = pageY + pageHeight / 2;
+
+    // Use requestAnimationFrame to ensure DOM is ready
+    requestAnimationFrame(() => {
+      onPanChange({ x: -centerX, y: -centerY });
+      onZoomChange(0.5); // Start at 50% zoom to see the whole page
+    });
   }, [pages, elements, onPanChange, onZoomChange]);
 
   // Handle canvas click (deselect) - only if not marquee selecting

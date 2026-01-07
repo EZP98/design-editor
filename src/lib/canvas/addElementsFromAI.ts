@@ -82,6 +82,7 @@ function normalizeToLegacyFormat(data: SemanticElementData): CanvasElementData {
     src: data.src,
     href: data.href,
     iconName: data.iconName,
+    imagePrompt: (data as any).imagePrompt, // AI image generation prompt
     children: data.children,
   };
 
@@ -834,12 +835,85 @@ export function replaceCanvasWithAI(elements: CanvasElementData[]): string[] {
 }
 
 /**
- * AI response with optional new page creation
+ * AI element modification - for updating existing elements
+ */
+export interface AIElementModification {
+  id: string; // ID of element to modify
+  styles?: Record<string, unknown>;
+  content?: string;
+  name?: string;
+  src?: string;
+  href?: string;
+}
+
+/**
+ * AI response with optional new page creation and element modifications
  */
 export interface AIDesignResponse {
   createNewPage?: boolean;
   pageName?: string;
-  elements: CanvasElementData[];
+  elements?: CanvasElementData[]; // New elements to create
+  modifications?: AIElementModification[]; // Modifications to existing elements
+}
+
+/**
+ * Apply modifications to existing elements
+ * Used when AI is modifying selected elements rather than creating new ones
+ */
+export function updateElementsFromAI(modifications: AIElementModification[]): {
+  updatedIds: string[];
+  notFound: string[];
+} {
+  const store = useCanvasStore.getState();
+  const updatedIds: string[] = [];
+  const notFound: string[] = [];
+
+  for (const mod of modifications) {
+    const element = store.getElement(mod.id);
+
+    if (!element) {
+      console.warn(`[UpdateElementsFromAI] Element not found: ${mod.id}`);
+      notFound.push(mod.id);
+      continue;
+    }
+
+    console.log(`[UpdateElementsFromAI] Updating element "${element.name}" (${mod.id})`);
+
+    // Update content if provided
+    if (mod.content !== undefined) {
+      store.updateElementContent(mod.id, mod.content);
+    }
+
+    // Update name if provided
+    if (mod.name !== undefined) {
+      store.renameElement(mod.id, mod.name);
+    }
+
+    // Update styles if provided
+    if (mod.styles) {
+      const styles = convertStyles(mod.styles);
+      store.updateElementStyles(mod.id, styles as any);
+    }
+
+    // Update src (for images/videos) if provided
+    if (mod.src !== undefined) {
+      store.updateElement(mod.id, { src: mod.src });
+    }
+
+    // Update href (for links/buttons) if provided
+    if (mod.href !== undefined) {
+      store.updateElement(mod.id, { href: mod.href });
+    }
+
+    updatedIds.push(mod.id);
+  }
+
+  // Save to history
+  if (updatedIds.length > 0) {
+    store.saveToHistory(`AI: Modified ${updatedIds.length} elements`);
+  }
+
+  return { updatedIds, notFound };
 }
 
 /**
@@ -882,6 +956,171 @@ export function processAIDesignResponse(response: AIDesignResponse): {
   const elementIds = addElementsFromAI(response.elements, parentId);
 
   return { elementIds, pageId };
+}
+
+// ============================================================================
+// AI IMAGE GENERATION
+// ============================================================================
+
+// API endpoint for AI image generation
+const SUPABASE_URL = import.meta.env.VITE_SUPABASE_URL || 'https://dyivbglwaazrddmihnod.supabase.co';
+const AI_STUDIO_API = `${SUPABASE_URL}/functions/v1/ai-studio`;
+
+/**
+ * Generate an AI image from a prompt
+ * @param prompt - Descriptive prompt for image generation
+ * @param width - Image width
+ * @param height - Image height
+ * @returns Generated image URL or fallback Unsplash image
+ */
+async function generateAIImage(
+  prompt: string,
+  width: number = 800,
+  height: number = 600
+): Promise<string> {
+  try {
+    console.log(`[AI Image] Generating: "${prompt.substring(0, 50)}..."`);
+
+    const response = await fetch(AI_STUDIO_API, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        operation: 'generate',
+        prompt: prompt,
+        model: 'flux-schnell', // Fast model for quick generation
+        width: Math.min(width, 1024),
+        height: Math.min(height, 1024),
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error(`AI Studio API error: ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    if (data.success && data.imageUrl) {
+      console.log(`[AI Image] Generated: ${data.imageUrl}`);
+      return data.imageUrl;
+    }
+
+    throw new Error(data.error || 'Unknown error');
+  } catch (error) {
+    console.warn('[AI Image] Generation failed, using fallback:', error);
+    // Return fallback Unsplash image
+    return getNextDefaultImage();
+  }
+}
+
+/**
+ * Find all elements with imagePrompt in a tree structure
+ */
+function findElementsWithImagePrompt(
+  elements: CanvasElementData[],
+  parentPath: number[] = []
+): Array<{ path: number[]; prompt: string; element: CanvasElementData }> {
+  const results: Array<{ path: number[]; prompt: string; element: CanvasElementData }> = [];
+
+  elements.forEach((element, index) => {
+    const currentPath = [...parentPath, index];
+
+    if (element.imagePrompt) {
+      results.push({
+        path: currentPath,
+        prompt: element.imagePrompt,
+        element,
+      });
+    }
+
+    if (element.children) {
+      const childResults = findElementsWithImagePrompt(element.children, currentPath);
+      results.push(...childResults);
+    }
+  });
+
+  return results;
+}
+
+/**
+ * Options for addElementsFromAI
+ */
+export interface AddElementsOptions {
+  /** Auto-generate AI images for elements with imagePrompt */
+  autoGenerateImages?: boolean;
+  /** Callback for progress updates */
+  onImageProgress?: (generated: number, total: number) => void;
+}
+
+/**
+ * Add elements and optionally auto-generate AI images
+ * This is the main entry point for adding AI-generated elements with images
+ */
+export async function addElementsWithAI(
+  elements: CanvasElementData[],
+  parentId?: string,
+  options: AddElementsOptions = {}
+): Promise<{ elementIds: string[]; imagesGenerated: number }> {
+  const { autoGenerateImages = false, onImageProgress } = options;
+
+  // First, add all elements to canvas (with placeholder images)
+  const elementIds = addElementsFromAI(elements, parentId);
+
+  let imagesGenerated = 0;
+
+  // If auto-generate is enabled, find and generate images
+  if (autoGenerateImages) {
+    const imagesToGenerate = findElementsWithImagePrompt(elements);
+    const total = imagesToGenerate.length;
+
+    if (total > 0) {
+      console.log(`[AI Image] Found ${total} images to generate`);
+      const store = useCanvasStore.getState();
+
+      // Generate images in parallel (up to 3 at a time)
+      const batchSize = 3;
+      for (let i = 0; i < imagesToGenerate.length; i += batchSize) {
+        const batch = imagesToGenerate.slice(i, i + batchSize);
+
+        await Promise.all(batch.map(async ({ prompt, element }) => {
+          try {
+            // Get dimensions from styles
+            const width = (element.styles?.width as number) || 800;
+            const height = (element.styles?.height as number) || 600;
+
+            // Generate the image
+            const imageUrl = await generateAIImage(prompt, width, height);
+
+            // Find the element in the store and update it
+            // We need to find by name since IDs are generated
+            const allElements = store.elements;
+            const matchingElement = Object.values(allElements).find(
+              el => el.name === element.name && el.type === 'image'
+            );
+
+            if (matchingElement) {
+              store.updateElement(matchingElement.id, { src: imageUrl });
+              imagesGenerated++;
+              console.log(`[AI Image] Updated element "${element.name}" with generated image`);
+            }
+          } catch (error) {
+            console.warn(`[AI Image] Failed to generate for "${element.name}":`, error);
+          }
+
+          // Report progress
+          if (onImageProgress) {
+            onImageProgress(imagesGenerated, total);
+          }
+        }));
+      }
+
+      // Save to history after all images are generated
+      if (imagesGenerated > 0) {
+        store.saveToHistory(`AI: Generated ${imagesGenerated} images`);
+      }
+    }
+  }
+
+  return { elementIds, imagesGenerated };
 }
 
 export default addElementsFromAI;

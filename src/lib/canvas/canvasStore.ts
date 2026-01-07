@@ -94,6 +94,7 @@ interface CanvasActions {
   updateElementStyles: (elementId: string, styles: Partial<ElementStyles>) => void;
   updateElementContent: (elementId: string, content: string) => void;
   updateElement: (elementId: string, updates: Partial<CanvasElement>) => void;
+  updateElementNotes: (elementId: string, notes: string) => void;
   renameElement: (elementId: string, name: string) => void;
   reparentElement: (elementId: string, newParentId: string) => void;
   reorderElement: (elementId: string, targetId: string, position: 'before' | 'after' | 'inside') => void;
@@ -406,7 +407,6 @@ export function saveProjectToRecents(projectId: string, projectName: string = 'P
   try {
     const stored = localStorage.getItem('objects-saved-projects');
     const projects = stored ? JSON.parse(stored) : [];
-    console.log('[CanvasStore] Saving project to recents:', { projectId, projectName, hasThumbnail: !!thumbnail });
 
     // Find existing project or create new one
     const existingIndex = projects.findIndex((p: any) => p.id === projectId);
@@ -445,6 +445,37 @@ export function saveProjectToRecents(projectId: string, projectName: string = 'P
   }
 }
 
+// Normalize page positions (fix accumulated X/Y values)
+function normalizePagePositions(state: Partial<CanvasState>): Partial<CanvasState> {
+  if (!state.pages) return state;
+
+  const pages = state.pages;
+  const pageList = Object.values(pages);
+  if (pageList.length === 0) return state;
+
+  // Find minimum X and Y positions
+  const minX = Math.min(...pageList.map((p) => p.x || 0));
+  const minY = Math.min(...pageList.map((p) => p.y || 0));
+
+  // Normalize if pages are far from origin (accumulated positions > 1000px)
+  const shouldNormalizeX = minX > 1000;
+  const shouldNormalizeY = minY > 1000 || minY < -1000;
+
+  if (shouldNormalizeX || shouldNormalizeY) {
+    for (const pageId of Object.keys(pages)) {
+      const page = pages[pageId];
+      if (shouldNormalizeX) {
+        page.x = (page.x || 0) - minX;
+      }
+      if (shouldNormalizeY) {
+        page.y = (page.y || 0) - minY;
+      }
+    }
+  }
+
+  return state;
+}
+
 // Load canvas state for a specific project
 export function loadProjectCanvasState(projectId: string): Partial<CanvasState> | null {
   if (!projectId || projectId === 'new') return null;
@@ -453,7 +484,9 @@ export function loadProjectCanvasState(projectId: string): Partial<CanvasState> 
     const stored = localStorage.getItem(`objects-canvas-${projectId}`);
     if (stored) {
       const data = JSON.parse(stored);
-      return data.state || null;
+      const state = data.state || null;
+      // Normalize page positions before returning
+      return state ? normalizePagePositions(state) : null;
     }
   } catch (e) {
     console.error('Error loading project canvas state:', e);
@@ -985,6 +1018,16 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       elements: {
         ...state.elements,
         [elementId]: { ...state.elements[elementId], name },
+      },
+    }));
+  },
+
+  // Update element notes (for AI context and collaboration)
+  updateElementNotes: (elementId: string, notes: string) => {
+    set((state) => ({
+      elements: {
+        ...state.elements,
+        [elementId]: { ...state.elements[elementId], notes },
       },
     }));
   },
@@ -1566,7 +1609,6 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       historyIndex: state.historyIndex - 1,
       selectedElementIds: [],
     });
-    console.log('[Undo] Restored to index', state.historyIndex - 1);
   },
 
   redo: () => {
@@ -1581,7 +1623,6 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       historyIndex: state.historyIndex + 1,
       selectedElementIds: [],
     });
-    console.log('[Redo] Restored to index', state.historyIndex + 1);
   },
 
   saveToHistory: (action: string) => {
@@ -1614,7 +1655,6 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       history: newHistory,
       historyIndex: newHistory.length - 1,
     });
-    console.log('[History] Saved:', action, 'Index:', newHistory.length - 1);
   },
 
   // Save initial state (call this once at startup or first interaction)
@@ -1633,7 +1673,6 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
       history: [entry],
       historyIndex: 0,
     });
-    console.log('[History] Initial state saved');
   },
 
   // Getters
@@ -2225,43 +2264,37 @@ export const useCanvasStore = create<CanvasState & CanvasActions>()(
         currentPageId: state.currentPageId,
         canvasSettings: state.canvasSettings,
       }),
-      version: 2,
+      version: 3, // Bump version to force migration
       migrate: (persistedState: any, version: number) => {
-        if (version < 2) {
-          // Add x, y to pages that don't have them
-          const pages = persistedState.pages || {};
+        const pages = persistedState.pages || {};
+        const pageList = Object.values(pages) as any[];
+
+        if (pageList.length > 0) {
+          // Find minimum X and Y positions
+          const minX = Math.min(...pageList.map((p: any) => p.x || 0));
+          const minY = Math.min(...pageList.map((p: any) => p.y || 0));
+
+          // Normalize if pages are far from origin (accumulated positions > 1000px)
+          const shouldNormalizeX = minX > 1000;
+          const shouldNormalizeY = minY > 1000 || minY < -1000;
+
           for (const pageId of Object.keys(pages)) {
-            if (pages[pageId].x === undefined) pages[pageId].x = 0;
-            if (pages[pageId].y === undefined) pages[pageId].y = 0;
+            const page = pages[pageId];
+            // Normalize X if accumulated
+            if (shouldNormalizeX) {
+              page.x = (page.x || 0) - minX;
+            }
+            // Normalize Y if accumulated
+            if (shouldNormalizeY) {
+              page.y = (page.y || 0) - minY;
+            }
+            // Ensure x, y exist
+            if (page.x === undefined) page.x = 0;
+            if (page.y === undefined) page.y = 0;
           }
         }
+
         return persistedState;
-      },
-      onRehydrateStorage: () => (state) => {
-        if (!state?.pages) return;
-
-        const pageList = Object.values(state.pages);
-        if (pageList.length === 0) return;
-
-        // Find minimum X and Y positions
-        const minX = Math.min(...pageList.map((p: any) => p.x || 0));
-        const minY = Math.min(...pageList.map((p: any) => p.y || 0));
-
-        // Normalize if pages are far from origin (accumulated positions)
-        for (const pageId of Object.keys(state.pages)) {
-          const page = state.pages[pageId];
-          // Normalize X if accumulated
-          if (minX > 100) {
-            page.x = (page.x || 0) - minX;
-          }
-          // Normalize Y if accumulated
-          if (minY > 100) {
-            page.y = (page.y || 0) - minY;
-          }
-          // Ensure x, y exist
-          if (page.x === undefined) page.x = 0;
-          if (page.y === undefined) page.y = 0;
-        }
       },
     }
   )

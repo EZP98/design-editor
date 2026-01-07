@@ -68,10 +68,8 @@ const ProjectsPage: React.FC = () => {
   // Load saved projects from localStorage
   useEffect(() => {
     const stored = localStorage.getItem('objects-saved-projects');
-    console.log('[ProjectsPage] Loading projects from localStorage:', stored ? JSON.parse(stored).length + ' projects' : 'none');
     if (stored) {
       const parsed = JSON.parse(stored);
-      console.log('[ProjectsPage] Loaded projects:', parsed.map((p: any) => ({ id: p.id, name: p.name, hasThumbnail: !!p.thumbnail })));
       setSavedProjects(parsed);
     }
   }, []);

@@ -1131,7 +1131,6 @@ export default defineConfig({ plugins: [react()] });`,
       // Update recents list with thumbnail
       saveProjectToRecents(projectId, projectName, thumbnail);
 
-      console.log('[AutoSave] Project saved:', projectId, { name: projectName, hasThumbnail: !!thumbnail });
     }, 1000); // 1 second debounce
 
     return () => clearTimeout(saveTimeout);
@@ -1712,7 +1711,6 @@ export default defineConfig({ plugins: [react()] });`,
     // Try to load saved canvas state for this project
     const savedState = loadProjectCanvasState(projectId);
     if (savedState) {
-      console.log('[ProjectLoad] Loading saved canvas state for:', projectId, savedState);
       // Use Zustand's setState to merge the saved state into the store
       useCanvasStore.setState({
         ...(savedState.projectName && { projectName: savedState.projectName }),

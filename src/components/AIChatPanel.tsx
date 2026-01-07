@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle, us
 import { useChatHistory } from '../lib/persistence/useChatHistory';
 import { ChatMessage, FileSnapshot } from '../lib/persistence/db';
 import { parseArtifacts, formatFilesForContext, ParsedArtifact } from '../lib/artifactParser';
-import { getSystemPrompt, getDesignPromptWithIntent, getAvailableStylePresets, extractDesignIntent, getTopicColorOptions, StylePresetOption } from '../lib/prompts/system-prompt';
+import { getSystemPrompt, getDesignPromptWithIntent, getWireframePrompt, getVibePrompt, getAgentPrompt, getAvailableStylePresets, extractDesignIntent, getTopicColorOptions, StylePresetOption, SelectedElementForAI, DesignAgentContext } from '../lib/prompts/system-prompt';
 import { TopicPalette } from '../lib/designSystem';
-import { addElementsFromAI, processAIDesignResponse } from '../lib/canvas/addElementsFromAI';
+import { addElementsFromAI, addElementsWithAI, processAIDesignResponse, updateElementsFromAI } from '../lib/canvas/addElementsFromAI';
 import { parseJSXToCanvas, extractJSXFromResponse } from '../lib/canvas/jsxToCanvas';
 import { generateProjectFromReactCode } from '../lib/canvas/codeGenerator';
 import { useTokensStore } from '../lib/canvas/tokens';
@@ -573,7 +573,7 @@ function parseDesignJSON(content: string): { elements: Array<Record<string, unkn
 }
 
 type ClaudeModel = 'claude-sonnet-4-5' | 'claude-haiku-4-5' | 'claude-opus-4-5';
-type OutputMode = 'design' | 'code' | 'smart';
+type OutputMode = 'design' | 'code' | 'smart' | 'wireframe' | 'vibe' | 'agent';
 
 interface ClaudeModelOption {
   id: ClaudeModel;
@@ -606,6 +606,19 @@ const OUTPUT_MODES: OutputModeOption[] = [
     description: 'Crea elementi visivi sul canvas',
   },
   {
+    id: 'wireframe',
+    name: 'Wire',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <rect x="3" y="3" width="7" height="7" rx="1" />
+        <rect x="14" y="3" width="7" height="7" rx="1" />
+        <rect x="3" y="14" width="7" height="7" rx="1" />
+        <rect x="14" y="14" width="7" height="7" rx="1" />
+      </svg>
+    ),
+    description: 'Layout rapido low-fidelity (Framer-style)',
+  },
+  {
     id: 'smart',
     name: 'Smart',
     icon: (
@@ -627,6 +640,32 @@ const OUTPUT_MODES: OutputModeOption[] = [
       </svg>
     ),
     description: 'Genera codice React + Tailwind',
+  },
+  {
+    id: 'vibe',
+    name: 'Vibe',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <path d="M12 2L2 7l10 5 10-5-10-5z" />
+        <path d="M2 17l10 5 10-5" />
+        <path d="M2 12l10 5 10-5" />
+        <circle cx="12" cy="12" r="2" fill="currentColor" />
+      </svg>
+    ),
+    description: 'Animazioni e interazioni da prompt (Framer Motion)',
+  },
+  {
+    id: 'agent',
+    name: 'Agent',
+    icon: (
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 8v8" />
+        <path d="M8 12h8" />
+        <circle cx="12" cy="12" r="3" fill="currentColor" />
+      </svg>
+    ),
+    description: 'Design Agent strategico con memoria (Lovart-style)',
   },
 ];
 
@@ -720,6 +759,22 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
   // Get current canvas elements for AI context (design mode only)
   const canvasElements = useCanvasStore((state) => state.elements);
+  const selectedElementIds = useCanvasStore((state) => state.selectedElementIds);
+
+  // Get selected elements with their full data for AI context
+  const selectedElementsForAI: SelectedElementForAI[] = selectedElementIds
+    .map(id => canvasElements[id])
+    .filter(Boolean)
+    .map(el => ({
+      id: el.id,
+      type: el.type as string,
+      name: el.name,
+      content: el.content,
+      src: el.src,
+      styles: el.styles as Record<string, unknown>,
+      children: el.children?.length || 0,
+      notes: el.notes, // Include designer notes for AI context
+    }));
 
   const [input, setInput] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -727,6 +782,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
   const [showModelSelector, setShowModelSelector] = useState(false);
   const [outputMode, setOutputMode] = useState<OutputMode>('design');
   const [createAsNewPage, setCreateAsNewPage] = useState(false);
+  const [autoGenerateImages, setAutoGenerateImages] = useState(false);
+  const [imageGenProgress, setImageGenProgress] = useState<{ current: number; total: number } | null>(null);
   const [selectedStylePreset, setSelectedStylePreset] = useState<string>('framer-dark');
   const [showStylePresets, setShowStylePresets] = useState(false);
   const [detectedTopic, setDetectedTopic] = useState<string | null>(null);
@@ -835,8 +892,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
         : '';
 
       // Build system prompt based on mode
-      // For design mode, pass current canvas elements so AI understands context
-      const currentCanvasForAI = outputMode === 'design'
+      // For design/wireframe/agent modes, pass current canvas elements so AI understands context
+      const currentCanvasForAI = (outputMode === 'design' || outputMode === 'wireframe' || outputMode === 'agent')
         ? Object.values(canvasElements).map(el => ({
             id: el.id,
             type: el.type as string,
@@ -848,13 +905,35 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
         : undefined;
 
       // Smart mode uses 'code' prompt to generate React/Tailwind
-      const promptMode = outputMode === 'smart' ? 'code' : outputMode;
+      // Wireframe mode uses 'design' for the API (canvas elements output)
+      // Vibe mode uses 'code' for the API (generates React component files)
+      // Agent mode uses 'design' for the API (can output canvas elements + analysis)
+      const promptMode = outputMode === 'smart' || outputMode === 'vibe'
+        ? 'code'
+        : (outputMode === 'wireframe' || outputMode === 'agent' ? 'design' : outputMode);
 
       // Use enhanced design prompt for design mode (includes style presets, components, few-shot examples)
+      // Use wireframe prompt for wireframe mode (grayscale, low-fidelity, rapid prototyping)
+      // Use vibe prompt for vibe mode (Framer Motion animations from natural language)
+      // Use agent prompt for agent mode (strategic design partner with memory)
       // Use regular system prompt for code/smart modes
-      // In design mode: use getDesignPromptWithIntent which auto-extracts topic, colors, mood from user message
       let systemPrompt: string;
-      if (outputMode === 'design') {
+      if (outputMode === 'agent') {
+        // AGENT MODE: Strategic design partner with memory and analysis
+        console.log('[AIChatPanel] Agent mode - strategic design partner');
+        systemPrompt = getAgentPrompt(messageContent, {
+          currentCanvas: currentCanvasForAI,
+          selectedElements: selectedElementsForAI,
+        });
+      } else if (outputMode === 'vibe') {
+        // VIBE MODE: Generate Framer Motion components from natural language
+        console.log('[AIChatPanel] Vibe mode - generating interactive components with Framer Motion');
+        systemPrompt = getVibePrompt(messageContent, selectedElementsForAI);
+      } else if (outputMode === 'wireframe') {
+        // WIREFRAME MODE: Use specialized wireframe prompt (Framer Wireframer style)
+        console.log('[AIChatPanel] Wireframe mode - using grayscale low-fidelity prompt');
+        systemPrompt = getWireframePrompt(messageContent);
+      } else if (outputMode === 'design') {
         const intent = extractDesignIntent(messageContent);
 
         // Get selected topic palette if available
@@ -874,9 +953,13 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           language: intent.language,
         });
 
+        console.log(`[AI Design] Topic: ${intent.topic}`);
+
         systemPrompt = getDesignPromptWithIntent(messageContent, {
           stylePresetId: selectedStylePreset,
           selectedPalette: selectedPaletteObj,
+          designTokens, // Pass sidebar design tokens to AI
+          selectedElements: selectedElementsForAI, // Pass selected elements for AI context
         });
       } else {
         systemPrompt = getSystemPrompt({
@@ -1000,8 +1083,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       await takeSnapshot(assistantMessage.id);
 
       // Handle response based on output mode
-      if (outputMode === 'design' || outputMode === 'smart') {
-        // DESIGN/SMART MODE: Parse boltArtifact format with canvas elements
+      if (outputMode === 'design' || outputMode === 'smart' || outputMode === 'wireframe' || outputMode === 'agent') {
+        // DESIGN/SMART/WIREFRAME/AGENT MODE: Parse boltArtifact format with canvas elements
         console.log(`[AIChatPanel] ${outputMode} mode - parsing boltArtifact for canvas`);
         console.log('[AIChatPanel] fullContent length:', fullContent.length);
         console.log('[AIChatPanel] fullContent preview:', fullContent.substring(0, 500));
@@ -1022,8 +1105,38 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           console.log('[AIChatPanel] Artifacts details:', artifacts.map(a => ({
             type: a.type,
             hasCanvasElements: !!a.canvasElements,
-            canvasElementsLength: a.canvasElements?.length || 0
+            canvasElementsLength: a.canvasElements?.length || 0,
+            hasModifications: !!a.canvasModifications,
+            modificationsLength: a.canvasModifications?.length || 0
           })));
+
+          // Check for modifications to existing elements (Smart AI Context)
+          let allModifications: any[] = [];
+          for (const artifact of canvasArtifacts) {
+            if (artifact.canvasModifications && artifact.canvasModifications.length > 0) {
+              allModifications = allModifications.concat(artifact.canvasModifications);
+            }
+          }
+
+          // Apply modifications to existing elements
+          if (allModifications.length > 0) {
+            console.log('[AIChatPanel] Applying', allModifications.length, 'modifications to existing elements');
+            const { updatedIds, notFound } = updateElementsFromAI(allModifications);
+
+            if (notFound.length > 0) {
+              console.warn('[AIChatPanel] Elements not found for modification:', notFound);
+            }
+
+            // If only modifications (no new elements), show success and return
+            const hasNewElements = canvasArtifacts.some(a => a.canvasElements && a.canvasElements.length > 0);
+            if (!hasNewElements) {
+              updateMessage(
+                assistantMessage.id,
+                `Modificati ${updatedIds.length} elementi sul canvas\n\n${fullContent}`
+              );
+              return;
+            }
+          }
 
           let allElements: any[] = [];
           const elementNames: string[] = [];
@@ -1091,7 +1204,23 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             childrenCount: e.children?.length || 0
           })));
 
-          const ids = addElementsFromAI(allElements, parentId);
+          // Use addElementsWithAI if auto-generate images is enabled
+          let ids: string[] = [];
+          if (autoGenerateImages) {
+            const result = await addElementsWithAI(allElements, parentId, {
+              autoGenerateImages: true,
+              onImageProgress: (current, total) => {
+                setImageGenProgress({ current, total });
+              },
+            });
+            ids = result.elementIds;
+            setImageGenProgress(null);
+            if (result.imagesGenerated > 0) {
+              console.log(`[AIChatPanel] Auto-generated ${result.imagesGenerated} AI images`);
+            }
+          } else {
+            ids = addElementsFromAI(allElements, parentId);
+          }
 
           console.log('[AIChatPanel] Created element IDs:', ids);
           // Log created elements details
@@ -1219,7 +1348,20 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               setCreateAsNewPage(false);
             }
 
-            const ids = addElementsFromAI(allElements, parentId);
+            // Use addElementsWithAI if auto-generate images is enabled
+            let ids: string[] = [];
+            if (autoGenerateImages) {
+              const result = await addElementsWithAI(allElements, parentId, {
+                autoGenerateImages: true,
+                onImageProgress: (current, total) => {
+                  setImageGenProgress({ current, total });
+                },
+              });
+              ids = result.elementIds;
+              setImageGenProgress(null);
+            } else {
+              ids = addElementsFromAI(allElements, parentId);
+            }
             canvasCount = ids.length;
             allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
           }
@@ -1263,7 +1405,20 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               // Add elements to the visual canvas
               console.log('[AIChatPanel] Adding canvas elements:', artifact.canvasElements.length);
               try {
-                const createdIds = addElementsFromAI(artifact.canvasElements);
+                // Use addElementsWithAI if auto-generate images is enabled
+                let createdIds: string[] = [];
+                if (autoGenerateImages) {
+                  const result = await addElementsWithAI(artifact.canvasElements, undefined, {
+                    autoGenerateImages: true,
+                    onImageProgress: (current, total) => {
+                      setImageGenProgress({ current, total });
+                    },
+                  });
+                  createdIds = result.elementIds;
+                  setImageGenProgress(null);
+                } else {
+                  createdIds = addElementsFromAI(artifact.canvasElements);
+                }
                 canvasElementsAdded += createdIds.length;
                 console.log('[AIChatPanel] Canvas elements created:', createdIds);
               } catch (err) {
@@ -2085,8 +2240,8 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                 </div>
               )}
 
-              {/* New Page Toggle - for design and smart modes */}
-              {(outputMode === 'design' || outputMode === 'smart') && (
+              {/* New Page Toggle - for design, smart, wireframe, and agent modes */}
+              {(outputMode === 'design' || outputMode === 'smart' || outputMode === 'wireframe' || outputMode === 'agent') && (
                 <button
                   onClick={() => setCreateAsNewPage(!createAsNewPage)}
                   title={createAsNewPage ? 'Crea come nuova pagina' : 'Aggiungi alla pagina corrente'}
@@ -2113,6 +2268,65 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
                     {createAsNewPage ? 'New' : '+Page'}
                   </span>
                 </button>
+              )}
+
+              {/* Auto-generate AI Images Toggle - only for design mode */}
+              {outputMode === 'design' && (
+                <button
+                  onClick={() => setAutoGenerateImages(!autoGenerateImages)}
+                  title={autoGenerateImages ? 'Auto-genera immagini AI attivo' : 'Clicca per auto-generare immagini AI'}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    padding: '5px 8px',
+                    background: autoGenerateImages ? 'rgba(168, 85, 247, 0.2)' : 'rgba(255,255,255,0.03)',
+                    border: autoGenerateImages ? '1px solid rgba(168, 85, 247, 0.4)' : '1px solid rgba(255,255,255,0.08)',
+                    borderRadius: 6,
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease',
+                    color: autoGenerateImages ? '#a855f7' : '#6b7280',
+                  }}
+                >
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <rect x="3" y="3" width="18" height="18" rx="2" ry="2" />
+                    <circle cx="8.5" cy="8.5" r="1.5" />
+                    <polyline points="21 15 16 10 5 21" />
+                  </svg>
+                  <span style={{ fontSize: 10, fontWeight: 500 }}>
+                    {autoGenerateImages ? 'AI Img' : '+AI Img'}
+                  </span>
+                </button>
+              )}
+
+              {/* Image Generation Progress Indicator */}
+              {imageGenProgress && (
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 6,
+                    padding: '5px 10px',
+                    background: 'rgba(168, 85, 247, 0.15)',
+                    border: '1px solid rgba(168, 85, 247, 0.3)',
+                    borderRadius: 6,
+                    color: '#a855f7',
+                    fontSize: 10,
+                    fontWeight: 500,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 10,
+                      height: 10,
+                      borderRadius: '50%',
+                      border: '2px solid currentColor',
+                      borderTopColor: 'transparent',
+                      animation: 'spin 1s linear infinite',
+                    }}
+                  />
+                  Generating {imageGenProgress.current}/{imageGenProgress.total}
+                </div>
               )}
             </div>
 

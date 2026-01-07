@@ -102,6 +102,39 @@ const TYPE_ICONS: Record<ElementType, React.ReactNode> = {
       <path d="M2 12l10 5 10-5" />
     </svg>
   ),
+  card: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="3" />
+      <line x1="3" y1="9" x2="21" y2="9" />
+    </svg>
+  ),
+  navbar: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="4" width="20" height="6" rx="2" />
+      <line x1="6" y1="7" x2="8" y2="7" />
+      <line x1="12" y1="7" x2="14" y2="7" />
+      <line x1="18" y1="7" x2="18" y2="7" />
+    </svg>
+  ),
+  heading: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <polyline points="4 7 4 4 20 4 20 7" />
+      <line x1="12" y1="4" x2="12" y2="20" />
+      <line x1="8" y1="20" x2="16" y2="20" />
+    </svg>
+  ),
+  paragraph: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <line x1="3" y1="6" x2="21" y2="6" />
+      <line x1="3" y1="10" x2="21" y2="10" />
+      <line x1="3" y1="14" x2="15" y2="14" />
+    </svg>
+  ),
+  box: (
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="2" />
+    </svg>
+  ),
 };
 
 // Mini Page Preview - renders the first section/viewport of the page

@@ -8,8 +8,6 @@ import React, { useState, useRef, useEffect } from 'react';
 import { IconPicker } from './IconPicker';
 import { PluginPanel, availablePlugins, Plugin } from './plugins';
 import { useCanvasStore } from '../../lib/canvas/canvasStore';
-import { BreakpointSelector } from './ResponsiveToolbar';
-import { useResponsiveStore } from '../../lib/canvas/responsive';
 
 interface CanvasToolbarProps {
   activeTool: 'select' | 'hand' | 'frame' | 'text';
@@ -18,6 +16,7 @@ interface CanvasToolbarProps {
   onAddBlock?: (blockId: string) => void;
   onAddIcon?: (iconName: string) => void;
   onPluginInsert?: (data: any) => void;
+  onGenerateVariations?: () => void;
   zoom?: number;
   onZoomChange?: (zoom: number) => void;
   theme?: 'dark' | 'light';
@@ -56,6 +55,43 @@ const BLOCKS = [
   { id: 'faq', label: 'FAQ', icon: 'faq', description: 'FAQ accordion' },
   { id: 'footer', label: 'Footer', icon: 'footer', description: 'Page footer' },
   { id: 'contact', label: 'Contact', icon: 'contact', description: 'Contact form' },
+];
+
+// ============================================================================
+// Canvas Format Presets
+// ============================================================================
+
+export interface CanvasFormat {
+  id: string;
+  label: string;
+  width: number;
+  height: number;
+  category: 'social' | 'print' | 'web' | 'custom';
+}
+
+export const CANVAS_FORMATS: CanvasFormat[] = [
+  // Social Media
+  { id: 'instagram-post', label: 'Instagram Post', width: 1080, height: 1080, category: 'social' },
+  { id: 'instagram-story', label: 'Instagram Story', width: 1080, height: 1920, category: 'social' },
+  { id: 'facebook-post', label: 'Facebook Post', width: 1200, height: 630, category: 'social' },
+  { id: 'twitter-post', label: 'Twitter/X Post', width: 1200, height: 675, category: 'social' },
+  { id: 'linkedin-post', label: 'LinkedIn Post', width: 1200, height: 627, category: 'social' },
+  { id: 'tiktok', label: 'TikTok Video', width: 1080, height: 1920, category: 'social' },
+  { id: 'youtube-thumbnail', label: 'YouTube Thumbnail', width: 1280, height: 720, category: 'social' },
+
+  // Web
+  { id: 'desktop', label: 'Desktop (1440)', width: 1440, height: 900, category: 'web' },
+  { id: 'laptop', label: 'Laptop (1280)', width: 1280, height: 800, category: 'web' },
+  { id: 'tablet', label: 'Tablet', width: 768, height: 1024, category: 'web' },
+  { id: 'mobile', label: 'Mobile', width: 375, height: 812, category: 'web' },
+  { id: 'landing-page', label: 'Landing Page', width: 1440, height: 2560, category: 'web' },
+
+  // Print
+  { id: 'a4', label: 'A4', width: 2480, height: 3508, category: 'print' },
+  { id: 'a3', label: 'A3', width: 3508, height: 4961, category: 'print' },
+  { id: 'letter', label: 'Letter', width: 2550, height: 3300, category: 'print' },
+  { id: 'business-card', label: 'Business Card', width: 1050, height: 600, category: 'print' },
+  { id: 'poster-a2', label: 'Poster A2', width: 4961, height: 7016, category: 'print' },
 ];
 
 // ============================================================================
@@ -264,6 +300,13 @@ const Icons: Record<string, React.ReactNode> = {
       <path d="M6 14h12" strokeWidth="1" opacity="0.5" />
     </svg>
   ),
+  artboard: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="3" y="3" width="18" height="18" rx="2"/>
+      <path d="M3 9h18"/>
+      <path d="M9 21V9"/>
+    </svg>
+  ),
   wand: (
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
       <path d="M15 4V2"/>
@@ -275,6 +318,16 @@ const Icons: Record<string, React.ReactNode> = {
       <path d="M17.8 6.2L19 5"/>
       <path d="M3 21l9-9"/>
       <path d="M12.2 6.2L11 5"/>
+    </svg>
+  ),
+  variations: (
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+      <rect x="2" y="2" width="6" height="6" rx="1"/>
+      <rect x="9" y="2" width="6" height="6" rx="1"/>
+      <rect x="16" y="2" width="6" height="6" rx="1"/>
+      <rect x="5.5" y="11" width="6" height="6" rx="1"/>
+      <rect x="12.5" y="11" width="6" height="6" rx="1"/>
+      <path d="M8.5 20v2M15.5 20v2" strokeLinecap="round"/>
     </svg>
   ),
 };
@@ -290,6 +343,7 @@ export function CanvasToolbar({
   onAddBlock,
   onAddIcon,
   onPluginInsert,
+  onGenerateVariations,
   zoom = 1,
   onZoomChange,
   theme = 'dark',
@@ -298,18 +352,23 @@ export function CanvasToolbar({
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [showIconPicker, setShowIconPicker] = useState(false);
   const [showPluginPanel, setShowPluginPanel] = useState(false);
+  const [showFormatPicker, setShowFormatPicker] = useState(false);
   const [activePlugin, setActivePlugin] = useState<Plugin | null>(null);
 
-  // Use store for AI panel state
+  // Use store for AI panel state and page management
   const activeRightPanel = useCanvasStore((state) => state.activeRightPanel);
   const setActiveRightPanel = useCanvasStore((state) => state.setActiveRightPanel);
+  const currentPageId = useCanvasStore((state) => state.currentPageId);
+  const pages = useCanvasStore((state) => state.pages);
+  const updatePage = useCanvasStore((state) => state.updatePage);
 
-  // Responsive store for multi-breakpoint view
-  const { multiBreakpointView, toggleMultiBreakpointView } = useResponsiveStore();
+  // Get current page dimensions
+  const currentPage = currentPageId ? pages[currentPageId] : null;
 
   const [activeTab, setActiveTab] = useState<'primitives' | 'layout' | 'blocks'>('primitives');
   const addMenuRef = useRef<HTMLDivElement>(null);
   const iconPickerRef = useRef<HTMLDivElement>(null);
+  const formatPickerRef = useRef<HTMLDivElement>(null);
 
   // Close menus on outside click
   useEffect(() => {
@@ -320,10 +379,21 @@ export function CanvasToolbar({
       if (iconPickerRef.current && !iconPickerRef.current.contains(e.target as Node)) {
         setShowIconPicker(false);
       }
+      if (formatPickerRef.current && !formatPickerRef.current.contains(e.target as Node)) {
+        setShowFormatPicker(false);
+      }
     };
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
+
+  // Handle format change
+  const handleFormatChange = (format: CanvasFormat) => {
+    if (currentPageId) {
+      updatePage(currentPageId, { width: format.width, height: format.height });
+    }
+    setShowFormatPicker(false);
+  };
 
   const handleAddItem = (item: typeof PRIMITIVES[0] | typeof LAYOUT[0] | typeof BLOCKS[0]) => {
     // For blocks, use onAddBlock if available, otherwise fallback to onAddElement
@@ -391,23 +461,16 @@ export function CanvasToolbar({
           >
             {Icons.wand}
           </ToolButton>
+          {onGenerateVariations && (
+            <ToolButton
+              onClick={onGenerateVariations}
+              tooltip="AI Variations (genera 3 varianti del design)"
+              theme={theme}
+            >
+              {Icons.variations}
+            </ToolButton>
+          )}
         </div>
-
-        <Divider />
-
-        {/* === Breakpoint Selector === */}
-        <BreakpointSelector />
-
-        {/* Multi-breakpoint view toggle */}
-        <ToolButton
-          active={multiBreakpointView}
-          onClick={toggleMultiBreakpointView}
-          tooltip="Multi-device view"
-          accent={multiBreakpointView}
-          theme={theme}
-        >
-          {Icons.multiDevice}
-        </ToolButton>
 
         <Divider />
 
@@ -567,6 +630,169 @@ export function CanvasToolbar({
                     </div>
                   </div>
                 )}
+              </div>
+            )}
+          </div>
+
+          {/* Format Picker */}
+          <Divider />
+          <div ref={formatPickerRef} style={{ position: 'relative' }}>
+            <button
+              onClick={() => setShowFormatPicker(!showFormatPicker)}
+              title="Canvas format"
+              style={{
+                height: 28,
+                padding: '0 10px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                borderRadius: 6,
+                border: 'none',
+                background: showFormatPicker ? 'rgba(255, 255, 255, 0.12)' : 'transparent',
+                color: showFormatPicker ? '#fff' : '#888',
+                cursor: 'pointer',
+                fontSize: 11,
+                fontWeight: 500,
+              }}
+              onMouseEnter={(e) => {
+                if (!showFormatPicker) {
+                  e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                  e.currentTarget.style.color = '#ccc';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!showFormatPicker) {
+                  e.currentTarget.style.background = 'transparent';
+                  e.currentTarget.style.color = '#888';
+                }
+              }}
+            >
+              {Icons.artboard}
+              <span>{currentPage ? `${currentPage.width}×${currentPage.height}` : 'Format'}</span>
+            </button>
+
+            {showFormatPicker && (
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: 'calc(100% + 12px)',
+                  left: '50%',
+                  transform: 'translateX(-50%)',
+                  width: 240,
+                  padding: 8,
+                  borderRadius: 12,
+                  background: 'rgba(20, 20, 20, 0.98)',
+                  backdropFilter: 'blur(20px)',
+                  border: '1px solid rgba(255, 255, 255, 0.08)',
+                  boxShadow: '0 20px 50px -10px rgba(0, 0, 0, 0.6)',
+                  maxHeight: 400,
+                  overflowY: 'auto',
+                }}
+              >
+                {/* Social */}
+                <div style={{ fontSize: 10, color: '#666', padding: '8px 8px 4px', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Social Media
+                </div>
+                {CANVAS_FORMATS.filter(f => f.category === 'social').map((format) => (
+                  <button
+                    key={format.id}
+                    onClick={() => handleFormatChange(format)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#ccc',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = '#ccc';
+                    }}
+                  >
+                    <span>{format.label}</span>
+                    <span style={{ color: '#666', fontSize: 10 }}>{format.width}×{format.height}</span>
+                  </button>
+                ))}
+
+                {/* Web */}
+                <div style={{ fontSize: 10, color: '#666', padding: '12px 8px 4px', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Web
+                </div>
+                {CANVAS_FORMATS.filter(f => f.category === 'web').map((format) => (
+                  <button
+                    key={format.id}
+                    onClick={() => handleFormatChange(format)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#ccc',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = '#ccc';
+                    }}
+                  >
+                    <span>{format.label}</span>
+                    <span style={{ color: '#666', fontSize: 10 }}>{format.width}×{format.height}</span>
+                  </button>
+                ))}
+
+                {/* Print */}
+                <div style={{ fontSize: 10, color: '#666', padding: '12px 8px 4px', fontWeight: 600, textTransform: 'uppercase' }}>
+                  Print
+                </div>
+                {CANVAS_FORMATS.filter(f => f.category === 'print').map((format) => (
+                  <button
+                    key={format.id}
+                    onClick={() => handleFormatChange(format)}
+                    style={{
+                      width: '100%',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      padding: '8px 10px',
+                      borderRadius: 6,
+                      border: 'none',
+                      background: 'transparent',
+                      color: '#ccc',
+                      cursor: 'pointer',
+                      fontSize: 12,
+                    }}
+                    onMouseEnter={(e) => {
+                      e.currentTarget.style.background = 'rgba(255, 255, 255, 0.08)';
+                      e.currentTarget.style.color = '#fff';
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = 'transparent';
+                      e.currentTarget.style.color = '#ccc';
+                    }}
+                  >
+                    <span>{format.label}</span>
+                    <span style={{ color: '#666', fontSize: 10 }}>{format.width}×{format.height}</span>
+                  </button>
+                ))}
               </div>
             )}
           </div>

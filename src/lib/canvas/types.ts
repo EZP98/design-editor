@@ -25,6 +25,11 @@ export type ElementType =
   | 'container'
   | 'row'
   | 'card'
+  | 'navbar'
+  // Semantic text elements (aliases for text)
+  | 'heading'
+  | 'paragraph'
+  | 'box'
   // 3D elements
   | 'model3d';
 
@@ -39,6 +44,17 @@ export interface Size {
 }
 
 export interface ElementStyles {
+  // CSS width/height (string values like '100%')
+  width?: number | string;
+  height?: number | string;
+
+  // CSS position
+  position?: 'static' | 'relative' | 'absolute' | 'fixed' | 'sticky';
+  top?: number | string;
+  right?: number | string;
+  bottom?: number | string;
+  left?: number | string;
+
   // Layout
   display?: 'block' | 'flex' | 'grid' | 'inline' | 'inline-block' | 'none';
   flexDirection?: 'row' | 'column' | 'row-reverse' | 'column-reverse';
@@ -272,6 +288,9 @@ export interface CanvasElement {
   ariaLabel?: string;
   ariaRole?: string;
   tabIndex?: number;
+
+  // Notes/Annotations (for AI context and collaboration)
+  notes?: string;
 }
 
 export interface CanvasPage {
@@ -589,6 +608,51 @@ export const DEFAULT_ELEMENT_CONFIGS: Record<ElementType, Partial<CanvasElement>
       borderRadius: 12,
       overflow: 'hidden',
       backgroundColor: '#18181b',
+    },
+  },
+  // Navbar element
+  navbar: {
+    size: { width: 1200, height: 72 },
+    styles: {
+      display: 'flex',
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'space-between',
+      padding: 16,
+      paddingLeft: 32,
+      paddingRight: 32,
+      backgroundColor: '#ffffff',
+    },
+  },
+  // Semantic text aliases
+  heading: {
+    size: { width: 400, height: 60 },
+    content: 'Heading',
+    styles: {
+      fontSize: 32,
+      fontWeight: 700,
+      color: '#1f2937',
+      lineHeight: 1.2,
+      resizeX: 'hug',
+      resizeY: 'hug',
+    },
+  },
+  paragraph: {
+    size: { width: 400, height: 80 },
+    content: 'Paragraph text',
+    styles: {
+      fontSize: 16,
+      color: '#4b5563',
+      lineHeight: 1.6,
+      resizeX: 'hug',
+      resizeY: 'hug',
+    },
+  },
+  box: {
+    size: { width: 200, height: 200 },
+    styles: {
+      backgroundColor: '#f3f4f6',
+      borderRadius: 8,
     },
   },
 };

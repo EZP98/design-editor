@@ -1027,47 +1027,45 @@ export function PropertiesPanel() {
             onBlur={(e) => (e.target.style.borderColor = 'transparent')}
           />
         </div>
+
+        {/* Breakpoint Indicator - show when editing non-desktop breakpoint */}
+        {!isDefaultBreakpoint && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              padding: '8px 10px',
+              background: 'rgba(99, 102, 241, 0.1)',
+              borderRadius: 8,
+              marginBottom: 4,
+            }}
+          >
+            <svg
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="#818CF8"
+              strokeWidth="2"
+            >
+              {activeBreakpointId === 'tablet' ? (
+                <rect x="4" y="2" width="16" height="20" rx="2" />
+              ) : (
+                <rect x="6" y="4" width="12" height="16" rx="2" />
+              )}
+            </svg>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#818CF8', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              Editing: {activeBreakpointId}
+            </span>
+            <span style={{ flex: 1 }} />
+            <span style={{ fontSize: 10, color: 'rgba(129, 140, 248, 0.7)' }}>
+              Overrides desktop
+            </span>
+          </div>
+        )}
         <div style={{ fontSize: 11, color: colors.textDimmed, textTransform: 'capitalize' }}>{selectedElement.type}</div>
       </div>
-
-      {/* Breakpoint Indicator - shows when editing non-default breakpoint */}
-      {!isDefaultBreakpoint && (
-        <div
-          style={{
-            margin: '0 12px',
-            padding: '8px 12px',
-            background: 'rgba(168, 50, 72, 0.1)',
-            border: '1px solid rgba(168, 50, 72, 0.3)',
-            borderRadius: 8,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-            marginBottom: 8,
-          }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#A78BFA" strokeWidth="2">
-            {activeBreakpointId === 'tablet' ? (
-              <>
-                <rect x="4" y="2" width="16" height="20" rx="2" />
-                <line x1="10" y1="18" x2="14" y2="18" />
-              </>
-            ) : (
-              <>
-                <rect x="6" y="2" width="12" height="20" rx="2" />
-                <line x1="10" y1="18" x2="14" y2="18" />
-              </>
-            )}
-          </svg>
-          <div style={{ flex: 1 }}>
-            <div style={{ fontSize: 11, fontWeight: 600, color: '#A78BFA', textTransform: 'capitalize' }}>
-              {activeBreakpointId} override
-            </div>
-            <div style={{ fontSize: 10, color: '#71717a' }}>
-              Changes apply only to this breakpoint
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* Position & Size */}
       <Section title="Layout">
