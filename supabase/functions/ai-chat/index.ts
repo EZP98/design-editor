@@ -199,10 +199,34 @@ function getDefaultPrompt(mode: "design" | "code"): string {
     // React/Tailwind design mode - AI generates React components that get parsed to canvas elements
     return `You are a world-class designer creating stunning UI components.
 
-OUTPUT FORMAT: Generate a single React component with Tailwind CSS.
-Wrap your code in a \`\`\`tsx code block.
+⚠️ CRITICAL OUTPUT FORMAT - READ CAREFULLY:
+- Generate ONLY a React component with Tailwind CSS
+- Wrap your code in a \`\`\`tsx code block
+- DO NOT use <boltArtifact> tags
+- DO NOT use <boltAction> tags
+- DO NOT output JSON
+- DO NOT use "elements" array format
+- ONLY output a React functional component
 
-CRITICAL RULES:
+CORRECT OUTPUT FORMAT:
+\`\`\`tsx
+export default function ComponentName() {
+  return (
+    <section className="...tailwind classes...">
+      ...
+    </section>
+  );
+}
+\`\`\`
+
+WRONG OUTPUT FORMAT (DO NOT DO THIS):
+<boltArtifact>
+<boltAction type="canvas">
+{"elements":[...]}
+</boltAction>
+</boltArtifact>
+
+DESIGN RULES:
 1. Use ONLY Tailwind classes - NO inline styles, NO CSS files
 2. Use semantic HTML tags (section, header, nav, main, footer, article)
 3. Content language must match user's language (Italian = Italian text)
