@@ -151,11 +151,21 @@ export function parseArtifacts(response: string): ParseResult {
   }
 
   // Try bolt.diy format first
+  console.log('[ArtifactParser] Response length:', response.length);
+  console.log('[ArtifactParser] Contains boltArtifact:', response.includes('<boltArtifact'));
+  console.log('[ArtifactParser] Contains </boltArtifact>:', response.includes('</boltArtifact>'));
+  console.log('[ArtifactParser] Contains boltAction:', response.includes('<boltAction'));
+  console.log('[ArtifactParser] Contains </boltAction>:', response.includes('</boltAction>'));
+
   const boltArtifactMatches = [...response.matchAll(PATTERNS.boltArtifact)];
+  console.log('[ArtifactParser] boltArtifact matches:', boltArtifactMatches.length);
+
   if (boltArtifactMatches.length > 0) {
     for (const match of boltArtifactMatches) {
       const artifactContent = match[1];
+      console.log('[ArtifactParser] Artifact content length:', artifactContent.length);
       const actionMatches = [...artifactContent.matchAll(PATTERNS.boltAction)];
+      console.log('[ArtifactParser] boltAction matches:', actionMatches.length);
 
       for (const actionMatch of actionMatches) {
         const [, type, filePath, content] = actionMatch;
@@ -164,7 +174,12 @@ export function parseArtifacts(response: string): ParseResult {
         if (type === 'canvas') {
           try {
             const trimmedContent = content.trim();
+            console.log('[ArtifactParser] Canvas content length:', trimmedContent.length);
+            console.log('[ArtifactParser] Canvas content preview:', trimmedContent.substring(0, 200));
+            console.log('[ArtifactParser] Canvas content ends with:', trimmedContent.substring(Math.max(0, trimmedContent.length - 50)));
+
             const canvasData = JSON.parse(trimmedContent);
+            console.log('[ArtifactParser] JSON parsed successfully, elements count:', canvasData.elements?.length || 0);
 
             // Build artifact with elements and/or modifications
             const artifact: ParsedArtifact = {
@@ -189,8 +204,10 @@ export function parseArtifacts(response: string): ParseResult {
             }
 
             artifacts.push(artifact);
+            console.log('[ArtifactParser] Canvas artifact added with', artifact.canvasElements?.length || 0, 'elements');
           } catch (e) {
-            console.warn('[ArtifactParser] Failed to parse canvas JSON:', e);
+            console.error('[ArtifactParser] Failed to parse canvas JSON:', e);
+            console.error('[ArtifactParser] Content that failed:', content.substring(0, 500));
           }
         } else {
           artifacts.push({
@@ -328,8 +345,266 @@ export function applyArtifacts(
 }
 
 /**
- * Format files for AI context
+ * Progressive Canvas Parser
+ * Extracts complete canvas elements during streaming for live rendering
+ *
+ * @param content - The streaming content so far
+ * @param processedPosition - Position up to which content has been processed
+ * @returns Object with new elements and updated processed position
  */
+export function parseProgressiveCanvasElements(
+  content: string,
+  processedPosition: number = 0
+): {
+  elements: CanvasElementData[];
+  processedPosition: number;
+} {
+  const elements: CanvasElementData[] = [];
+  let newProcessedPosition = processedPosition;
+
+  // Only look at content after processed position
+  const unprocessedContent = content.slice(processedPosition);
+
+  // Look for complete boltAction canvas blocks
+  const canvasBlockRegex = /<boltAction\s+type="canvas"[^>]*>([\s\S]*?)<\/boltAction>/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = canvasBlockRegex.exec(unprocessedContent)) !== null) {
+    const jsonContent = match[1].trim();
+    const blockEndPosition = processedPosition + match.index + match[0].length;
+
+    try {
+      const canvasData = JSON.parse(jsonContent);
+
+      // Extract elements
+      let newElements: CanvasElementData[] = [];
+      if (canvasData.elements && Array.isArray(canvasData.elements)) {
+        newElements = canvasData.elements;
+      } else if (Array.isArray(canvasData)) {
+        newElements = canvasData;
+      } else if (canvasData.type) {
+        // Single element
+        newElements = [canvasData];
+      }
+
+      if (newElements.length > 0) {
+        elements.push(...newElements);
+        newProcessedPosition = blockEndPosition;
+        console.log(`[ProgressiveParser] Found ${newElements.length} complete elements`);
+      }
+    } catch (e) {
+      // JSON not complete yet, skip this block
+      console.log('[ProgressiveParser] JSON incomplete, waiting for more data');
+    }
+  }
+
+  return {
+    elements,
+    processedPosition: newProcessedPosition,
+  };
+}
+
+/**
+ * Extract complete JSON objects from streaming content using brace counting
+ * Works with nested objects by tracking brace depth
+ *
+ * @param content - The streaming content
+ * @param addedElementIds - Set of element IDs already added to canvas
+ * @returns Array of complete elements found
+ */
+export function parseStreamingElements(
+  content: string,
+  addedElementIds: Set<string>
+): CanvasElementData[] {
+  const elements: CanvasElementData[] = [];
+
+  // Find where the elements array starts
+  const elementsMatch = content.match(/"elements"\s*:\s*\[/);
+  if (!elementsMatch || elementsMatch.index === undefined) return elements;
+
+  const arrayStartIndex = content.indexOf('[', elementsMatch.index);
+  if (arrayStartIndex === -1) return elements;
+
+  // Extract complete top-level objects from the array using brace counting
+  const contentAfterArray = content.slice(arrayStartIndex + 1);
+
+  let braceDepth = 0;
+  let objectStart = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < contentAfterArray.length; i++) {
+    const char = contentAfterArray[i];
+
+    // Handle escape sequences in strings
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    // Track string boundaries
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+
+    // Only count braces outside strings
+    if (!inString) {
+      if (char === '{') {
+        if (braceDepth === 0) {
+          objectStart = i;
+        }
+        braceDepth++;
+      } else if (char === '}') {
+        braceDepth--;
+
+        // Complete object found at top level
+        if (braceDepth === 0 && objectStart !== -1) {
+          const objectStr = contentAfterArray.slice(objectStart, i + 1);
+
+          try {
+            const element = JSON.parse(objectStr) as CanvasElementData;
+
+            // Create unique ID from type + name
+            const elementId = `${element.type}-${element.name || 'unnamed'}`;
+
+            if (element.type && !addedElementIds.has(elementId)) {
+              elements.push(element);
+              console.log(`[StreamingParser] Found complete element: "${element.name || element.type}"`);
+            }
+          } catch {
+            // JSON not valid yet, skip
+          }
+
+          objectStart = -1;
+        }
+      } else if (char === ']' && braceDepth === 0) {
+        // End of elements array
+        break;
+      }
+    }
+  }
+
+  return elements;
+}
+
+/**
+ * Tolerant Canvas Parser
+ * Attempts to extract elements even from incomplete/malformed JSON
+ * Uses brace counting to find complete objects within incomplete responses
+ *
+ * @param content - The raw content (may be incomplete)
+ * @returns Object with extracted elements and parse status
+ */
+export function parseCanvasElementsTolerant(content: string): {
+  elements: CanvasElementData[];
+  isComplete: boolean;
+  parseError?: string;
+} {
+  const elements: CanvasElementData[] = [];
+
+  // First, try to find boltAction canvas content
+  const canvasMatch = content.match(/<boltAction\s+type="canvas"[^>]*>([\s\S]*?)(?:<\/boltAction>|$)/i);
+  if (!canvasMatch) {
+    console.log('[TolerantParser] No canvas action found');
+    return { elements: [], isComplete: false, parseError: 'No canvas action found' };
+  }
+
+  const jsonContent = canvasMatch[1].trim();
+  const hasClosingTag = content.includes('</boltAction>');
+
+  console.log('[TolerantParser] Found canvas content, length:', jsonContent.length, 'hasClosingTag:', hasClosingTag);
+
+  // Try full JSON parse first
+  try {
+    const parsed = JSON.parse(jsonContent);
+    const extractedElements = parsed.elements || (Array.isArray(parsed) ? parsed : [parsed]);
+    console.log('[TolerantParser] Full JSON parse succeeded:', extractedElements.length, 'elements');
+    return { elements: extractedElements, isComplete: true };
+  } catch (e) {
+    console.log('[TolerantParser] Full JSON parse failed, trying tolerant extraction...');
+  }
+
+  // Fallback: Extract complete objects using brace counting
+  // Find where elements array starts
+  const elementsMatch = jsonContent.match(/"elements"\s*:\s*\[/);
+  const arrayStart = elementsMatch
+    ? jsonContent.indexOf('[', elementsMatch.index)
+    : jsonContent.indexOf('[');
+
+  if (arrayStart === -1) {
+    console.log('[TolerantParser] No array found');
+    return { elements: [], isComplete: false, parseError: 'No elements array found' };
+  }
+
+  const contentAfterArray = jsonContent.slice(arrayStart + 1);
+
+  let braceDepth = 0;
+  let objectStart = -1;
+  let inString = false;
+  let escapeNext = false;
+
+  for (let i = 0; i < contentAfterArray.length; i++) {
+    const char = contentAfterArray[i];
+
+    if (escapeNext) {
+      escapeNext = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      escapeNext = true;
+      continue;
+    }
+
+    if (char === '"' && !escapeNext) {
+      inString = !inString;
+      continue;
+    }
+
+    if (!inString) {
+      if (char === '{') {
+        if (braceDepth === 0) {
+          objectStart = i;
+        }
+        braceDepth++;
+      } else if (char === '}') {
+        braceDepth--;
+
+        if (braceDepth === 0 && objectStart !== -1) {
+          const objectStr = contentAfterArray.slice(objectStart, i + 1);
+
+          try {
+            const element = JSON.parse(objectStr) as CanvasElementData;
+            if (element.type) {
+              elements.push(element);
+              console.log(`[TolerantParser] Extracted element: "${element.name || element.type}"`);
+            }
+          } catch {
+            // Individual object not valid, skip
+          }
+
+          objectStart = -1;
+        }
+      } else if (char === ']' && braceDepth === 0) {
+        break;
+      }
+    }
+  }
+
+  console.log('[TolerantParser] Tolerant extraction found', elements.length, 'elements');
+  return {
+    elements,
+    isComplete: hasClosingTag && elements.length > 0,
+    parseError: elements.length === 0 ? 'Could not extract any complete elements' : undefined
+  };
+}
+
 export function formatFilesForContext(
   files: Record<string, string>,
   maxFiles = 10,

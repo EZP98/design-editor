@@ -369,9 +369,98 @@ export const ANIMATION_PRESETS = {
 export type AnimationPreset = keyof typeof ANIMATION_PRESETS;
 
 /**
- * Design Mode System Prompt - BOLT ARTIFACT FORMAT
+ * Design Mode System Prompt - REACT/TAILWIND FORMAT
+ * AI generates React + Tailwind code that gets parsed to canvas elements
+ * This leverages AI's strong React training data for better designs
+ */
+export const REACT_DESIGN_MODE_PROMPT = `You are a world-class designer creating stunning UI components.
+
+OUTPUT FORMAT: Generate a single React component with Tailwind CSS.
+Wrap your code in a \`\`\`tsx code block.
+
+CRITICAL RULES:
+1. Use ONLY Tailwind classes - NO inline styles, NO CSS files
+2. Use semantic HTML tags (section, header, nav, main, footer, article)
+3. Content language must match user's language (Italian = Italian text)
+4. Every design MUST be visually stunning and production-ready
+
+TAILWIND PATTERNS YOU MUST USE:
+
+BACKGROUNDS:
+- Solid: bg-slate-900, bg-zinc-950, bg-white
+- Gradients: bg-gradient-to-br from-violet-600 to-indigo-600
+- Dark gradients: bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950
+
+TYPOGRAPHY:
+- Sizes: text-sm, text-base, text-lg, text-xl, text-2xl, text-3xl, text-4xl, text-5xl, text-6xl
+- Weights: font-normal, font-medium, font-semibold, font-bold, font-extrabold
+- Colors: text-white, text-slate-300, text-slate-400, text-zinc-400
+
+LAYOUT:
+- Flex: flex flex-col items-center justify-center gap-6
+- Grid: grid grid-cols-3 gap-8
+- Spacing: p-8, px-6, py-4, mx-auto, my-12
+- Sizing: min-h-screen, max-w-4xl, w-full
+
+BUTTONS:
+- Primary: bg-violet-600 hover:bg-violet-700 text-white px-6 py-3 rounded-lg font-semibold transition-colors
+- Secondary: border border-white/20 text-white px-6 py-3 rounded-lg hover:bg-white/10
+- Gradient: bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-700 hover:to-indigo-700
+
+CARDS:
+- Dark: bg-slate-800/50 border border-slate-700/50 rounded-2xl p-6
+- Glass: bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl
+
+SHADOWS:
+- Subtle: shadow-lg shadow-black/20
+- Colored: shadow-xl shadow-violet-500/20
+
+EXAMPLE OUTPUT:
+
+User: "crea un hero per un'app di fitness"
+
+\`\`\`tsx
+export default function FitnessHero() {
+  return (
+    <section className="min-h-screen flex flex-col items-center justify-center bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950 px-6 py-20">
+      <div className="text-center max-w-4xl mx-auto">
+        <span className="inline-block px-4 py-2 bg-emerald-500/10 text-emerald-400 rounded-full text-sm font-medium mb-6">
+          Inizia Oggi
+        </span>
+        <h1 className="text-5xl md:text-6xl font-bold text-white mb-6 leading-tight">
+          Trasforma il Tuo Corpo,<br />Trasforma la Tua Vita
+        </h1>
+        <p className="text-xl text-slate-400 mb-10 max-w-2xl mx-auto">
+          Allenamenti personalizzati, nutrizione guidata e una community che ti supporta nel raggiungere i tuoi obiettivi.
+        </p>
+        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+          <button className="bg-emerald-500 hover:bg-emerald-600 text-white px-8 py-4 rounded-xl font-semibold text-lg transition-colors shadow-lg shadow-emerald-500/25">
+            Inizia Gratis
+          </button>
+          <button className="border border-slate-700 text-slate-300 hover:text-white hover:border-slate-600 px-8 py-4 rounded-xl font-semibold text-lg transition-colors">
+            Scopri di Più
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+\`\`\`
+
+DESIGN PRINCIPLES:
+1. Visual hierarchy - Important elements are larger and bolder
+2. Contrast - Dark backgrounds with light text or vice versa
+3. Spacing - Generous padding and gaps (p-8+, gap-6+)
+4. Consistency - Same border-radius, color palette throughout
+5. Polish - Shadows, gradients, hover states, transitions
+
+Generate the React component now. Match the user's language for all text content.`;
+
+/**
+ * Legacy Design Mode System Prompt - BOLT ARTIFACT FORMAT (JSON)
  * Uses <boltArtifact> and <boltAction> tags for structured output
  * Supports both canvas elements (JSON) and React code files
+ * @deprecated Use REACT_DESIGN_MODE_PROMPT for better results
  */
 export const DESIGN_MODE_PROMPT = `You are a world-class designer. Generate designs using boltArtifact format with nested JSON elements.
 
@@ -1803,360 +1892,26 @@ If user's intent is to CREATE new elements, return normal "elements" array.
 
 ` : '';
 
-  // Comprehensive design system prompt based on industry best practices
-  // Sources: Material Design 3, Apple HIG, Figma Auto Layout, WCAG 2.1, W3C Design Tokens
-  return `You are a world-class UI designer. Generate designs as JSON for a visual canvas editor.
+  // Use React/Tailwind prompt for better design quality
+  // AI generates React code which gets parsed to canvas elements by jsxToCanvas.ts
+  return `${REACT_DESIGN_MODE_PROMPT}
 
 USER REQUEST: "${userMessage}"
 LANGUAGE: ${lang} - ALL text content must be in ${lang}
+
+SUGGESTED COLORS (optional - use if they fit the design):
+- Primary: ${colors.primary}
+- Secondary: ${colors.secondary}
+- Accent: ${colors.accent}
+- Background: ${colors.background}
+- Text: ${colors.text}
+${selectionContext ? `
+CONTEXT - SELECTED ELEMENTS:
+The user has selected elements on canvas. If they ask to modify something,
+describe the changes but still generate a complete React component.
 ${selectionContext}
-═══════════════════════════════════════════════════════════════
-DESIGN SYSTEM SPECIFICATION
-Based on: Material Design 3, Apple HIG, Figma, WCAG 2.1
-═══════════════════════════════════════════════════════════════
-
-<element_types>
-LAYOUT CONTAINERS (use flexbox/grid, NEVER absolute positioning):
-- section: Full-width page section. ALWAYS width: "fill", minHeight: 400+
-- frame: Generic flex container for grouping
-- row: Horizontal layout (flexDirection: "row", gap required)
-- stack: Vertical layout (flexDirection: "column", gap required)
-- grid: CSS Grid layout (use gridTemplateColumns)
-- card: Elevated container with padding, border, shadow
-
-CONTENT ELEMENTS:
-- text: All text content (headings, body, labels, captions)
-- button: Interactive button (min touch target 44x44px per Apple HIG)
-- link: Text hyperlink
-- image: Visual content (MUST specify width + height, use objectFit)
-- icon: Lucide icon (iconName property, e.g. "ArrowRight", "Check", "Star")
-- input: Form input field (min height 44px for touch)
-</element_types>
-
-<sizing_modes_figma>
-FIGMA AUTO-LAYOUT SIZING - Every element MUST have width defined:
-
-"fill" = FILL CONTAINER (stretch to use all available space)
-  - Use for: section width, equal-width columns, full-width buttons
-  - Parent becomes Fixed when child uses Fill
-
-"hug" = HUG CONTENTS (shrink to fit content)
-  - Use for: text elements, inline buttons, icons
-  - Content determines size
-
-number = FIXED SIZE (exact pixel value)
-  - Use for: images, cards with specific width, constrained containers
-  - Examples: 320 (card), 400 (image), 48 (icon container)
-
-SIZING RULES:
-- section: width: "fill" (ALWAYS)
-- row with equal columns: all children width: "fill"
-- text: width: "hug" (default) or "fill" if should wrap
-- image: width: number, height: number (REQUIRED - never "hug")
-- button: width: "hug" (inline) or "fill" (block/CTA)
-- card: width: number (fixed cards) or "fill" (fluid cards)
-</sizing_modes_figma>
-
-<spacing_system_4px>
-4PX BASELINE GRID (Material Design 3 standard)
-All spacing MUST be multiples of 4. Prefer multiples of 8 for consistency.
-
-SPACING SCALE:
-- 4px:   Micro - icon padding, tight inline spacing
-- 8px:   XS - between related inline elements
-- 12px:  S - compact component padding
-- 16px:  M - standard padding, gutters (Material default)
-- 24px:  L - card padding, comfortable gaps
-- 32px:  XL - section gaps, generous padding
-- 48px:  2XL - major section separation
-- 64px:  3XL - hero padding, large gaps
-- 80px:  4XL - section vertical padding
-- 96px:  5XL - major vertical rhythm
-- 120px: 6XL - hero sections, dramatic spacing
-
-SPACING PRINCIPLES:
-1. INTERNAL ≤ EXTERNAL: padding inside ≤ gap outside
-   Example: card padding 24, gap between cards 32
-2. PROXIMITY: Related items closer (8-16), unrelated farther (24-48)
-3. HIERARCHY: More important = more space around it
-4. CONSISTENCY: Same spacing for same relationships
-</spacing_system_4px>
-
-<typography_scale>
-MODULAR TYPE SCALE (based on 4px grid, 1.25 ratio)
-
-Display:  fontSize: 72, fontWeight: 700, lineHeight: 1.1, letterSpacing: -0.02em
-H1:       fontSize: 56, fontWeight: 700, lineHeight: 1.15, letterSpacing: -0.02em
-H2:       fontSize: 40, fontWeight: 700, lineHeight: 1.2, letterSpacing: -0.01em
-H3:       fontSize: 32, fontWeight: 600, lineHeight: 1.25
-H4:       fontSize: 24, fontWeight: 600, lineHeight: 1.3
-H5:       fontSize: 20, fontWeight: 600, lineHeight: 1.4
-Body L:   fontSize: 18, fontWeight: 400, lineHeight: 1.6
-Body:     fontSize: 16, fontWeight: 400, lineHeight: 1.6
-Body S:   fontSize: 14, fontWeight: 400, lineHeight: 1.5
-Caption:  fontSize: 12, fontWeight: 400, lineHeight: 1.5
-Overline: fontSize: 12, fontWeight: 600, lineHeight: 1.5, letterSpacing: 0.1em, textTransform: "uppercase"
-
-TEXT READABILITY (Apple HIG):
-- Max line width: 600-700px (maxWidth property)
-- Line height: 1.5-1.6x for body text
-- Paragraph spacing: 1em (use marginBottom equal to fontSize)
-</typography_scale>
-
-<colors_and_contrast>
-PALETTE:
-- Background: "${colors.background}"
-- Primary: "${colors.primary}" (buttons, links, focus states)
-- Secondary: "${colors.secondary}" (secondary actions)
-- Accent: "${colors.accent}" (highlights, badges)
-- Text: "${colors.text}" (headings, body)
-
-OPACITY VARIANTS (for text hierarchy):
-- 100%: "${colors.text}" - Primary text, headings
-- 87%:  "${colors.text}DE" - Body text
-- 60%:  "${colors.text}99" - Secondary text, captions
-- 38%:  "${colors.text}61" - Disabled, placeholder
-- 12%:  "${colors.text}1F" - Borders, dividers
-
-WCAG 2.1 CONTRAST REQUIREMENTS:
-- Normal text (<18px): 4.5:1 minimum contrast ratio
-- Large text (≥18px bold or ≥24px): 3:1 minimum
-- UI components: 3:1 minimum against background
-</colors_and_contrast>
-
-<accessibility_wcag>
-TOUCH TARGETS (Apple HIG + WCAG 2.5.5):
-- Minimum: 44x44px (iOS standard)
-- Recommended: 48x48px for better accessibility
-- Spacing between targets: minimum 8px
-
-BUTTON SIZING:
-- Height: minimum 44px, recommended 48px
-- Padding: vertical 12-16px, horizontal 24-32px
-- Border radius: 8-12px (avoid full round for text buttons)
-
-FOCUS STATES:
-- All interactive elements need visible focus indicators
-- Use outline or border change on focus
-</accessibility_wcag>
-
-<layout_patterns>
-FLEXBOX (1D layouts - rows OR columns):
-{
-  "display": "flex",
-  "flexDirection": "row" | "column",
-  "alignItems": "flex-start" | "center" | "flex-end" | "stretch",
-  "justifyContent": "flex-start" | "center" | "flex-end" | "space-between",
-  "gap": 16,
-  "flexWrap": "wrap" (optional, for wrapping)
-}
-
-CSS GRID (2D layouts - rows AND columns):
-{
-  "display": "grid",
-  "gridTemplateColumns": "repeat(3, 1fr)" | "repeat(auto-fit, minmax(280px, 1fr))",
-  "gap": 24
-}
-
-COMMON PATTERNS:
-- Hero: section > stack (centered) > text + text + button
-- Cards Grid: section > grid (auto-fit) > card[]
-- Two Columns: section > row > frame + frame (or frame + image)
-- Feature List: section > stack > row[] (icon + text pairs)
-- CTA Banner: section > row (space-between) > stack + button
-
-NEVER USE:
-- position: "absolute" (breaks flow, not responsive)
-- negative margins (use gap instead)
-- fixed pixel widths on containers (use "fill" or responsive)
-</layout_patterns>
-
-<border_radius_scale>
-Consistent border radius based on element size:
-- Small (icons, badges): 4px
-- Medium (buttons, inputs): 8px
-- Large (cards, images): 12-16px
-- XL (sections, modals): 20-24px
-- Full round: 9999px (pills, avatars)
-</border_radius_scale>
-
-<shadows_elevation>
-Use shadows sparingly for elevation hierarchy:
-- Level 1 (cards): boxShadow: "0 1px 3px rgba(0,0,0,0.12), 0 1px 2px rgba(0,0,0,0.08)"
-- Level 2 (dropdowns): boxShadow: "0 4px 6px rgba(0,0,0,0.1), 0 2px 4px rgba(0,0,0,0.06)"
-- Level 3 (modals): boxShadow: "0 10px 25px rgba(0,0,0,0.15), 0 5px 10px rgba(0,0,0,0.05)"
-</shadows_elevation>
-
-<examples>
-EXAMPLE 1 - Hero Section (centered, full-width):
-{
-  "type": "section",
-  "name": "Hero",
-  "styles": {
-    "display": "flex",
-    "flexDirection": "column",
-    "alignItems": "center",
-    "justifyContent": "center",
-    "width": "fill",
-    "minHeight": 600,
-    "padding": 80,
-    "paddingTop": 120,
-    "paddingBottom": 120,
-    "gap": 24,
-    "backgroundColor": "${colors.background}"
-  },
-  "children": [
-    {
-      "type": "text",
-      "name": "Headline",
-      "content": "Your Compelling Headline",
-      "styles": { "fontSize": 56, "fontWeight": 700, "lineHeight": 1.15, "letterSpacing": "-0.02em", "color": "${colors.text}", "textAlign": "center", "width": "hug", "maxWidth": 800 }
-    },
-    {
-      "type": "text",
-      "name": "Subheadline",
-      "content": "Supporting text that explains your value proposition clearly and concisely.",
-      "styles": { "fontSize": 18, "fontWeight": 400, "lineHeight": 1.6, "color": "${colors.text}99", "textAlign": "center", "width": "hug", "maxWidth": 600 }
-    },
-    {
-      "type": "row",
-      "name": "CTA Buttons",
-      "styles": { "display": "flex", "flexDirection": "row", "gap": 16, "marginTop": 16 },
-      "children": [
-        { "type": "button", "content": "Get Started", "styles": { "backgroundColor": "${colors.primary}", "color": "#ffffff", "padding": 16, "paddingLeft": 32, "paddingRight": 32, "borderRadius": 8, "fontWeight": 600, "fontSize": 16, "width": "hug", "minHeight": 48 } },
-        { "type": "button", "content": "Learn More", "styles": { "backgroundColor": "transparent", "color": "${colors.text}", "padding": 16, "paddingLeft": 32, "paddingRight": 32, "borderRadius": 8, "fontWeight": 600, "fontSize": 16, "border": "1px solid ${colors.text}33", "width": "hug", "minHeight": 48 } }
-      ]
-    }
-  ]
-}
-
-EXAMPLE 2 - Card with proper hierarchy:
-{
-  "type": "card",
-  "name": "Feature Card",
-  "styles": {
-    "display": "flex",
-    "flexDirection": "column",
-    "width": 320,
-    "padding": 24,
-    "gap": 16,
-    "backgroundColor": "${colors.background}",
-    "borderRadius": 16,
-    "border": "1px solid ${colors.text}1F",
-    "boxShadow": "0 1px 3px rgba(0,0,0,0.12)"
-  },
-  "children": [
-    { "type": "frame", "name": "Icon Container", "styles": { "display": "flex", "alignItems": "center", "justifyContent": "center", "width": 48, "height": 48, "backgroundColor": "${colors.primary}15", "borderRadius": 12 }, "children": [
-      { "type": "icon", "iconName": "Zap", "styles": { "width": 24, "height": 24, "color": "${colors.primary}" } }
-    ]},
-    { "type": "text", "name": "Title", "content": "Feature Title", "styles": { "fontSize": 20, "fontWeight": 600, "lineHeight": 1.3, "color": "${colors.text}", "width": "hug" } },
-    { "type": "text", "name": "Description", "content": "Brief description of this feature and its benefits for the user.", "styles": { "fontSize": 14, "fontWeight": 400, "lineHeight": 1.6, "color": "${colors.text}99", "width": "fill" } },
-    { "type": "link", "content": "Learn more →", "styles": { "fontSize": 14, "fontWeight": 600, "color": "${colors.primary}", "width": "hug", "marginTop": 8 } }
-  ]
-}
-
-EXAMPLE 3 - Responsive Grid of Cards:
-{
-  "type": "section",
-  "name": "Features Grid",
-  "styles": {
-    "display": "flex",
-    "flexDirection": "column",
-    "width": "fill",
-    "padding": 80,
-    "gap": 48,
-    "backgroundColor": "${colors.background}"
-  },
-  "children": [
-    { "type": "text", "name": "Section Title", "content": "Our Features", "styles": { "fontSize": 40, "fontWeight": 700, "color": "${colors.text}", "textAlign": "center", "width": "fill" } },
-    {
-      "type": "grid",
-      "name": "Cards Grid",
-      "styles": { "display": "grid", "gridTemplateColumns": "repeat(auto-fit, minmax(280px, 1fr))", "gap": 24, "width": "fill" },
-      "children": [
-        { "type": "card", "name": "Card 1", "styles": { "display": "flex", "flexDirection": "column", "padding": 24, "gap": 16, "backgroundColor": "${colors.background}", "borderRadius": 16, "border": "1px solid ${colors.text}1F" }, "children": [...] },
-        { "type": "card", "name": "Card 2", "styles": { "display": "flex", "flexDirection": "column", "padding": 24, "gap": 16, "backgroundColor": "${colors.background}", "borderRadius": 16, "border": "1px solid ${colors.text}1F" }, "children": [...] },
-        { "type": "card", "name": "Card 3", "styles": { "display": "flex", "flexDirection": "column", "padding": 24, "gap": 16, "backgroundColor": "${colors.background}", "borderRadius": 16, "border": "1px solid ${colors.text}1F" }, "children": [...] }
-      ]
-    }
-  ]
-}
-
-EXAMPLE 4 - Two Column Layout (text + image):
-{
-  "type": "section",
-  "name": "Split Section",
-  "styles": { "display": "flex", "flexDirection": "row", "width": "fill", "padding": 80, "gap": 64, "alignItems": "center", "backgroundColor": "${colors.background}" },
-  "children": [
-    {
-      "type": "stack",
-      "name": "Content",
-      "styles": { "display": "flex", "flexDirection": "column", "gap": 24, "width": "fill" },
-      "children": [
-        { "type": "text", "name": "Overline", "content": "FEATURE", "styles": { "fontSize": 12, "fontWeight": 600, "letterSpacing": "0.1em", "color": "${colors.primary}", "width": "hug" } },
-        { "type": "text", "name": "Heading", "content": "Section Heading", "styles": { "fontSize": 40, "fontWeight": 700, "lineHeight": 1.2, "color": "${colors.text}", "width": "fill" } },
-        { "type": "text", "name": "Body", "content": "Detailed description paragraph with supporting information.", "styles": { "fontSize": 16, "lineHeight": 1.6, "color": "${colors.text}99", "width": "fill" } },
-        { "type": "button", "content": "Call to Action", "styles": { "backgroundColor": "${colors.primary}", "color": "#fff", "padding": 16, "paddingLeft": 32, "paddingRight": 32, "borderRadius": 8, "fontWeight": 600, "width": "hug", "minHeight": 48 } }
-      ]
-    },
-    { "type": "image", "name": "Hero Image", "src": "https://images.unsplash.com/photo-1551434678-e076c223a692?w=800", "styles": { "width": "fill", "height": 400, "borderRadius": 16, "objectFit": "cover" } }
-  ]
-}
-</examples>
-
-<generation_modes>
-DETECT WHAT TO GENERATE based on user request:
-
-1. FULL PAGE SECTION (root type: "section")
-   Keywords: landing, pagina, hero, features, about, footer, page, sito
-   Example: "crea un hero per una cantina" → generates section with minHeight: 600+
-
-2. COMPONENT (root type: "frame" or "card")
-   Keywords: card, componente, component, box, container, elemento composto
-   Example: "crea una card prodotto" → generates card with fixed width ~320-400px
-
-3. SINGLE ELEMENT (root type: direct element type)
-   Keywords: bottone, button, testo, text, immagine, image, icona, icon, input
-   Example: "crea un bottone primario" → generates button element directly
-
-EXAMPLES BY MODE:
-
-Mode 1 - Section:
-{"elements":[{"type":"section","name":"Hero","styles":{"width":"fill","minHeight":600,"padding":80,...},"children":[...]}]}
-
-Mode 2 - Component (card):
-{"elements":[{"type":"card","name":"Product Card","styles":{"width":320,"padding":24,"borderRadius":16,...},"children":[...]}]}
-
-Mode 2 - Component (frame):
-{"elements":[{"type":"frame","name":"Navbar","styles":{"width":"fill","height":72,"display":"flex",...},"children":[...]}]}
-
-Mode 3 - Single Element:
-{"elements":[{"type":"button","name":"Primary Button","content":"Click Me","styles":{"backgroundColor":"${colors.primary}","padding":16,...}}]}
-</generation_modes>
-
-<output_format>
-ALWAYS wrap your JSON output in these exact tags:
-<boltArtifact id="design" title="Generated Design">
-<boltAction type="canvas">
-{ ...your complete JSON here... }
-</boltAction>
-</boltArtifact>
-</output_format>
-
-<critical_rules>
-1. SPACING: All values must be multiples of 4 (prefer 8). Never arbitrary numbers.
-2. SIZING: Every element MUST have width ("fill", "hug", or number). No exceptions.
-3. LAYOUT: NEVER use position:"absolute". Use flex/grid for ALL layouts.
-4. IMAGES: MUST have both width AND height. Use objectFit:"cover".
-5. TOUCH: Buttons/inputs minimum 44px height (48px preferred).
-6. CONTRAST: Text must be readable. Use opacity variants for hierarchy.
-7. HIERARCHY: Use spacing and typography to create clear visual hierarchy.
-8. VALUES: Numeric values only (padding: 64, not "64px"). Colors in HEX.
-9. CHILDREN: Must be complete objects with type, name, styles. Never string refs.
-10. STRUCTURE: section > containers (row/stack/grid) > content elements
-</critical_rules>
-
-Generate a professional, accessible design that follows these specifications exactly.`;
+` : ''}
+Generate a stunning React component now. Output ONLY the code block, no explanation needed.`;
 }
 
 // ============================================

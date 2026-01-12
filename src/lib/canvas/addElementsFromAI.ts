@@ -318,19 +318,26 @@ export function addElementsFromAI(
   const store = useCanvasStore.getState();
   const createdIds: string[] = [];
 
+  console.log('[AddElementsFromAI] Called with', elements.length, 'elements, parentId:', parentId);
+  console.log('[AddElementsFromAI] Current pages:', Object.keys(store.pages));
+  console.log('[AddElementsFromAI] Current elements count:', Object.keys(store.elements).length);
+
   // If no parentId provided, use current page root
   if (!parentId) {
     const currentPage = store.getCurrentPage();
+    console.log('[AddElementsFromAI] No parentId, getting current page:', currentPage?.id);
     if (currentPage) {
       parentId = currentPage.rootElementId;
+      console.log('[AddElementsFromAI] Using current page root:', parentId);
     } else {
-      console.error('[AddElementsFromAI] No current page found!');
+      console.error('[AddElementsFromAI] No current page found! Pages:', Object.keys(store.pages));
       return [];
     }
   }
 
   if (!store.elements[parentId!]) {
     console.error('[AddElementsFromAI] Parent element not found:', parentId);
+    console.error('[AddElementsFromAI] Available elements:', Object.keys(store.elements).slice(0, 5));
     return [];
   }
 
@@ -795,17 +802,27 @@ function convertStyles(aiStyles: Record<string, unknown>): Partial<ElementStyles
   }
 
   // Handle resizeX/resizeY (auto-layout sizing modes)
+  // AI prompt uses "width: fill/hug" but canvas needs "resizeX: fill/hug"
   if (aiStyles.resizeX !== undefined) {
     const resizeXValue = aiStyles.resizeX as string;
     if (resizeXValue === 'fixed' || resizeXValue === 'fill' || resizeXValue === 'hug') {
       styles.resizeX = resizeXValue;
     }
+  } else if (aiStyles.width === 'fill' || aiStyles.width === 'hug') {
+    // Convert width: "fill"/"hug" to resizeX
+    styles.resizeX = aiStyles.width as 'fill' | 'hug';
+    console.log(`[ConvertStyles] Converted width:"${aiStyles.width}" to resizeX:"${aiStyles.width}"`);
   }
+
   if (aiStyles.resizeY !== undefined) {
     const resizeYValue = aiStyles.resizeY as string;
     if (resizeYValue === 'fixed' || resizeYValue === 'fill' || resizeYValue === 'hug') {
       styles.resizeY = resizeYValue;
     }
+  } else if (aiStyles.height === 'fill' || aiStyles.height === 'hug') {
+    // Convert height: "fill"/"hug" to resizeY
+    styles.resizeY = aiStyles.height as 'fill' | 'hug';
+    console.log(`[ConvertStyles] Converted height:"${aiStyles.height}" to resizeY:"${aiStyles.height}"`);
   }
 
   return styles;

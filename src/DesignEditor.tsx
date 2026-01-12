@@ -1689,15 +1689,20 @@ export default defineConfig({ plugins: [react()] });`,
   // EFFECTS
   // ==========================================
 
-  // Auto-start WebContainer for new projects
+  // Initialize new projects in 2D Canvas mode (not WebContainer)
   useEffect(() => {
     if (projectId === 'new') {
       localStorage.removeItem('current-github-repo');
       setGithubRepo(null);
       setProjectFiles([]);
       setProjectUrl('');
-      // Auto-start WebContainer with editable template for new projects
-      setUseWebContainer(true);
+      // Start in 2D canvas mode for new projects (AI design generation)
+      setUseWebContainer(false);
+      setCanvasViewMode('2d');
+      // Reset canvas store for fresh start
+      useCanvasStore.getState().reset();
+      setCurrentProjectId(null);
+      console.log('[DesignEditor] New project initialized - canvas reset');
     }
   }, [projectId]);
 

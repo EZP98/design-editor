@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect, forwardRef, useImperativeHandle, useCallback } from 'react';
 import { useChatHistory } from '../lib/persistence/useChatHistory';
 import { ChatMessage, FileSnapshot } from '../lib/persistence/db';
-import { parseArtifacts, formatFilesForContext, ParsedArtifact } from '../lib/artifactParser';
+import { parseArtifacts, formatFilesForContext, ParsedArtifact, parseStreamingElements, parseCanvasElementsTolerant } from '../lib/artifactParser';
 import { getSystemPrompt, getDesignPromptWithIntent, getWireframePrompt, getVibePrompt, getAgentPrompt, getAvailableStylePresets, extractDesignIntent, getTopicColorOptions, StylePresetOption, SelectedElementForAI, DesignAgentContext } from '../lib/prompts/system-prompt';
 import { TopicPalette } from '../lib/designSystem';
 import { addElementsFromAI, addElementsWithAI, processAIDesignResponse, updateElementsFromAI } from '../lib/canvas/addElementsFromAI';
@@ -879,6 +879,9 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       abortControllerRef.current?.abort();
     }, 180000); // 3 minutes timeout
 
+    // Track pre-created page for cleanup on error (declared outside try for catch access)
+    let preCreatedPageId: string | undefined;
+
     try {
       // Build full project context for AI (only for code mode)
       const projectContext = outputMode === 'code' && currentFiles
@@ -1011,6 +1014,33 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       // Streaming loop with buffer for partial lines
       let buffer = '';
 
+      // Canvas mode check for page pre-creation
+      const isCanvasMode = outputMode === 'design' || outputMode === 'smart' || outputMode === 'wireframe' || outputMode === 'agent';
+
+      // Progressive rendering state - track elements already added
+      const progressiveAddedIds = new Set<string>();
+      let hasCalledOnDesignCreated = false;
+
+      // PRE-CREATE PAGE for canvas modes - so progressive rendering adds to it
+      let progressivePageId: string | undefined;
+      let progressiveParentId: string | undefined;
+      if (isCanvasMode) {
+        const store = useCanvasStore.getState();
+        progressivePageId = store.addPage();
+        if (progressivePageId) {
+          preCreatedPageId = progressivePageId; // Track for cleanup on error
+          store.renamePage(progressivePageId, 'AI Design (Loading...)');
+          const page = store.pages[progressivePageId];
+          if (page) {
+            store.renameElement(page.rootElementId, 'AI Design');
+            progressiveParentId = page.rootElementId;
+          }
+          store.setCurrentPage(progressivePageId);
+          setCreateAsNewPage(false);
+          console.log('[AIChatPanel] Pre-created page for progressive rendering:', progressivePageId);
+        }
+      }
+
       if (reader) {
         while (true) {
           const { done, value } = await reader.read();
@@ -1047,6 +1077,9 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
                     // Show content directly for all modes
                     updateMessage(assistantMessage.id, fullContent);
+
+                    // Progressive rendering disabled - causes hierarchy issues with nested elements
+                    // Elements are added at the end when JSON is complete and properly parsed
                   }
                 } catch (e) {
                   console.log('[AIChatPanel] JSON parse error for:', data.substring(0, 50));
@@ -1080,12 +1113,21 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       }
 
       // Take snapshot after AI response
-      await takeSnapshot(assistantMessage.id);
+      try {
+        await takeSnapshot(assistantMessage.id);
+      } catch (snapshotErr) {
+        console.warn('[AIChatPanel] Snapshot failed (non-critical):', snapshotErr);
+      }
+
+      console.log('[AIChatPanel] Stream complete, processing response...');
+      console.log('[AIChatPanel] Output mode:', outputMode);
+      console.log('[AIChatPanel] fullContent length:', fullContent.length);
+      console.log('[AIChatPanel] fullContent ends with:', fullContent.substring(Math.max(0, fullContent.length - 100)));
 
       // Handle response based on output mode
       if (outputMode === 'design' || outputMode === 'smart' || outputMode === 'wireframe' || outputMode === 'agent') {
         // DESIGN/SMART/WIREFRAME/AGENT MODE: Parse boltArtifact format with canvas elements
-        console.log(`[AIChatPanel] ${outputMode} mode - parsing boltArtifact for canvas`);
+        console.log(`[AIChatPanel] Entering ${outputMode} mode parsing block`);
         console.log('[AIChatPanel] fullContent length:', fullContent.length);
         console.log('[AIChatPanel] fullContent preview:', fullContent.substring(0, 500));
         console.log('[AIChatPanel] contains boltArtifact:', fullContent.includes('boltArtifact'));
@@ -1140,6 +1182,7 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
           let allElements: any[] = [];
           const elementNames: string[] = [];
+          let wasResponseTruncated = false;
 
           if (canvasArtifacts.length > 0) {
             // Use canvas elements from boltArtifact
@@ -1150,54 +1193,111 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
               }
             }
           } else {
-            // Fallback: try legacy JSX parsing
-            console.log('[AIChatPanel] No canvas artifacts found, trying JSX fallback...');
+            // No complete artifacts found - check if response was truncated
+            const hasBoltArtifact = fullContent.includes('<boltArtifact');
+            const hasBoltAction = fullContent.includes('<boltAction');
+            const hasClosingTags = fullContent.includes('</boltArtifact>') && fullContent.includes('</boltAction>');
 
-            const codeBlocks = extractJSXFromResponse(fullContent);
-            console.log('[AIChatPanel] Found', codeBlocks.length, 'JSX code blocks');
+            if (hasBoltArtifact && hasBoltAction && !hasClosingTags) {
+              // Response was truncated! Use tolerant parser to recover what we can
+              console.log('[AIChatPanel] TRUNCATED RESPONSE DETECTED - using tolerant parser');
+              wasResponseTruncated = true;
+              const tolerantResult = parseCanvasElementsTolerant(fullContent);
 
-            if (codeBlocks.length === 0) {
-              // Fallback: try to find any code block
-              const codeMatch = fullContent.match(/```(?:tsx?|jsx?)\n([\s\S]*?)```/);
-              if (codeMatch) {
-                codeBlocks.push(codeMatch[1]);
+              if (tolerantResult.elements.length > 0) {
+                console.log('[AIChatPanel] Tolerant parser recovered', tolerantResult.elements.length, 'elements');
+                allElements = tolerantResult.elements;
+              } else {
+                console.log('[AIChatPanel] Tolerant parser found 0 elements, error:', tolerantResult.parseError);
               }
             }
 
-            // Parse each code block to canvas elements
-            for (const codeBlock of codeBlocks) {
-              const elements = parseJSXToCanvas(codeBlock);
-              console.log('[AIChatPanel] Parsed', elements.length, 'elements from JSX block');
-              allElements = allElements.concat(elements);
+            // If still no elements, try legacy JSX parsing
+            if (allElements.length === 0) {
+              console.log('[AIChatPanel] Trying JSX fallback...');
+              const codeBlocks = extractJSXFromResponse(fullContent);
+              console.log('[AIChatPanel] Found', codeBlocks.length, 'JSX code blocks');
+
+              if (codeBlocks.length === 0) {
+                // Fallback: try to find any code block
+                const codeMatch = fullContent.match(/```(?:tsx?|jsx?)\n([\s\S]*?)```/);
+                if (codeMatch) {
+                  codeBlocks.push(codeMatch[1]);
+                }
+              }
+
+              // Parse each code block to canvas elements
+              for (const codeBlock of codeBlocks) {
+                const elements = parseJSXToCanvas(codeBlock);
+                console.log('[AIChatPanel] Parsed', elements.length, 'elements from JSX block');
+                allElements = allElements.concat(elements);
+              }
             }
           }
 
+          const store = useCanvasStore.getState();
+
+          // If no elements from final parsing but progressive added some, still rename page
           if (allElements.length === 0) {
-            console.log('[AIChatPanel] No canvas elements extracted');
-            // Show the response content instead
+            console.log('[AIChatPanel] No canvas elements from final parsing');
+
+            if (progressiveAddedIds.size > 0 && progressivePageId) {
+              // Progressive rendering handled everything - rename page and finish
+              store.renamePage(progressivePageId, 'AI Design');
+              const page = store.pages[progressivePageId];
+              if (page) {
+                store.renameElement(page.rootElementId, 'AI Design');
+              }
+              updateMessage(assistantMessage.id, `Creati ${progressiveAddedIds.size} elementi sul canvas (nuova pagina)`);
+              return;
+            }
+
+            // No elements at all - show content and cleanup
             updateMessage(assistantMessage.id, fullContent);
+            if (progressivePageId) {
+              store.deletePage(progressivePageId);
+            }
             return;
           }
 
-          // Add elements to canvas - ALWAYS create new page for clean slate
-          const store = useCanvasStore.getState();
           const pageName = (allElements[0]?.name as string) || 'AI Design';
-          const pageId = store.addPage();
-          let parentId: string | undefined;
+          let ids: string[] = [];
 
+          // Use pre-created page if available, otherwise create new one
+          let pageId = progressivePageId;
+          let parentId = progressiveParentId;
+
+          // Only create new page if we don't have a pre-created one
+          if (!pageId) {
+            pageId = store.addPage();
+            if (pageId) {
+              const page = store.pages[pageId];
+              if (page) {
+                parentId = page.rootElementId;
+              }
+              store.setCurrentPage(pageId);
+            }
+          }
+
+          // Update page name (whether pre-created or new)
           if (pageId) {
             store.renamePage(pageId, pageName);
             const page = store.pages[pageId];
             if (page) {
               store.renameElement(page.rootElementId, pageName);
-              parentId = page.rootElementId;
+              if (!parentId) parentId = page.rootElementId;
             }
-            store.setCurrentPage(pageId);
           }
           setCreateAsNewPage(false);
 
-          console.log('[AIChatPanel] Adding elements to canvas:', allElements.length, 'elements, parentId:', parentId);
-          console.log('[AIChatPanel] Elements to add:', allElements.map(e => ({
+          // Filter out elements already added by progressive rendering
+          const remainingElements = allElements.filter(el => {
+            const elementId = `${el.type}-${el.name || 'unnamed'}`;
+            return !progressiveAddedIds.has(elementId);
+          });
+
+          console.log('[AIChatPanel] Progressive added:', progressiveAddedIds.size, 'remaining:', remainingElements.length);
+          console.log('[AIChatPanel] Elements to add:', remainingElements.map(e => ({
             type: e.type,
             name: e.name,
             hasChildren: !!(e.children?.length),
@@ -1205,9 +1305,10 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           })));
 
           // Use addElementsWithAI if auto-generate images is enabled
-          let ids: string[] = [];
-          if (autoGenerateImages) {
-            const result = await addElementsWithAI(allElements, parentId, {
+          console.log('[AIChatPanel] About to add elements. remainingElements:', remainingElements.length, 'parentId:', parentId, 'autoGenerateImages:', autoGenerateImages);
+          if (remainingElements.length > 0 && autoGenerateImages) {
+            console.log('[AIChatPanel] Using addElementsWithAI (with image generation)');
+            const result = await addElementsWithAI(remainingElements, parentId, {
               autoGenerateImages: true,
               onImageProgress: (current, total) => {
                 setImageGenProgress({ current, total });
@@ -1218,27 +1319,23 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
             if (result.imagesGenerated > 0) {
               console.log(`[AIChatPanel] Auto-generated ${result.imagesGenerated} AI images`);
             }
-          } else {
-            ids = addElementsFromAI(allElements, parentId);
+          } else if (remainingElements.length > 0) {
+            console.log('[AIChatPanel] Using addElementsFromAI (no image generation)');
+            try {
+              ids = addElementsFromAI(remainingElements, parentId);
+              console.log('[AIChatPanel] addElementsFromAI returned IDs:', ids);
+            } catch (addErr) {
+              console.error('[AIChatPanel] addElementsFromAI FAILED:', addErr);
+              throw addErr;
+            }
           }
 
-          console.log('[AIChatPanel] Created element IDs:', ids);
-          // Log created elements details
-          const createdElements = ids.map(id => store.getElement(id)).filter(Boolean);
-          console.log('[AIChatPanel] Created elements details:', createdElements.map(e => ({
-            id: e?.id,
-            type: e?.type,
-            name: e?.name,
-            visible: e?.visible,
-            size: e?.size,
-            position: e?.position,
-            childrenCount: e?.children?.length || 0
-          })));
+          console.log('[AIChatPanel] Created element IDs:', ids.length, 'Progressive already added:', progressiveAddedIds.size);
 
           allElements.forEach(e => elementNames.push(e.name || e.type || 'element'));
 
-          // Switch to 2D canvas mode to show the created elements
-          if (onDesignCreated && ids.length > 0) {
+          // Switch to 2D canvas mode to show the created elements (if not already done by progressive)
+          if (onDesignCreated && !hasCalledOnDesignCreated && (ids.length > 0 || progressiveAddedIds.size > 0)) {
             console.log('[AIChatPanel] Calling onDesignCreated to switch to 2D canvas');
             onDesignCreated();
           }
@@ -1263,14 +1360,89 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
 
           // Update message with success
           const pageInfo = pageId ? ' (nuova pagina)' : '';
+          const truncatedWarning = wasResponseTruncated ? ' (risposta AI troncata - alcuni elementi potrebbero mancare)' : '';
           updateMessage(
             assistantMessage.id,
-            `Creati ${ids.length} elementi sul canvas${pageInfo}\n\n${elementNames.slice(0, 8).join(', ')}${elementNames.length > 8 ? '...' : ''}`
+            `Creati ${allElements.length} elementi sul canvas${pageInfo}${truncatedWarning}\n\n${elementNames.slice(0, 8).join(', ')}${elementNames.length > 8 ? '...' : ''}`
           );
         } catch (err) {
           console.error('[AIChatPanel] Error parsing design response:', err);
-          // Show content as fallback
-          updateMessage(assistantMessage.id, fullContent);
+
+          // TOLERANT FALLBACK: Try to recover partial content
+          console.log('[AIChatPanel] Attempting tolerant parsing to recover partial content...');
+          const tolerantResult = parseCanvasElementsTolerant(fullContent);
+
+          if (tolerantResult.elements.length > 0) {
+            console.log('[AIChatPanel] Tolerant parser recovered', tolerantResult.elements.length, 'elements');
+
+            // We have partial content - add it to canvas
+            const store = useCanvasStore.getState();
+            let pageId = progressivePageId;
+            let parentId = progressiveParentId;
+
+            // Use pre-created page or create new one
+            if (!pageId) {
+              pageId = store.addPage();
+              if (pageId) {
+                const page = store.pages[pageId];
+                if (page) {
+                  parentId = page.rootElementId;
+                }
+                store.setCurrentPage(pageId);
+              }
+            }
+
+            // Add recovered elements
+            if (parentId) {
+              try {
+                const ids = addElementsFromAI(tolerantResult.elements, parentId);
+                console.log('[AIChatPanel] Added', ids.length, 'recovered elements');
+
+                // Rename page to indicate partial success
+                if (pageId) {
+                  const pageName = tolerantResult.isComplete ? 'AI Design' : 'AI Design (parziale)';
+                  store.renamePage(pageId, pageName);
+                  const page = store.pages[pageId];
+                  if (page) {
+                    store.renameElement(page.rootElementId, pageName);
+                  }
+                }
+
+                // Notify design created
+                if (onDesignCreated) {
+                  onDesignCreated();
+                }
+
+                // Show success with warning
+                const warningMsg = tolerantResult.isComplete ? '' : ' (risposta incompleta, alcuni elementi potrebbero mancare)';
+                updateMessage(
+                  assistantMessage.id,
+                  `Recuperati ${tolerantResult.elements.length} elementi${warningMsg}`
+                );
+                return;
+              } catch (addErr) {
+                console.error('[AIChatPanel] Failed to add recovered elements:', addErr);
+              }
+            }
+          }
+
+          // If tolerant parsing also failed, clean up and show error
+          if (progressivePageId) {
+            const store = useCanvasStore.getState();
+            const page = store.pages[progressivePageId];
+            if (page) {
+              const rootElement = store.getElement(page.rootElementId);
+              if (!rootElement?.children?.length) {
+                console.log('[AIChatPanel] Deleting empty pre-created page after error');
+                store.deletePage(progressivePageId);
+              } else {
+                store.renamePage(progressivePageId, 'AI Design (incompleto)');
+              }
+            }
+          }
+
+          // Show content as fallback with error indication
+          updateMessage(assistantMessage.id, `Errore nel parsing del design. Contenuto raw:\n\n${fullContent.slice(0, 500)}${fullContent.length > 500 ? '...' : ''}`);
         }
       } else if (false) {
         // Legacy smart mode block - keeping structure for now
@@ -1462,6 +1634,23 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
       // Clear timeout on error
       clearTimeout(timeoutId);
 
+      // Clean up pre-created page if error occurred
+      if (preCreatedPageId) {
+        const store = useCanvasStore.getState();
+        const page = store.pages[preCreatedPageId];
+        if (page) {
+          const rootElement = store.getElement(page.rootElementId);
+          // If page is empty (only root with no children), delete it
+          if (!rootElement?.children?.length) {
+            console.log('[AIChatPanel] Deleting empty pre-created page after stream error');
+            store.deletePage(preCreatedPageId);
+          } else {
+            // Page has some content, rename to indicate it's incomplete
+            store.renamePage(preCreatedPageId, 'AI Design (interrotto)');
+          }
+        }
+      }
+
       // Don't show error if user aborted
       if (error instanceof Error && error.name === 'AbortError') {
         if (fullContent.length === 0) {
@@ -1476,6 +1665,24 @@ const AIChatPanel = forwardRef<AIChatPanelRef, AIChatPanelProps>(function AIChat
           ? `Errore: ${error.message}`
           : 'Errore di connessione. Riprova.';
         updateMessage(assistantMessage.id, errorMessage);
+      }
+    } finally {
+      // SAFETY: Ensure pre-created page is never left with "Loading..." name
+      if (preCreatedPageId) {
+        const store = useCanvasStore.getState();
+        const page = store.pages[preCreatedPageId];
+        if (page && page.name.includes('Loading')) {
+          console.log('[AIChatPanel] SAFETY: Page still has Loading name, cleaning up');
+          const rootElement = store.getElement(page.rootElementId);
+          if (!rootElement?.children?.length) {
+            console.log('[AIChatPanel] SAFETY: Deleting empty page');
+            store.deletePage(preCreatedPageId);
+          } else {
+            console.log('[AIChatPanel] SAFETY: Page has', rootElement.children.length, 'children, renaming to AI Design');
+            store.renamePage(preCreatedPageId, 'AI Design');
+            store.renameElement(page.rootElementId, 'AI Design');
+          }
+        }
       }
     }
 

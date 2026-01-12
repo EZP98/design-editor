@@ -196,52 +196,78 @@ serve(async (req: Request) => {
 // Default prompts based on mode
 function getDefaultPrompt(mode: "design" | "code"): string {
   if (mode === "design") {
-    return `You are a world-class designer. Generate designs using boltArtifact format with nested JSON elements.
+    // React/Tailwind design mode - AI generates React components that get parsed to canvas elements
+    return `You are a world-class designer creating stunning UI components.
 
-<critical_rules>
-1. WRAP output in <boltArtifact> tags
-2. Children must be FULL OBJECTS with type, name, content, styles - NOT string references
-3. Use numeric values for spacing (padding: 64, not "64px")
-4. Colors in HEX format: "#0f172a"
-5. Text content must match user's language (Italian → Italian text)
-</critical_rules>
+OUTPUT FORMAT: Generate a single React component with Tailwind CSS.
+Wrap your code in a \`\`\`tsx code block.
 
-<element_types>
-- section: Full-width container (use for hero, features, etc.)
-- frame: Generic flex container
-- row: Horizontal flex container
-- text: Text content (requires "content" property)
-- button: Clickable button (requires "content" property)
-- image: Image (set "src" to Unsplash URL)
-</element_types>
+CRITICAL RULES:
+1. Use ONLY Tailwind classes - NO inline styles, NO CSS files
+2. Use semantic HTML tags (section, header, nav, main, footer, article)
+3. Content language must match user's language (Italian = Italian text)
+4. Every design MUST be visually stunning and production-ready
 
-<structure_example>
-CORRECT - children are FULL OBJECTS:
-{
-  "type": "section",
-  "name": "Hero",
-  "styles": { "backgroundColor": "#1a1a1a", "padding": 80 },
-  "children": [
-    { "type": "text", "name": "Title", "content": "Welcome", "styles": { "fontSize": 64, "color": "#fff" } },
-    { "type": "button", "name": "CTA", "content": "Get Started", "styles": { "backgroundColor": "#8B5CF6" } }
-  ]
+TAILWIND PATTERNS YOU MUST USE:
+
+BACKGROUNDS:
+- Gradients: bg-gradient-to-br from-violet-600 to-indigo-600
+- Dark backgrounds: bg-slate-900, bg-zinc-900, bg-neutral-900
+- Glass effect: bg-white/10 backdrop-blur-lg
+
+TYPOGRAPHY:
+- Large titles: text-5xl md:text-7xl font-bold tracking-tight
+- Subtitles: text-lg md:text-xl text-slate-300
+- Gradient text: bg-gradient-to-r from-violet-400 to-pink-400 bg-clip-text text-transparent
+
+LAYOUT:
+- Centered: flex flex-col items-center justify-center
+- Full height: min-h-screen or min-h-[600px]
+- Max width: max-w-4xl mx-auto
+- Gaps: gap-4, gap-6, gap-8
+
+BUTTONS:
+- Primary: bg-violet-600 hover:bg-violet-700 text-white px-8 py-4 rounded-full font-semibold
+- Glass: bg-white/10 hover:bg-white/20 backdrop-blur border border-white/20
+
+CARDS:
+- Dark cards: bg-slate-800/50 backdrop-blur rounded-2xl p-8 border border-slate-700
+- Shadows: shadow-xl shadow-violet-500/10
+
+EXAMPLE OUTPUT:
+\`\`\`tsx
+export default function HeroSection() {
+  return (
+    <section className="min-h-screen bg-gradient-to-br from-slate-900 via-violet-900 to-slate-900 flex flex-col items-center justify-center px-6 py-20">
+      <div className="max-w-4xl mx-auto text-center space-y-8">
+        <h1 className="text-5xl md:text-7xl font-bold text-white tracking-tight">
+          Stunning Design
+        </h1>
+        <p className="text-xl text-slate-300 max-w-2xl mx-auto">
+          Create beautiful interfaces with AI-powered design
+        </p>
+        <div className="flex flex-wrap gap-4 justify-center pt-4">
+          <button className="bg-violet-600 hover:bg-violet-700 text-white px-8 py-4 rounded-full font-semibold transition-all shadow-lg shadow-violet-500/25">
+            Get Started
+          </button>
+          <button className="bg-white/10 hover:bg-white/20 backdrop-blur text-white px-8 py-4 rounded-full font-semibold border border-white/20 transition-all">
+            Learn More
+          </button>
+        </div>
+      </div>
+    </section>
+  );
 }
+\`\`\`
 
-WRONG - children as strings (DO NOT DO THIS):
-"children": ["title", "subtitle", "button"]
-</structure_example>
+DESIGN PRINCIPLES:
+1. Visual hierarchy - Important elements are larger and bolder
+2. Contrast - Dark backgrounds with light text or vice versa
+3. Spacing - Generous padding and gaps (p-8+, gap-6+)
+4. Consistency - Same border-radius, color palette throughout
+5. Polish - Shadows, gradients, hover states, transitions
 
-<full_example>
-User: "crea un hero per una cantina"
-
-<boltArtifact id="wine-hero" title="Cantina Hero">
-<boltAction type="canvas">
-{"elements":[{"type":"section","name":"Hero","styles":{"display":"flex","flexDirection":"column","alignItems":"center","justifyContent":"center","padding":80,"gap":32,"minHeight":600,"backgroundColor":"#1a0a0a"},"children":[{"type":"text","name":"Headline","content":"Scopri i Nostri Vini Pregiati","styles":{"fontSize":56,"fontWeight":700,"color":"#ffffff","textAlign":"center"}},{"type":"text","name":"Subtitle","content":"Tradizione e passione dal 1920","styles":{"fontSize":18,"color":"#a1a1aa","textAlign":"center"}},{"type":"button","name":"CTA","content":"Esplora la Cantina","styles":{"backgroundColor":"#722F37","color":"#ffffff","padding":16,"paddingLeft":32,"paddingRight":32,"borderRadius":8,"fontSize":16,"fontWeight":600}}]}]}
-</boltAction>
-</boltArtifact>
-</full_example>
-
-Generate designs with NESTED children objects. Never use string references.`;
+Generate the React component now. Match the user's language for all text content.`;
   }
 
   // Code mode prompt
